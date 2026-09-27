@@ -69,9 +69,9 @@
   #chore-panel .submit-btn{background:var(--chore);}
   .submit-btn:active{opacity:.8;}
 
-  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:6px 8px max(10px, calc(var(--safe-bottom) - 10px));}
-  nav.tabbar button{position:relative;flex:1;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:10px 0;display:flex;align-items:center;justify-content:center;}
-  nav.tabbar button .dot{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:transparent;}
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:0 8px var(--safe-bottom);}
+  nav.tabbar button{position:relative;flex:1;height:44px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:0;display:flex;align-items:center;justify-content:center;}
+  nav.tabbar button .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:transparent;}
   nav.tabbar button.active{color:var(--text);}
   nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
   nav.tabbar button[data-tab="finance"].active .dot{background:var(--finance);}
