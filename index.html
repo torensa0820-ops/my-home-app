@@ -19,6 +19,8 @@
     --finance:#4FA3E3;
     --chore:#F2B84B;
     --chore-dim:#7A5A1E;
+    --danger:#F0616D;
+    --danger-dim:#5C262B;
     --safe-top:env(safe-area-inset-top,0px);
     --safe-bottom:env(safe-area-inset-bottom,0px);
   }
@@ -67,12 +69,33 @@
   .submit-btn:active{opacity:.8;}
 
   nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:6px 8px max(10px, calc(var(--safe-bottom) - 10px));}
-  nav.tabbar button{flex:1;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:6px 0 2px;display:flex;flex-direction:column;align-items:center;gap:4px;}
-  nav.tabbar button .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
+  nav.tabbar button{position:relative;flex:1;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:10px 0;display:flex;align-items:center;justify-content:center;}
+  nav.tabbar button .dot{position:absolute;top:-7px;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:transparent;}
   nav.tabbar button.active{color:var(--text);}
   nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
   nav.tabbar button[data-tab="finance"].active .dot{background:var(--finance);}
   nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
+
+  .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
+  .list-head .section-title{margin:0;}
+  .edit-toggle{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;}
+  .edit-toggle.on{border-color:var(--danger);color:var(--danger);}
+  .delete-btn{flex-shrink:0;border:1px solid var(--danger);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;background:none;color:var(--danger);}
+  .delete-btn:active{background:var(--danger-dim);}
+
+  #sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:10;}
+  #sheet-backdrop.show{display:flex;}
+  .sheet{width:100%;max-width:520px;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));}
+  .sheet h2{margin:0 0 6px;font-size:17px;}
+  .sheet .sheet-name{font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;}
+  .sheet p{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.6;}
+  .sheet .warn{color:var(--chore);}
+  .hold-btn{position:relative;overflow:hidden;width:100%;margin-top:18px;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;background:var(--danger-dim);color:var(--text);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
+  .hold-btn .fill{position:absolute;inset:0;background:var(--danger);transform:scaleX(0);transform-origin:left;transition:transform .2s ease-out;}
+  .hold-btn.holding .fill{transform:scaleX(1);transition:transform 1.5s linear;}
+  .hold-btn span{position:relative;}
+  .hold-btn:disabled{opacity:.6;}
+  .cancel-btn{width:100%;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:13px;font-size:15px;font-weight:600;background:none;color:var(--text);}
 
   #toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-bottom));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
@@ -88,6 +111,10 @@
   <main>
     <!-- ===== 在庫タブ ===== -->
     <section id="stock-panel" class="tab-panel active">
+      <div class="list-head">
+        <div class="section-title">登録中の商品</div>
+        <button type="button" id="stock-edit-toggle" class="edit-toggle">整理</button>
+      </div>
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
       <div class="section-title">新しく登録する</div>
       <form id="stock-form">
@@ -149,6 +176,16 @@
     <button data-tab="chore"><span class="dot"></span>家事</button>
   </nav>
 </div>
+<div id="sheet-backdrop">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <h2 id="sheet-title">在庫管理から削除</h2>
+    <div class="sheet-name" id="sheet-item-name"></div>
+    <p id="sheet-stock-warn" class="warn"></p>
+    <p>スプレッドシートからこの商品の行が削除されます。元に戻すことはできません。</p>
+    <button type="button" class="hold-btn" id="hold-delete-btn"><div class="fill"></div><span>長押しで削除</span></button>
+    <button type="button" class="cancel-btn" id="sheet-cancel-btn">キャンセル</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -208,6 +245,7 @@ const TAB_INFO = {
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    if(stockEditMode) setStockEditMode(false);
     document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
@@ -227,11 +265,18 @@ function renderStockList(){
     const card = document.createElement('div');
     card.className = 'card';
     const metaParts = [item.location, item.tags].filter(Boolean).join(' ・ ');
-    card.innerHTML = `
+    const info = `
       <div class="card-info">
         <div class="card-name">${escapeHtml(item.itemName)}</div>
         <div class="card-meta">${escapeHtml(metaParts || '—')}</div>
-      </div>
+      </div>`;
+    if(stockEditMode){
+      card.innerHTML = info + '<button class="delete-btn" type="button">削除</button>';
+      card.querySelector('.delete-btn').addEventListener('click', ()=>openDeleteSheet(item));
+      wrap.appendChild(card);
+      return;
+    }
+    card.innerHTML = info + `
       <div class="stepper">
         <button data-action="minus" type="button">−</button>
         <span class="count">${item.stock ?? 0}</span>
@@ -251,6 +296,80 @@ function bumpStock(item, delta, countEl){
     .then(res=>{ if(res.status !== 'success'){ item.stock=prev; countEl.textContent=prev; toast('更新に失敗しました'); } })
     .catch(()=>{ item.stock=prev; countEl.textContent=prev; toast('通信エラー'); });
 }
+// 削除は「整理モード → 削除ボタン → 確認シートで長押し」の3段階にして誤操作を防ぐ
+let stockEditMode = false;
+let deleteTarget = null;
+const HOLD_MS = 1500;
+const editToggle = document.getElementById('stock-edit-toggle');
+const sheetBackdrop = document.getElementById('sheet-backdrop');
+const holdBtn = document.getElementById('hold-delete-btn');
+
+function setStockEditMode(on){
+  stockEditMode = on;
+  editToggle.textContent = on ? '完了' : '整理';
+  editToggle.classList.toggle('on', on);
+  if(document.querySelector('nav.tabbar button.active').dataset.tab === 'stock'){
+    document.getElementById('page-sub').textContent = on ? '不要になった商品を削除' : TAB_INFO.stock.sub;
+  }
+  renderStockList();
+}
+editToggle.addEventListener('click', ()=>setStockEditMode(!stockEditMode));
+
+function openDeleteSheet(item){
+  deleteTarget = item;
+  document.getElementById('sheet-item-name').textContent = item.itemName;
+  const stock = Number(item.stock) || 0;
+  document.getElementById('sheet-stock-warn').textContent = stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '';
+  holdBtn.disabled = false;
+  holdBtn.querySelector('span').textContent = '長押しで削除';
+  sheetBackdrop.classList.add('show');
+}
+function closeDeleteSheet(){
+  cancelHold();
+  deleteTarget = null;
+  sheetBackdrop.classList.remove('show');
+}
+document.getElementById('sheet-cancel-btn').addEventListener('click', closeDeleteSheet);
+sheetBackdrop.addEventListener('click', e=>{ if(e.target === sheetBackdrop && !holdBtn.disabled) closeDeleteSheet(); });
+
+function startHold(e){
+  if(holdBtn.disabled || !deleteTarget) return;
+  e.preventDefault();
+  holdBtn.classList.add('holding');
+  clearTimeout(startHold._t);
+  startHold._t = setTimeout(executeDelete, HOLD_MS);
+}
+function cancelHold(){
+  clearTimeout(startHold._t);
+  holdBtn.classList.remove('holding');
+}
+holdBtn.addEventListener('pointerdown', startHold);
+['pointerup','pointerleave','pointercancel'].forEach(ev=>holdBtn.addEventListener(ev, cancelHold));
+holdBtn.addEventListener('contextmenu', e=>e.preventDefault());
+
+function executeDelete(){
+  const item = deleteTarget;
+  if(!item) return;
+  holdBtn.disabled = true;
+  holdBtn.querySelector('span').textContent = '削除中…';
+  postToGas({type:'stock', action:'delete', target:item.itemName})
+    .then(res=>{
+      if(res.status === 'success'){
+        stockCache = stockCache.filter(r=>r !== item);
+        closeDeleteSheet();
+        renderStockList();
+        toast(`「${item.itemName}」を削除しました`);
+      } else {
+        cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
+        toast(res.message || '削除に失敗しました');
+      }
+    })
+    .catch(()=>{
+      cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
+      toast('通信エラー');
+    });
+}
+
 function loadStock(){
   fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
     .then(r=>r.json())
