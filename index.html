@@ -66,8 +66,8 @@
   #chore-panel .submit-btn{background:var(--chore);}
   .submit-btn:active{opacity:.8;}
 
-  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:8px 8px calc(8px + var(--safe-bottom));}
-  nav.tabbar button{flex:1;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:8px 0 4px;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:6px 8px max(10px, calc(var(--safe-bottom) - 10px);}
+  nav.tabbar button{flex:1;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:6px 0 2px;display:flex;flex-direction:column;align-items:center;gap:4px;}
   nav.tabbar button .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
   nav.tabbar button.active{color:var(--text);}
   nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
