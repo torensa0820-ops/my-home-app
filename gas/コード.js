@@ -47,7 +47,9 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    if (data.type === "stock") {
+    if (data.type === "stock" && data.action === "delete") {
+      deleteStock(ss, data);
+    } else if (data.type === "stock") {
       updateStock(ss, data);
     } else if (data.type === "finance") {
       addFinance(ss, data);
@@ -119,6 +121,21 @@ function updateStock(ss, data) {
     if (data.modelNumber) sheet.getRange(sheetRowNum, col.modelNumber + 1).setValue(data.modelNumber);
     sheet.getRange(sheetRowNum, col.lastUpdated + 1).setValue(now);
   }
+}
+
+// ---- 在庫タブから品目の行を削除 ----
+function deleteStock(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_STOCK);
+  const values = sheet.getDataRange().getValues();
+  const idxName = values[0].indexOf("itemName");
+
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idxName] === data.target) {
+      sheet.deleteRow(i + 1); // シート上の実際の行番号
+      return;
+    }
+  }
+  throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
 }
 
 // ---- 家計簿タブへの行追加 ----
