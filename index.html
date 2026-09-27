@@ -17,107 +17,41 @@
     --stock:#3DDC97;
     --stock-dim:#245C43;
     --finance:#4FA3E3;
-    --finance-dim:#1E4A6B;
-    --danger:#E8695A;
-    --radius:14px;
+    --chore:#F2B84B;
+    --chore-dim:#7A5A1E;
     --safe-top:env(safe-area-inset-top,0px);
     --safe-bottom:env(safe-area-inset-bottom,0px);
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
-  body{
-    margin:0;
-    background:var(--bg);
-    color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
-    -webkit-font-smoothing:antialiased;
-    overscroll-behavior-y:none;
-  }
-  #app{
-    display:flex;
-    flex-direction:column;
-    height:100%;
-  }
-  header{
-    padding:calc(18px + var(--safe-top)) 20px 16px;
-    flex-shrink:0;
-    border-bottom:1px solid var(--border);
-  }
-  header h1{
-    margin:0;
-    font-size:20px;
-    font-weight:700;
-    letter-spacing:.2px;
-  }
-  header p{
-    margin:4px 0 0;
-    font-size:13px;
-    color:var(--muted);
-  }
-  main{
-    flex:1;
-    overflow-y:auto;
-    padding:16px 16px calc(96px + var(--safe-bottom));
-    -webkit-overflow-scrolling:touch;
-  }
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+  #app{display:flex;flex-direction:column;height:100%;}
+  header{padding:calc(18px + var(--safe-top)) 20px 16px;flex-shrink:0;border-bottom:1px solid var(--border);}
+  header h1{margin:0;font-size:20px;font-weight:700;}
+  header p{margin:4px 0 0;font-size:13px;color:var(--muted);}
+  main{flex:1;overflow-y:auto;padding:16px 16px calc(96px + var(--safe-bottom));-webkit-overflow-scrolling:touch;}
   .tab-panel{display:none;}
   .tab-panel.active{display:block;}
 
-  /* ---- Stock cards ---- */
-  .card{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:14px 16px;
-    margin-bottom:10px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-  }
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .card-info{min-width:0;flex:1;}
   .card-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .card-meta{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .stepper{display:flex;align-items:center;gap:10px;flex-shrink:0;}
-  .stepper button{
-    width:36px;height:36px;border-radius:10px;border:none;
-    background:var(--surface-2);color:var(--stock);
-    font-size:20px;line-height:1;font-weight:700;
-    display:flex;align-items:center;justify-content:center;
-  }
+  .stepper button{width:36px;height:36px;border-radius:10px;border:none;background:var(--surface-2);color:var(--stock);font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;}
   .stepper button:active{background:var(--stock-dim);}
   .stepper .count{min-width:26px;text-align:center;font-size:17px;font-weight:700;}
   .empty-msg{color:var(--muted);font-size:14px;text-align:center;padding:32px 0;}
 
-  /* ---- Forms ---- */
-  .section-title{
-    font-size:13px;color:var(--muted);font-weight:600;
-    margin:24px 0 10px;letter-spacing:.3px;
-  }
-  form{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:16px;
-  }
+  .done-btn{flex-shrink:0;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;background:var(--chore);color:#26200E;}
+  .done-btn:active{background:var(--chore-dim);color:var(--text);}
+
+  .section-title{font-size:13px;color:var(--muted);font-weight:600;margin:24px 0 10px;}
+  form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
-  input[type=text], input[type=number], input[type=date], select, textarea{
-    width:100%;
-    background:var(--surface-2);
-    border:1px solid var(--border);
-    color:var(--text);
-    border-radius:10px;
-    padding:11px 12px;
-    font-size:16px;
-    appearance:none;
-  }
-  select{
-    background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
-    background-position:calc(100% - 18px) 50%, calc(100% - 13px) 50%;
-    background-size:5px 5px,5px 5px;
-    background-repeat:no-repeat;
-  }
+  input[type=text],input[type=number],input[type=date],select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px;appearance:none;}
+  select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
   .hybrid-input{margin-top:8px;display:none;}
   details{border-top:1px solid var(--border);margin-top:6px;padding-top:10px;}
   summary{font-size:13px;color:var(--muted);cursor:pointer;list-style:none;}
@@ -126,41 +60,21 @@
   details[open] summary:before{content:"▾ ";}
   .row2{display:flex;gap:10px;}
   .row2 .field{flex:1;}
-  .submit-btn{
-    width:100%;border:none;border-radius:10px;padding:13px;
-    font-size:16px;font-weight:700;margin-top:4px;color:#0B1210;
-  }
+  .submit-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:16px;font-weight:700;margin-top:4px;color:#0B1210;}
   #stock-panel .submit-btn{background:var(--stock);}
   #finance-panel .submit-btn{background:var(--finance);}
+  #chore-panel .submit-btn{background:var(--chore);}
   .submit-btn:active{opacity:.8;}
 
-  /* ---- Tab bar ---- */
-  nav.tabbar{
-    position:fixed;left:0;right:0;bottom:0;
-    display:flex;
-    background:rgba(24,31,35,.92);
-    backdrop-filter:blur(14px);
-    border-top:1px solid var(--border);
-    padding:8px 8px calc(8px + var(--safe-bottom));
-  }
-  nav.tabbar button{
-    flex:1;background:none;border:none;color:var(--muted);
-    font-size:12px;font-weight:600;padding:8px 0 4px;
-    display:flex;flex-direction:column;align-items:center;gap:4px;
-  }
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:8px 8px calc(8px + var(--safe-bottom));}
+  nav.tabbar button{flex:1;background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:8px 0 4px;display:flex;flex-direction:column;align-items:center;gap:4px;}
   nav.tabbar button .dot{width:6px;height:6px;border-radius:50%;background:transparent;}
   nav.tabbar button.active{color:var(--text);}
   nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
   nav.tabbar button[data-tab="finance"].active .dot{background:var(--finance);}
+  nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
 
-  #toast{
-    position:fixed;left:50%;bottom:calc(90px + var(--safe-bottom));
-    transform:translateX(-50%) translateY(20px);
-    background:var(--surface-2);border:1px solid var(--border);
-    color:var(--text);padding:10px 18px;border-radius:999px;
-    font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
-    white-space:nowrap;
-  }
+  #toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-bottom));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 </style>
 </head>
@@ -175,39 +89,22 @@
     <!-- ===== 在庫タブ ===== -->
     <section id="stock-panel" class="tab-panel active">
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
-
       <div class="section-title">新しく登録する</div>
       <form id="stock-form">
-        <div class="field">
-          <label>商品名</label>
-          <input type="text" id="s-name" required placeholder="例：ティッシュ">
-        </div>
-        <div class="row2">
-          <div class="field">
-            <label>個数</label>
-            <input type="number" id="s-value" required value="1" inputmode="numeric">
-          </div>
-        </div>
-        <div class="field">
-          <label>収納場所</label>
+        <div class="field"><label>商品名</label><input type="text" id="s-name" required placeholder="例：ティッシュ"></div>
+        <div class="row2"><div class="field"><label>個数</label><input type="number" id="s-value" required value="1" inputmode="numeric"></div></div>
+        <div class="field"><label>収納場所</label>
           <select id="s-location-select" class="hybrid-select"></select>
           <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
         </div>
-        <div class="field">
-          <label>タグ</label>
+        <div class="field"><label>タグ</label>
           <select id="s-tags-select" class="hybrid-select"></select>
           <input type="text" id="s-tags-input" class="hybrid-input" placeholder="新しいタグを入力（カンマ区切り可）">
         </div>
         <details>
           <summary>賞味期限・型番（任意）</summary>
-          <div class="field" style="margin-top:10px;">
-            <label>賞味期限</label>
-            <input type="date" id="s-expiration">
-          </div>
-          <div class="field">
-            <label>型番</label>
-            <input type="text" id="s-model" placeholder="例：EC-CT12">
-          </div>
+          <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"></div>
+          <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"></div>
         </details>
         <button type="submit" class="submit-btn">この商品を登録</button>
       </form>
@@ -217,44 +114,51 @@
     <section id="finance-panel" class="tab-panel">
       <div class="section-title">支出を記録する</div>
       <form id="finance-form">
-        <div class="field">
-          <label>カテゴリ</label>
+        <div class="field"><label>カテゴリ</label>
           <select id="f-category-select" class="hybrid-select"></select>
           <input type="text" id="f-category-input" class="hybrid-input" placeholder="新しいカテゴリを入力">
         </div>
-        <div class="field">
-          <label>金額（円）</label>
-          <input type="number" id="f-amount" required inputmode="numeric" placeholder="850">
-        </div>
-        <div class="field">
-          <label>メモ</label>
-          <input type="text" id="f-memo" placeholder="例：スーパー">
-        </div>
-        <div class="field">
-          <label>タグ</label>
+        <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
+        <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
+        <div class="field"><label>タグ</label>
           <select id="f-tags-select" class="hybrid-select"></select>
           <input type="text" id="f-tags-input" class="hybrid-input" placeholder="新しいタグを入力（カンマ区切り可）">
         </div>
         <button type="submit" class="submit-btn">記録する</button>
       </form>
     </section>
+
+    <!-- ===== 家事タブ ===== -->
+    <section id="chore-panel" class="tab-panel">
+      <div id="chore-list"><p class="empty-msg">読み込み中…</p></div>
+      <div class="section-title">新しい家事を登録する</div>
+      <form id="chore-form">
+        <div class="field"><label>家事名</label><input type="text" id="c-name" required placeholder="例：お風呂掃除"></div>
+        <div class="field"><label>周期</label>
+          <select id="c-cycle-select" class="hybrid-select"></select>
+          <input type="text" id="c-cycle-input" class="hybrid-input" placeholder="新しい周期を入力（例：3ヶ月に1回）">
+        </div>
+        <button type="submit" class="submit-btn">この家事を登録</button>
+      </form>
+    </section>
   </main>
 
   <nav class="tabbar">
-    <button data-tab="stock" class="active"><span class="dot"></span>在庫管理</button>
+    <button data-tab="stock" class="active"><span class="dot"></span>在庫</button>
     <button data-tab="finance"><span class="dot"></span>家計簿</button>
+    <button data-tab="chore"><span class="dot"></span>家事</button>
   </nav>
 </div>
 <div id="toast"></div>
 
 <script>
 /* ▼▼▼ ここにデプロイしたGASのウェブアプリURLを貼り付けてください ▼▼▼ */
-const GAS_URL = "https://script.google.com/macros/s/AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB-zGssbL1/exec";
+const GAS_URL = "ここにGASのWebアプリURLを貼り付け";
 /* ▲▲▲ 例: https://script.google.com/macros/s/xxxxx/exec ▲▲▲ */
 
 let stockCache = [];
+let choreCache = [];
 
-// ---------- 共通ユーティリティ ----------
 function toast(msg){
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -266,7 +170,7 @@ function toast(msg){
 function postToGas(payload){
   return fetch(GAS_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // preflight回避のためtext/plainで送る
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload)
   }).then(r => r.json());
 }
@@ -279,47 +183,45 @@ function setupHybrid(selectEl, inputEl, presetValues){
     selectEl.appendChild(opt);
   });
   const blank = document.createElement('option');
-  blank.value = ''; blank.textContent = '（未選択）';
+  blank.value=''; blank.textContent='（未選択）';
   selectEl.insertBefore(blank, selectEl.firstChild);
   const newOpt = document.createElement('option');
-  newOpt.value = '__new__'; newOpt.textContent = '＋ 新規入力';
+  newOpt.value='__new__'; newOpt.textContent='＋ 新規入力';
   selectEl.appendChild(newOpt);
-
   selectEl.onchange = () => {
-    if(selectEl.value === '__new__'){
-      inputEl.style.display = 'block';
-      inputEl.value = '';
-      inputEl.focus();
-    } else {
-      inputEl.style.display = 'none';
-    }
+    if(selectEl.value === '__new__'){ inputEl.style.display='block'; inputEl.value=''; inputEl.focus(); }
+    else { inputEl.style.display='none'; }
   };
 }
 function getHybridValue(selectEl, inputEl){
-  if(selectEl.value === '__new__') return inputEl.value.trim();
-  return selectEl.value;
+  return selectEl.value === '__new__' ? inputEl.value.trim() : selectEl.value;
+}
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 // ---------- タブ切り替え ----------
+const TAB_INFO = {
+  stock:{title:'在庫管理', sub:'タップして数量を更新'},
+  finance:{title:'家計簿', sub:'支出を記録'},
+  chore:{title:'家事ルーティン', sub:'今日やる家事はこれ'}
+};
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
     const tab = btn.dataset.tab;
-    document.getElementById(tab === 'stock' ? 'stock-panel' : 'finance-panel').classList.add('active');
-    document.getElementById('page-title').textContent = tab === 'stock' ? '在庫管理' : '家計簿';
-    document.getElementById('page-sub').textContent = tab === 'stock' ? 'タップして数量を更新' : '支出を記録';
+    document.getElementById(tab + '-panel').classList.add('active');
+    document.getElementById('page-title').textContent = TAB_INFO[tab].title;
+    document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
   });
 });
 
-// ---------- 在庫リスト ----------
+// ---------- 在庫 ----------
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
-  if(!stockCache.length){
-    wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>';
-    return;
-  }
+  if(!stockCache.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   wrap.innerHTML = '';
   stockCache.forEach(item=>{
     const card = document.createElement('div');
@@ -336,36 +238,22 @@ function renderStockList(){
         <button data-action="plus" type="button">＋</button>
       </div>`;
     const countEl = card.querySelector('.count');
-    card.querySelector('[data-action="minus"]').addEventListener('click', ()=>bump(item, -1, countEl));
-    card.querySelector('[data-action="plus"]').addEventListener('click', ()=>bump(item, 1, countEl));
+    card.querySelector('[data-action="minus"]').addEventListener('click', ()=>bumpStock(item,-1,countEl));
+    card.querySelector('[data-action="plus"]').addEventListener('click', ()=>bumpStock(item,1,countEl));
     wrap.appendChild(card);
   });
 }
-function escapeHtml(s){
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
-
-function bump(item, delta, countEl){
+function bumpStock(item, delta, countEl){
   const prev = Number(item.stock) || 0;
-  item.stock = prev + delta; // 楽観的更新
+  item.stock = prev + delta;
   countEl.textContent = item.stock;
-  postToGas({
-    type: 'stock', target: item.itemName, value: delta,
-    location: '', tags: '', expirationDate: '', modelNumber: ''
-  }).then(res=>{
-    if(res.status !== 'success'){
-      item.stock = prev; countEl.textContent = prev;
-      toast('更新に失敗しました');
-    }
-  }).catch(()=>{
-    item.stock = prev; countEl.textContent = prev;
-    toast('通信エラー');
-  });
+  postToGas({type:'stock', target:item.itemName, value:delta, location:'', tags:'', expirationDate:'', modelNumber:''})
+    .then(res=>{ if(res.status !== 'success'){ item.stock=prev; countEl.textContent=prev; toast('更新に失敗しました'); } })
+    .catch(()=>{ item.stock=prev; countEl.textContent=prev; toast('通信エラー'); });
 }
-
 function loadStock(){
   fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
-    .then(r => r.json())
+    .then(r=>r.json())
     .then(rows=>{
       stockCache = rows;
       renderStockList();
@@ -374,39 +262,27 @@ function loadStock(){
       setupHybrid(document.getElementById('s-location-select'), document.getElementById('s-location-input'), locs);
       setupHybrid(document.getElementById('s-tags-select'), document.getElementById('s-tags-input'), tagsAll);
     })
-    .catch(()=>{
-      document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました。GAS_URLを確認してください</p>';
-    });
+    .catch(()=>{ document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
-
-// ---------- 新規商品登録 ----------
 document.getElementById('stock-form').addEventListener('submit', e=>{
   e.preventDefault();
   const name = document.getElementById('s-name').value.trim();
+  if(!name) return;
   const value = Number(document.getElementById('s-value').value) || 0;
   const location = getHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'));
   const tags = getHybridValue(document.getElementById('s-tags-select'), document.getElementById('s-tags-input'));
   const expirationDate = document.getElementById('s-expiration').value;
   const modelNumber = document.getElementById('s-model').value.trim();
-  if(!name) return;
-
-  postToGas({ type:'stock', target:name, value, location, tags, expirationDate, modelNumber })
+  postToGas({type:'stock', target:name, value, location, tags, expirationDate, modelNumber})
     .then(res=>{
-      if(res.status === 'success'){
-        toast('登録しました');
-        e.target.reset();
-        document.getElementById('s-value').value = 1;
-        loadStock();
-      } else {
-        toast('登録に失敗しました');
-      }
+      if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; loadStock(); }
+      else toast('登録に失敗しました');
     }).catch(()=>toast('通信エラー'));
 });
 
 // ---------- 家計簿 ----------
 setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), ['食費','日用品','交通費','娯楽','医療','その他']);
 setupHybrid(document.getElementById('f-tags-select'), document.getElementById('f-tags-input'), ['外食','贅沢','必需品','特売']);
-
 document.getElementById('finance-form').addEventListener('submit', e=>{
   e.preventDefault();
   const category = getHybridValue(document.getElementById('f-category-select'), document.getElementById('f-category-input'));
@@ -414,20 +290,61 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
   const memo = document.getElementById('f-memo').value.trim();
   const tags = getHybridValue(document.getElementById('f-tags-select'), document.getElementById('f-tags-input'));
   if(!category || !amount) return;
+  postToGas({type:'finance', category, amount, memo, tags})
+    .then(res=>{ if(res.status==='success'){ toast('記録しました'); e.target.reset(); } else toast('記録に失敗しました'); })
+    .catch(()=>toast('通信エラー'));
+});
 
-  postToGas({ type:'finance', category, amount, memo, tags })
+// ---------- 家事 ----------
+setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), ['毎日','毎週月曜','毎週日曜','毎月1回','3ヶ月に1回']);
+
+function renderChoreList(){
+  const wrap = document.getElementById('chore-list');
+  const todo = choreCache.filter(t => !(t.isDone === true || String(t.isDone).toUpperCase() === 'TRUE'));
+  if(!todo.length){ wrap.innerHTML = '<p class="empty-msg">今日やる家事はありません</p>'; return; }
+  wrap.innerHTML = '';
+  todo.forEach(t=>{
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-info">
+        <div class="card-name">${escapeHtml(t.taskName)}</div>
+        <div class="card-meta">${escapeHtml(t.cycle || '—')}</div>
+      </div>
+      <button class="done-btn" type="button">完了</button>`;
+    card.querySelector('.done-btn').addEventListener('click', ()=>completeChore(t, card));
+    wrap.appendChild(card);
+  });
+}
+function completeChore(t, card){
+  card.style.opacity = '0.4';
+  postToGas({type:'todo', action:'done', id:t.id})
     .then(res=>{
-      if(res.status === 'success'){
-        toast('記録しました');
-        e.target.reset();
-      } else {
-        toast('記録に失敗しました');
-      }
+      if(res.status === 'success'){ toast('完了しました'); t.isDone = true; renderChoreList(); }
+      else { card.style.opacity='1'; toast('更新に失敗しました'); }
+    }).catch(()=>{ card.style.opacity='1'; toast('通信エラー'); });
+}
+function loadChores(){
+  fetch(`${GAS_URL}?action=getTasks&t=${Date.now()}`)
+    .then(r=>r.json())
+    .then(rows=>{ choreCache = rows; renderChoreList(); })
+    .catch(()=>{ document.getElementById('chore-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
+}
+document.getElementById('chore-form').addEventListener('submit', e=>{
+  e.preventDefault();
+  const taskName = document.getElementById('c-name').value.trim();
+  if(!taskName) return;
+  const cycle = getHybridValue(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'));
+  postToGas({type:'todo', action:'add', taskName, cycle})
+    .then(res=>{
+      if(res.status==='success'){ toast('登録しました'); e.target.reset(); loadChores(); }
+      else toast('登録に失敗しました');
     }).catch(()=>toast('通信エラー'));
 });
 
 // ---------- 初期化 ----------
 loadStock();
+loadChores();
 </script>
 </body>
 </html>
