@@ -45,13 +45,29 @@ function doGet(e) {
     const idxCat = headers.indexOf("category");
     const idxTags = headers.indexOf("tags");
     const categories = new Set();
-    const tags = new Set();
+    const tagCounts = {};
     values.slice(1).forEach(r => {
       const cat = String(r[idxCat]).trim();
       if (cat) categories.add(cat);
-      String(r[idxTags]).split(/[,，、]/).map(t => t.trim()).filter(Boolean).forEach(t => tags.add(t));
+      splitTags(r[idxTags]).forEach(t => tagCounts[t] = (tagCounts[t] || 0) + 1);
     });
-    return jsonOutput({ categories: [...categories], tags: [...tags] });
+    return jsonOutput({ categories: [...categories], tags: Object.keys(tagCounts), tagCounts: tagCounts });
+  }
+  if (e.parameter.action === "getFinance") {
+    // 家計簿の記録を新しい順に offset 件目から limit 件返す（タグ一括付与の対象選択用）
+    const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
+    const headers = values[0];
+    const offset = Number(e.parameter.offset) || 0;
+    const limit = Number(e.parameter.limit) || 30;
+    const rows = values.slice(1)
+      .map((r, i) => {
+        const obj = { row: i + 2 }; // シート上の行番号
+        headers.forEach((h, j) => obj[h] = r[j] instanceof Date ? r[j].toISOString() : r[j]);
+        return obj;
+      })
+      .filter(r => r.date !== "")
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.row - a.row);
+    return jsonOutput({ rows: rows.slice(offset, offset + limit), total: rows.length });
   }
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
@@ -70,6 +86,8 @@ function doPost(e) {
       addFinance(ss, data);
     } else if (data.type === "todo") {
       updateTodo(ss, data);
+    } else if (data.type === "tag") {
+      return jsonOutput({ status: "success", count: manageTags(ss, data) });
     } else {
       return jsonOutput({ status: "error", message: "type が不正です: " + data.type });
     }
@@ -151,6 +169,81 @@ function deleteStock(ss, data) {
     }
   }
   throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
+}
+
+// タグ文字列を配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
+function splitTags(s) {
+  return String(s).split(/[,，、]/).map(t => t.trim()).filter(Boolean);
+}
+
+// ---- タグの一括操作（在庫・家計簿共通）----
+// action: "rename"（名称変更。既存タグ名なら統合）/ "delete"（全行から外す）/ "assign"（指定行に付与）
+// 戻り値：変更した行数
+function manageTags(ss, data) {
+  const sheetName = { stock: SHEET_STOCK, finance: SHEET_FINANCE }[data.sheet];
+  if (!sheetName) throw new Error("sheet が不正です: " + data.sheet);
+  const tag = String(data.tag || "").trim();
+  if (!tag) throw new Error("タグ名が空です。");
+
+  const sheet = ss.getSheetByName(sheetName);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const idxTags = headers.indexOf("tags");
+  const rows = values.slice(1);
+  const tagsCol = rows.map(r => r[idxTags]);
+  let count = 0;
+
+  const setTags = (i, tags) => {
+    tagsCol[i] = [...new Set(tags)].join(",");
+    count++;
+  };
+
+  if (data.action === "rename") {
+    const newName = String(data.newName || "").trim();
+    if (!newName || /[,，、]/.test(newName)) throw new Error("新しいタグ名が不正です。");
+    rows.forEach((r, i) => {
+      const tags = splitTags(r[idxTags]);
+      if (tags.includes(tag)) setTags(i, tags.map(t => t === tag ? newName : t));
+    });
+  } else if (data.action === "delete") {
+    rows.forEach((r, i) => {
+      const tags = splitTags(r[idxTags]);
+      if (tags.includes(tag)) setTags(i, tags.filter(t => t !== tag));
+    });
+  } else if (data.action === "assign") {
+    if (/[,，、]/.test(tag)) throw new Error("タグ名に区切り文字は使えません。");
+    const targets = data.targets || [];
+    if (data.sheet === "stock") {
+      // 在庫は商品名で指定
+      const idxName = headers.indexOf("itemName");
+      const names = new Set(targets);
+      rows.forEach((r, i) => {
+        const tags = splitTags(r[idxTags]);
+        if (names.has(r[idxName]) && !tags.includes(tag)) setTags(i, tags.concat(tag));
+      });
+    } else {
+      // 家計簿は行番号で指定し、一覧取得後にシートが並べ替えられていないか日付で確認する
+      const idxDate = headers.indexOf("date");
+      targets.forEach(t => {
+        const i = Number(t.row) - 2;
+        const r = rows[i];
+        const date = r && (r[idxDate] instanceof Date ? r[idxDate].toISOString() : r[idxDate]);
+        if (!r || date !== t.date) throw new Error("家計簿のデータが変更されています。一覧を読み込み直してください。");
+      });
+      targets.forEach(t => {
+        const i = Number(t.row) - 2;
+        const tags = splitTags(tagsCol[i]);
+        if (!tags.includes(tag)) setTags(i, tags.concat(tag));
+      });
+    }
+  } else {
+    throw new Error("action が不正です: " + data.action);
+  }
+
+  if (count > 0) {
+    sheet.getRange(2, idxTags + 1, tagsCol.length, 1).setValues(tagsCol.map(v => [v]));
+  }
+  return count;
 }
 
 // ---- 家計簿タブへの行追加 ----

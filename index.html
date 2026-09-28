@@ -69,6 +69,41 @@
   .chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
   .chip.on{border-color:var(--stock);background:var(--stock-dim);color:var(--text);}
   #finance-panel .chip.on{border-color:var(--finance);background:var(--finance-dim);}
+  .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .label-row label{margin:0 !important;}
+  .text-btn{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:4px 2px;}
+  .label-row .text-btn{color:var(--stock);}
+  #finance-panel .label-row .text-btn{color:var(--finance);}
+
+  /* タグ管理シート */
+  .sheet.tall{height:85%;display:flex;flex-direction:column;padding-bottom:calc(14px + var(--safe-bottom));}
+  .tm-head{display:grid;grid-template-columns:72px 1fr 72px;align-items:center;margin-bottom:12px;}
+  .tm-head h2{margin:0;text-align:center;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tm-head .text-btn:last-child{justify-self:end;}
+  .tm-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .tm-foot:not(:empty){padding-top:12px;}
+  .tm-row{width:100%;display:flex;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:13px 14px;margin-bottom:8px;color:var(--text);font-size:15px;font-weight:600;text-align:left;}
+  .tm-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tm-row .count{font-size:12px;color:var(--muted);font-weight:500;}
+  .tm-row .chev{color:var(--muted);}
+  .tm-section{margin-bottom:22px;}
+  .tm-section h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;}
+  .tm-inline{display:flex;gap:8px;}
+  .tm-inline input{flex:1;min-width:0;}
+  .tm-btn{flex-shrink:0;border:none;border-radius:10px;padding:0 16px;font-size:14px;font-weight:700;background:var(--text);color:var(--bg);}
+  .tm-btn:disabled{opacity:.4;}
+  .tm-wide{width:100%;padding:13px;}
+  .tm-note{font-size:12px;color:var(--muted);line-height:1.6;margin:6px 0 0;}
+  .sheet .tm-lead{margin:0 0 18px;font-size:13px;}
+  .tm-month{font-size:12px;font-weight:700;color:var(--muted);margin:14px 0 6px;}
+  .tm-month:first-child{margin-top:0;}
+  .tm-check{display:flex;align-items:center;gap:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-bottom:6px;}
+  .tm-check input{width:20px;height:20px;flex-shrink:0;accent-color:var(--stock);}
+  #tm-backdrop[data-sheet="finance"] .tm-check input{accent-color:var(--finance);}
+  .tm-check.done{opacity:.5;}
+  .tm-check .main{flex:1;min-width:0;}
+  .tm-check .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tm-check .t2{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   details{border-top:1px solid var(--border);margin:6px 0 12px;}
   summary{display:block;padding:12px 0;font-size:13px;color:var(--muted);cursor:pointer;list-style:none;}
   summary::-webkit-details-marker{display:none;}
@@ -97,8 +132,8 @@
   .delete-btn{flex-shrink:0;border:1px solid var(--danger);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;background:none;color:var(--danger);}
   .delete-btn:active{background:var(--danger-dim);}
 
-  #sheet-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:10;}
-  #sheet-backdrop.show{display:flex;}
+  #sheet-backdrop,#tm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:10;}
+  #sheet-backdrop.show,#tm-backdrop.show{display:flex;}
   .sheet{width:100%;max-width:520px;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));}
   .sheet h2{margin:0 0 6px;font-size:17px;}
   .sheet .sheet-name{font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;}
@@ -144,7 +179,7 @@
           <select id="s-location-select" class="hybrid-select"></select>
           <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
         </div>
-        <div class="field"><label>タグ（複数選択可）</label>
+        <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="stock">管理</button></div>
           <div id="s-tags-chips" class="chips"></div>
           <input type="text" id="s-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
         </div>
@@ -167,7 +202,7 @@
         </div>
         <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
         <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
-        <div class="field"><label>タグ（複数選択可）</label>
+        <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
           <div id="f-tags-chips" class="chips"></div>
           <input type="text" id="f-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
         </div>
@@ -204,6 +239,17 @@
     <p>スプレッドシートからこの商品の行が削除されます。元に戻すことはできません。</p>
     <button type="button" class="hold-btn" id="hold-delete-btn"><div class="fill"></div><span>長押しで削除</span></button>
     <button type="button" class="cancel-btn" id="sheet-cancel-btn">キャンセル</button>
+  </div>
+</div>
+<div id="tm-backdrop">
+  <div class="sheet tall" role="dialog" aria-modal="true" aria-labelledby="tm-title">
+    <div class="tm-head">
+      <button type="button" class="text-btn" id="tm-back">‹ 戻る</button>
+      <h2 id="tm-title">タグ管理</h2>
+      <button type="button" class="text-btn" id="tm-close">閉じる</button>
+    </div>
+    <div class="tm-body" id="tm-body"></div>
+    <div class="tm-foot" id="tm-foot"></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -417,6 +463,8 @@ function createTagPicker(chipsId, inputId){
   const selected = new Set();
   return {
     render(tags){
+      // 名称変更・削除で無くなったタグは選択状態からも外す
+      [...selected].forEach(t=>{ if(!tags.includes(t)) selected.delete(t); });
       wrap.innerHTML = '';
       tags.forEach(tag=>{
         const chip = document.createElement('button');
@@ -444,7 +492,7 @@ function createTagPicker(chipsId, inputId){
 const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 
 function loadStock(){
-  fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
+  return fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
     .then(r=>r.json())
     .then(rows=>{
       stockCache = rows;
@@ -473,11 +521,13 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
 
 // ---------- 家計簿 ----------
 const financeTagPicker = createTagPicker('f-tags-chips', 'f-tags-input');
+let financeOpts = {categories:[], tags:[], tagCounts:{}};
 // カテゴリ・タグの候補は家計簿シートに登録済みの値から作る
 function loadFinanceOptions(){
-  fetch(`${GAS_URL}?action=getFinanceOptions&t=${Date.now()}`)
+  return fetch(`${GAS_URL}?action=getFinanceOptions&t=${Date.now()}`)
     .then(r=>r.json())
     .then(opts=>{
+      financeOpts = opts;
       setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), uniqSorted(opts.categories || []));
       financeTagPicker.render(uniqSorted(opts.tags || []));
     })
@@ -499,6 +549,231 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
     })
     .catch(()=>toast('通信エラー'));
 });
+
+// ---------- タグ管理（在庫・家計簿） ----------
+// 要素を作る小さなヘルパー。文字列の子要素はテキストとして入るのでエスケープ不要
+function h(tag, props = {}, ...children){
+  const el = document.createElement(tag);
+  Object.entries(props).forEach(([k, v])=>{
+    if(k === 'class') el.className = v;
+    else if(k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el[k] = v;
+  });
+  children.flat().forEach(c=>{ if(c != null && c !== false) el.append(c); });
+  return el;
+}
+function errMsg(err){
+  const m = err && err.message;
+  return !m || m === 'Failed to fetch' || m === 'Load failed' ? '通信エラー' : m.replace(/^Error:\s*/, '');
+}
+// 長押しで実行するボタン（商品削除と同じ見た目）。onDone(reset) の reset で元に戻せる
+function makeHoldButton(label, onDone){
+  const span = h('span', {}, label);
+  const btn = h('button', {type:'button', class:'hold-btn'}, h('div', {class:'fill'}), span);
+  let timer;
+  const reset = ()=>{ btn.disabled = false; btn.classList.remove('holding'); span.textContent = label; };
+  const cancel = ()=>{ clearTimeout(timer); if(!btn.disabled) btn.classList.remove('holding'); };
+  btn.addEventListener('pointerdown', e=>{
+    if(btn.disabled) return;
+    e.preventDefault();
+    btn.classList.add('holding');
+    timer = setTimeout(()=>{ btn.disabled = true; span.textContent = '処理中…'; onDone(reset); }, HOLD_MS);
+  });
+  ['pointerup','pointerleave','pointercancel'].forEach(ev=>btn.addEventListener(ev, cancel));
+  btn.addEventListener('contextmenu', e=>e.preventDefault());
+  return btn;
+}
+
+const TM_LABEL = {stock:'在庫', finance:'家計簿'};
+const tm = {sheet:null, stack:[], busy:false};
+const tmBackdrop = document.getElementById('tm-backdrop');
+const tmBody = document.getElementById('tm-body');
+const tmFoot = document.getElementById('tm-foot');
+const tmTitle = document.getElementById('tm-title');
+const tmBack = document.getElementById('tm-back');
+
+function tmTagCounts(){
+  if(tm.sheet === 'finance') return financeOpts.tagCounts || {};
+  const counts = {};
+  stockCache.forEach(r=>splitTags(r.tags).forEach(t=>counts[t] = (counts[t] || 0) + 1));
+  return counts;
+}
+function openTagManager(sheet){
+  tm.sheet = sheet;
+  tm.stack = [];
+  tmBackdrop.dataset.sheet = sheet;
+  tmBackdrop.classList.add('show');
+  tmShow(tmListView);
+}
+function closeTagManager(){
+  if(tm.busy) return;
+  tmBackdrop.classList.remove('show');
+}
+// 画面は「一覧 → タグ詳細 → 付与する行の選択」の順に積み重ね、「戻る」で1つ前に戻る
+function tmShow(view, ...args){ tm.stack.push([view, args]); tmRender(); }
+function tmRender(){
+  const [view, args] = tm.stack[tm.stack.length - 1];
+  tmBody.innerHTML = '';
+  tmFoot.innerHTML = '';
+  tmBody.scrollTop = 0;
+  tmBack.style.visibility = tm.stack.length > 1 ? 'visible' : 'hidden';
+  view(...args);
+}
+tmBack.addEventListener('click', ()=>{ if(!tm.busy && tm.stack.length > 1){ tm.stack.pop(); tmRender(); } });
+document.getElementById('tm-close').addEventListener('click', closeTagManager);
+tmBackdrop.addEventListener('click', e=>{ if(e.target === tmBackdrop) closeTagManager(); });
+document.querySelectorAll('[data-tag-manage]').forEach(b=>b.addEventListener('click', ()=>openTagManager(b.dataset.tagManage)));
+
+// GASでタグを一括操作し、成功したら候補とカウントを読み込み直す
+function tagOp(payload){
+  tm.busy = true;
+  return postToGas({type:'tag', sheet:tm.sheet, ...payload})
+    .then(res=>{
+      if(res.status !== 'success') throw new Error(res.message || '処理に失敗しました');
+      return (tm.sheet === 'stock' ? loadStock() : loadFinanceOptions()).then(()=>res);
+    })
+    .finally(()=>{ tm.busy = false; });
+}
+function hasSeparator(name){
+  if(/[,，、]/.test(name)){ toast('タグ名に「,」「、」は使えません'); return true; }
+  return false;
+}
+
+function tmListView(){
+  tmTitle.textContent = `${TM_LABEL[tm.sheet]}のタグ`;
+  const counts = tmTagCounts();
+  const tags = uniqSorted(Object.keys(counts));
+  const input = h('input', {type:'text', placeholder:'新しいタグ名'});
+  const next = ()=>{
+    const name = input.value.trim();
+    if(!name || hasSeparator(name)) return;
+    tmShow(counts[name] ? tmDetailView : tmAssignView, name);
+  };
+  tmBody.append(
+    h('div', {class:'tm-section'},
+      h('h3', {}, '新しいタグを作って付ける'),
+      h('div', {class:'tm-inline'}, input, h('button', {type:'button', class:'tm-btn', onclick:next}, '次へ'))),
+    h('div', {class:'tm-section'},
+      h('h3', {}, '登録済みのタグ'),
+      tags.length
+        ? tags.map(t=>h('button', {type:'button', class:'tm-row', onclick:()=>tmShow(tmDetailView, t)},
+            h('span', {class:'name'}, t), h('span', {class:'count'}, `${counts[t]}件`), h('span', {class:'chev'}, '›')))
+        : h('p', {class:'tm-note'}, 'タグはまだありません'))
+  );
+}
+
+function tmDetailView(tag){
+  tmTitle.textContent = tag;
+  const count = tmTagCounts()[tag] || 0;
+  const input = h('input', {type:'text', value:tag});
+  const renameBtn = h('button', {type:'button', class:'tm-btn', onclick:()=>{
+    const newName = input.value.trim();
+    if(!newName || newName === tag || hasSeparator(newName)) return;
+    if(tmTagCounts()[newName] && !confirm(`「${newName}」は既にあります。「${tag}」を「${newName}」に統合しますか？`)) return;
+    renameBtn.disabled = true;
+    tagOp({action:'rename', tag, newName})
+      .then(res=>{ toast(`${res.count}件のタグ名を変更しました`); tm.stack.pop(); tmShow(tmDetailView, newName); })
+      .catch(err=>{ toast(errMsg(err)); renameBtn.disabled = false; });
+  }}, '変更');
+  const deleteBtn = makeHoldButton('長押しでタグを削除', reset=>{
+    tagOp({action:'delete', tag})
+      .then(res=>{ toast(`${res.count}件から「${tag}」を外しました`); tm.stack.pop(); tmRender(); })
+      .catch(err=>{ toast(errMsg(err)); reset(); });
+  });
+  tmBody.append(
+    h('p', {class:'tm-note tm-lead'}, `${count}件に付いています`),
+    h('div', {class:'tm-section'},
+      h('h3', {}, '名前を変更'),
+      h('div', {class:'tm-inline'}, input, renameBtn),
+      h('p', {class:'tm-note'}, '既にあるタグ名にすると、2つのタグが1つにまとめられます。')),
+    h('div', {class:'tm-section'},
+      h('h3', {}, 'まとめて付ける'),
+      h('button', {type:'button', class:'tm-btn tm-wide', onclick:()=>tmShow(tmAssignView, tag)}, '付ける行を選ぶ')),
+    h('div', {class:'tm-section'},
+      h('h3', {}, '削除'),
+      h('p', {class:'tm-note'}, 'すべての行からこのタグを外します。行そのものは削除されません。'),
+      deleteBtn)
+  );
+}
+
+function tmAssignView(tag){
+  tmTitle.textContent = `「${tag}」を付ける`;
+  const selected = new Map(); // key → GASに送る対象
+  const submit = h('button', {type:'button', class:'tm-btn tm-wide'});
+  const update = ()=>{
+    submit.disabled = selected.size === 0;
+    submit.textContent = selected.size ? `${selected.size}件に付ける` : '付ける行を選んでください';
+  };
+  submit.addEventListener('click', ()=>{
+    submit.disabled = true;
+    submit.textContent = '処理中…';
+    tagOp({action:'assign', tag, targets:[...selected.values()]})
+      .then(res=>{
+        toast(`${res.count}件に「${tag}」を付けました`);
+        tm.stack.pop();
+        const [view, args] = tm.stack[tm.stack.length - 1];
+        if(view === tmDetailView && args[0] === tag) tmRender(); else tmShow(tmDetailView, tag);
+      })
+      .catch(err=>{ toast(errMsg(err)); update(); });
+  });
+  update();
+  tmFoot.append(submit);
+
+  const makeRow = (key, target, title, sub, has)=>{
+    const cb = h('input', {type:'checkbox', checked:has, disabled:has, onchange:()=>{
+      if(cb.checked) selected.set(key, target); else selected.delete(key);
+      update();
+    }});
+    return h('label', {class:'tm-check' + (has ? ' done' : '')}, cb,
+      h('div', {class:'main'}, h('div', {class:'t1'}, title), h('div', {class:'t2'}, has ? '付与済み' : sub)));
+  };
+
+  if(tm.sheet === 'stock'){
+    const items = [...stockCache].sort((a,b)=>String(a.itemName).localeCompare(String(b.itemName), 'ja'));
+    if(!items.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
+    items.forEach(it=>{
+      const tags = splitTags(it.tags);
+      const sub = [it.location, tags.join(', ')].filter(Boolean).join(' ・ ') || '収納場所・タグなし';
+      tmBody.append(makeRow(it.itemName, it.itemName, it.itemName, sub, tags.includes(tag)));
+    });
+    return;
+  }
+
+  // 家計簿は新しい順に30件ずつ読み込み、月ごとに見出しを付ける
+  const PAGE = 30;
+  let offset = 0, lastMonth = null;
+  const list = h('div');
+  const status = h('p', {class:'tm-note'}, '読み込み中…');
+  const more = h('button', {type:'button', class:'cancel-btn', onclick:()=>loadMore()});
+  tmBody.append(list);
+  function loadMore(){
+    more.remove();
+    status.textContent = '読み込み中…';
+    tmBody.append(status);
+    fetch(`${GAS_URL}?action=getFinance&offset=${offset}&limit=${PAGE}&t=${Date.now()}`)
+      .then(r=>r.json())
+      .then(data=>{
+        status.remove();
+        data.rows.forEach(r=>{
+          const d = new Date(r.date);
+          const month = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+          if(month !== lastMonth){ list.append(h('div', {class:'tm-month'}, month)); lastMonth = month; }
+          const tags = splitTags(r.tags);
+          const title = `${d.getMonth() + 1}/${d.getDate()}　${r.category || '—'}　¥${(Number(r.amount) || 0).toLocaleString()}`;
+          const sub = [r.memo, tags.join(', ')].filter(Boolean).join(' ・ ') || 'メモ・タグなし';
+          list.append(makeRow('row' + r.row, {row:r.row, date:r.date}, title, sub, tags.includes(tag)));
+        });
+        offset += data.rows.length;
+        if(!data.total) list.append(h('p', {class:'tm-note'}, '記録がありません'));
+        else if(offset < data.total){
+          more.textContent = `さらに${PAGE}件読み込む（残り${data.total - offset}件）`;
+          tmBody.append(more);
+        }
+      })
+      .catch(()=>{ status.textContent = '読み込みに失敗しました'; });
+  }
+  loadMore();
+}
 
 // ---------- 家事 ----------
 setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), []);
