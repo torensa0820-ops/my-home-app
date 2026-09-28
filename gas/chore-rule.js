@@ -97,6 +97,28 @@ function choreNextAfterDone(rule, now, due) {
   return choreNext(rule, due && due > now ? due : now, null);
 }
 
+// ルールの比較用の文字列（項目の順番や不要な項目の違いを無視する）
+function choreRuleKey(rule) {
+  if (!rule) return '';
+  var keys = { daily: ['interval', 'start'], weekly: ['interval', 'weekdays', 'start'], monthlyDay: ['day'],
+    monthlyWeekday: ['week', 'weekday'], afterDone: ['days', 'start'] }[rule.type] || [];
+  var obj = { type: rule.type, time: rule.time || '' };
+  keys.forEach(function (k) {
+    var v = rule[k];
+    obj[k] = Array.isArray(v) ? v.map(Number).sort() : (k === 'start' ? String(v || '') : Number(v));
+  });
+  return JSON.stringify(obj);
+}
+
+// 家事を編集したときの次の予定日時
+// 周期が変わっていなければ今の予定のまま。変わったら新しい周期で計算し直す
+// （afterDone は最後に完了した日から数える。未完了なら初回の日）
+function choreDueAfterEdit(oldRule, newRule, oldDue, lastDone, now) {
+  if (oldDue && choreRuleKey(choreParseRule(oldRule)) === choreRuleKey(newRule)) return oldDue;
+  if (newRule.type === 'afterDone' && lastDone) return choreNext(newRule, now, lastDone);
+  return choreFirst(newRule, now);
+}
+
 // ルールの説明文（例：毎月第2月曜 9:00）
 function choreLabel(rule) {
   if (!rule) return '';

@@ -634,6 +634,34 @@ function updateTodo(ss, data) {
     }
     throw new Error("家事が見つかりませんでした。一覧を読み込み直してください。");
   }
+
+  if (data.action === "edit" || data.action === "delete") {
+    const values = sheet.getDataRange().getValues();
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][col("id")]) !== String(data.id)) continue;
+      if (data.action === "delete") {
+        sheet.deleteRow(i + 1);
+        return null;
+      }
+      // 家事名と周期を上書きする。周期が変わったら次の予定日時を計算し直す
+      const taskName = String(data.taskName || "").trim();
+      if (!taskName) throw new Error("家事名が空です。");
+      const rule = choreParseRule(data.rule);
+      const err = choreValidate(rule);
+      if (err) throw new Error(err);
+      const r = values[i];
+      const asDate = v => v instanceof Date ? v : null;
+      const next = choreDueAfterEdit(r[col("rule")], rule, asDate(r[col("nextDue")]), asDate(r[col("lastDone")]), now);
+      const row = r.slice();
+      row[col("taskName")] = taskName;
+      row[col("rule")] = JSON.stringify(rule);
+      row[col("cycle")] = choreLabel(rule);
+      row[col("nextDue")] = next || "";
+      sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+      return { nextDue: next ? next.toISOString() : "" };
+    }
+    throw new Error("家事が見つかりませんでした。一覧を読み込み直してください。");
+  }
   throw new Error("action が不正です: " + data.action);
 }
 
