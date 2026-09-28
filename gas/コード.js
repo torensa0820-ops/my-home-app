@@ -55,18 +55,27 @@ function doGet(e) {
   }
   if (e.parameter.action === "getFinance") {
     // 家計簿の記録を新しい順に offset 件目から limit 件返す（履歴表示・タグ一括付与の対象選択用）
-    // monthTotals は全記録の月別合計（キーは日本時間の "yyyy-MM"）
+    // monthTotals は（絞り込み後の）全記録の月別合計（キーは日本時間の "yyyy-MM"）
     const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
     const headers = values[0];
     const offset = Number(e.parameter.offset) || 0;
     const limit = Number(e.parameter.limit) || 30;
-    const rows = values.slice(1)
+    let rows = values.slice(1)
       .map((r, i) => {
         const obj = { row: i + 2 }; // シート上の行番号
         headers.forEach((h, j) => obj[h] = r[j] instanceof Date ? r[j].toISOString() : r[j]);
         return obj;
       })
       .filter(r => r.date !== "");
+    // タグで絞り込む（tags は「,」区切り。mode=all ならすべて含む記録、それ以外はいずれかを含む記録）
+    const filterTags = splitTags(e.parameter.tags || "");
+    if (filterTags.length) {
+      const all = e.parameter.mode === "all";
+      rows = rows.filter(r => {
+        const t = splitTags(r.tags);
+        return all ? filterTags.every(x => t.includes(x)) : filterTags.some(x => t.includes(x));
+      });
+    }
     // 支出した日（日本時間）の新しい順。同じ日は登録時刻の新しい順
     const day = r => Utilities.formatDate(new Date(r.date), "Asia/Tokyo", "yyyy-MM-dd");
     rows.forEach(r => { r.day = day(r); });

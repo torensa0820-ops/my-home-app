@@ -140,6 +140,20 @@
   nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
 
   .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
+  /* タグの絞り込みバー：横にスクロールするチップと、右端の「管理」ボタン */
+  .filter-bar{display:flex;align-items:center;gap:8px;margin:0 -16px 12px;padding:0 16px;}
+  .filter-bar:empty{display:none;}
+  .filter-chips{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0;}
+  .filter-chips::-webkit-scrollbar{display:none;}
+  .filter-chips .chip{flex-shrink:0;padding:6px 12px;font-size:12px;}
+  .filter-chips .none{font-size:12px;color:var(--muted);padding:6px 0;white-space:nowrap;}
+  .filter-manage{flex-shrink:0;border:1px solid var(--border);background:none;color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;}
+  .filter-status{display:flex;align-items:center;gap:10px;margin:-4px 0 12px;font-size:12px;color:var(--muted);}
+  .filter-status:empty{display:none;}
+  .filter-status button{background:none;border:1px solid var(--border);border-radius:999px;color:var(--text);font-size:12px;font-weight:600;padding:4px 10px;}
+  .filter-status .clear{margin-left:auto;border:none;color:var(--muted);text-decoration:underline;padding:4px 0;}
+  #stock-panel .filter-manage{color:var(--stock);}
+  #finance-panel .filter-manage{color:var(--finance);}
 
   /* 登録パネル：一覧を見ながら入力できるよう、タブバーの上に半分ほどの高さで重ねる */
   :root{--tabbar-h:calc(49px + var(--safe-bottom));--compose-pad:0px;}
@@ -223,6 +237,7 @@
         <div class="section-title">登録中の商品</div>
         <button type="button" id="stock-edit-toggle" class="edit-toggle">整理</button>
       </div>
+      <div class="filter-bar" id="stock-filter"></div>
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
 
       <button type="button" class="fab" data-compose="stock">＋ 登録</button>
@@ -261,6 +276,7 @@
       <div class="list-head">
         <div class="section-title">記録の履歴</div>
       </div>
+      <div class="filter-bar" id="finance-filter"></div>
       <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
 
       <button type="button" class="fab" data-compose="finance">＋ 記録</button>
@@ -527,7 +543,10 @@ function renderStockList(){
   const wrap = document.getElementById('stock-list');
   if(!stockCache.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   wrap.innerHTML = '';
-  groupStock().forEach(g=>{
+  const groups = groupStock().filter(g=>stockFilter.matches(g.tags));
+  if(stockFilter.active()) stockFilter.setCount(`${groups.length}件`);
+  if(!groups.length){ wrap.innerHTML = '<p class="empty-msg">該当する商品がありません</p>'; return; }
+  groups.forEach(g=>{
     const single = g.lots.length === 1;
     const exp = single ? expInfo(g.lots[0]) : null;
     const meta = h('div', {class:'card-meta'});
@@ -702,6 +721,60 @@ function createTagPicker(chipsId, inputId){
     }
   };
 }
+// タグの絞り込みバー。複数選択でき、2つ以上選ぶと「いずれかを含む／すべてを含む」を切り替えられる
+function createFilterBar(barId, sheet, onChange){
+  const bar = document.getElementById(barId);
+  const status = h('div', {class:'filter-status'});
+  bar.after(status);
+  const selected = new Set();
+  let mode = 'any';
+  let tags = [];
+  const changed = ()=>{ draw(); onChange(); };
+  function draw(){
+    bar.innerHTML = '';
+    const chips = h('div', {class:'filter-chips'});
+    if(!tags.length) chips.append(h('span', {class:'none'}, 'タグはまだありません'));
+    // 選択中のタグが横スクロールの外に隠れないよう、先頭に並べる
+    [...tags.filter(t=>selected.has(t)), ...tags.filter(t=>!selected.has(t))].forEach(t=>chips.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>{
+      if(selected.has(t)) selected.delete(t); else selected.add(t);
+      changed();
+    }}, t)));
+    bar.append(chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
+    status.innerHTML = '';
+    if(selected.size){
+      status.append(h('span', {class:'count'}));
+      if(selected.size > 1){
+        status.append(h('button', {type:'button', onclick:()=>{ mode = mode === 'any' ? 'all' : 'any'; changed(); }},
+          mode === 'any' ? 'いずれかを含む ⇄' : 'すべてを含む ⇄'));
+      }
+      status.append(h('button', {type:'button', class:'clear', onclick:()=>{ selected.clear(); changed(); }}, '絞り込みを解除'));
+    }
+  }
+  return {
+    // タグ一覧を描き直す。名称変更・削除で無くなったタグは選択から外し、絞り込みを更新する
+    render(list){
+      tags = list;
+      const before = selected.size;
+      [...selected].forEach(t=>{ if(!tags.includes(t)) selected.delete(t); });
+      draw();
+      if(selected.size !== before) onChange();
+    },
+    active(){ return selected.size > 0; },
+    matches(tagStr){
+      if(!selected.size) return true;
+      const t = splitTags(tagStr);
+      return mode === 'all' ? [...selected].every(x=>t.includes(x)) : [...selected].some(x=>t.includes(x));
+    },
+    query(){ return selected.size ? `&tags=${encodeURIComponent([...selected].join(','))}&mode=${mode}` : ''; },
+    // 絞り込み結果の件数を表示する
+    setCount(text){ const el = status.querySelector('.count'); if(el) el.textContent = text; }
+  };
+}
+const stockFilter = createFilterBar('stock-filter', 'stock', ()=>renderStockList());
+const financeFilter = createFilterBar('finance-filter', 'finance', ()=>loadFinanceHistory());
+stockFilter.render([]);
+financeFilter.render([]);
+
 const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 
 function loadStock(){
@@ -713,6 +786,7 @@ function loadStock(){
       // 収納場所・タグの候補はスプレッドシートに登録済みの値から作る
       setupHybrid(document.getElementById('s-location-select'), document.getElementById('s-location-input'), uniqSorted(rows.map(r=>r.location)));
       stockTagPicker.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
+      stockFilter.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
     })
     .catch(()=>{ document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
@@ -754,6 +828,7 @@ function loadFinanceOptions(){
       financeOpts = opts;
       setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), uniqSorted(opts.categories || []));
       financeTagPicker.render(uniqSorted(opts.tags || []));
+      financeFilter.render(uniqSorted(opts.tags || []));
     })
     .catch(()=>toast('家計簿の候補の読み込みに失敗しました'));
 }
@@ -790,14 +865,15 @@ function loadFinanceHistory(append){
   wrap.querySelector('.more-btn')?.remove();
   if(!append) wrap.innerHTML = '';
   wrap.append(status);
-  return fetch(`${GAS_URL}?action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}&t=${Date.now()}`)
+  return fetch(`${GAS_URL}?action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}${financeFilter.query()}&t=${Date.now()}`)
     .then(r=>r.json())
     .then(data=>{
       if(seq !== fin.seq) return;
       status.remove();
       fin.total = data.total;
+      if(financeFilter.active()) financeFilter.setCount(`${data.total}件`);
       fin.monthTotals = data.monthTotals || {};
-      if(!data.total){ wrap.append(h('p', {class:'empty-msg'}, 'まだ記録がありません')); return; }
+      if(!data.total){ wrap.append(h('p', {class:'empty-msg'}, financeFilter.active() ? '該当する記録がありません' : 'まだ記録がありません')); return; }
       data.rows.forEach(r=>{
         const d = finDay(r);
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
