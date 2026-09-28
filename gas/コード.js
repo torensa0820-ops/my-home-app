@@ -54,7 +54,8 @@ function doGet(e) {
     return jsonOutput({ categories: [...categories], tags: Object.keys(tagCounts), tagCounts: tagCounts });
   }
   if (e.parameter.action === "getFinance") {
-    // 家計簿の記録を新しい順に offset 件目から limit 件返す（タグ一括付与の対象選択用）
+    // 家計簿の記録を新しい順に offset 件目から limit 件返す（履歴表示・タグ一括付与の対象選択用）
+    // monthTotals は全記録の月別合計（キーは日本時間の "yyyy-MM"）
     const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
     const headers = values[0];
     const offset = Number(e.parameter.offset) || 0;
@@ -67,7 +68,12 @@ function doGet(e) {
       })
       .filter(r => r.date !== "")
       .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.row - a.row);
-    return jsonOutput({ rows: rows.slice(offset, offset + limit), total: rows.length });
+    const monthTotals = {};
+    rows.forEach(r => {
+      const key = Utilities.formatDate(new Date(r.date), "Asia/Tokyo", "yyyy-MM");
+      monthTotals[key] = (monthTotals[key] || 0) + (Number(r.amount) || 0);
+    });
+    return jsonOutput({ rows: rows.slice(offset, offset + limit), total: rows.length, monthTotals: monthTotals });
   }
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }

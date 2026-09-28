@@ -140,6 +140,42 @@
   nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
 
   .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
+
+  /* 登録パネル：一覧を見ながら入力できるよう、タブバーの上に半分ほどの高さで重ねる */
+  :root{--tabbar-h:calc(49px + var(--safe-bottom));--compose-pad:0px;}
+  .compose{position:fixed;left:0;right:0;bottom:var(--tabbar-h);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.45);display:none;flex-direction:column;z-index:5;}
+  body.composing .tab-panel.active .compose{display:flex;}
+  .compose-grip{flex-shrink:0;height:22px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;}
+  .compose-grip span{width:40px;height:5px;border-radius:3px;background:var(--border);}
+  .compose-head{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px;}
+  .compose-hint + .compose-body{margin-top:0;}
+  .compose-head:has(+ .compose-hint){padding-bottom:0;}
+  .compose-head h2{margin:0;font-size:16px;}
+  .compose-hint{flex-shrink:0;margin:4px 16px 8px;font-size:12px;color:var(--muted);}
+  .compose-body{flex:1;overflow-y:auto;border-top:1px solid var(--border);-webkit-overflow-scrolling:touch;padding:12px 16px 16px;}
+  .compose form{background:none;border:none;border-radius:0;padding:0;}
+  main{padding-bottom:calc(96px + var(--safe-bottom) + var(--compose-pad));}
+  .fab{position:fixed;right:16px;bottom:calc(var(--tabbar-h) + 16px);z-index:4;border:none;border-radius:999px;padding:13px 20px;font-size:15px;font-weight:700;color:#0B1210;box-shadow:0 6px 18px rgba(0,0,0,.45);}
+  .tab-panel:not(.active) .fab, body.composing .fab{display:none;}
+  #stock-panel .fab{background:var(--stock);}
+  #finance-panel .fab{background:var(--finance);}
+  #chore-panel .fab{background:var(--chore);}
+  /* 登録パネルが開いている間、一覧のタップで入力できることを示す */
+  body.composing #stock-panel .card-info, body.composing #finance-panel .fin-row{cursor:copy;}
+  .picked{animation:picked .6s ease-out;}
+  @keyframes picked{from{box-shadow:0 0 0 2px var(--text);}to{box-shadow:0 0 0 2px transparent;}}
+
+  /* 家計簿の履歴 */
+  .fin-month{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;color:var(--muted);margin:18px 2px 8px;}
+  .fin-month:first-child{margin-top:0;}
+  .fin-month .sum{font-size:13px;color:var(--text);}
+  .fin-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-bottom:8px;}
+  .fin-date{flex-shrink:0;width:38px;font-size:12px;color:var(--muted);text-align:center;line-height:1.3;}
+  .fin-date b{display:block;font-size:16px;color:var(--text);}
+  .fin-main{flex:1;min-width:0;}
+  .fin-cat{font-size:15px;font-weight:600;}
+  .fin-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .fin-amount{flex-shrink:0;font-size:16px;font-weight:700;}
   .list-head .section-title{margin:0;}
   .edit-toggle{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;}
   .edit-toggle.on{border-color:var(--danger);color:var(--danger);}
@@ -160,7 +196,7 @@
   .hold-btn:disabled{opacity:.6;}
   .cancel-btn{width:100%;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:13px;font-size:15px;font-weight:600;background:none;color:var(--text);}
 
-  #toast{position:fixed;left:50%;bottom:calc(90px + var(--safe-bottom));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
+  #toast{position:fixed;z-index:20;left:50%;bottom:calc(90px + var(--safe-bottom) + var(--compose-pad));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 </style>
 </head>
@@ -185,57 +221,96 @@
         <button type="button" id="stock-edit-toggle" class="edit-toggle">整理</button>
       </div>
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
-      <div class="section-title">新しく登録する</div>
-      <form id="stock-form">
-        <div class="field"><label>商品名</label><input type="text" id="s-name" required placeholder="例：ティッシュ"></div>
-        <div class="row2"><div class="field"><label>個数</label><input type="number" id="s-value" required value="1" inputmode="numeric"></div></div>
-        <div class="field"><label>収納場所</label>
-          <select id="s-location-select" class="hybrid-select"></select>
-          <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
+
+      <button type="button" class="fab" data-compose="stock">＋ 登録</button>
+      <div class="compose" id="stock-compose" role="dialog" aria-labelledby="stock-compose-title">
+        <div class="compose-grip" aria-hidden="true"><span></span></div>
+        <div class="compose-head">
+          <h2 id="stock-compose-title">新しく登録する</h2>
+          <button type="button" class="text-btn compose-close">閉じる</button>
         </div>
-        <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="stock">管理</button></div>
-          <div id="s-tags-chips" class="chips"></div>
-          <input type="text" id="s-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
+        <p class="compose-hint">一覧の商品をタップすると、商品名・収納場所・タグを入力できます</p>
+        <div class="compose-body">
+          <form id="stock-form">
+            <div class="field"><label>商品名</label><input type="text" id="s-name" required placeholder="例：ティッシュ"></div>
+            <div class="row2"><div class="field"><label>個数</label><input type="number" id="s-value" required value="1" inputmode="numeric"></div></div>
+            <div class="field"><label>収納場所</label>
+              <select id="s-location-select" class="hybrid-select"></select>
+              <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
+            </div>
+            <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="stock">管理</button></div>
+              <div id="s-tags-chips" class="chips"></div>
+              <input type="text" id="s-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
+            </div>
+            <details>
+              <summary>賞味期限・型番（任意）</summary>
+              <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"><p class="form-note">登録済みの商品名で登録すると、賞味期限が同じなら個数を足し、違えば期限ごとに分けて管理します。</p></div>
+              <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"></div>
+            </details>
+            <button type="submit" class="submit-btn">この商品を登録</button>
+          </form>
         </div>
-        <details>
-          <summary>賞味期限・型番（任意）</summary>
-          <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"><p class="form-note">登録済みの商品名で登録すると、賞味期限が同じなら個数を足し、違えば期限ごとに分けて管理します。</p></div>
-          <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"></div>
-        </details>
-        <button type="submit" class="submit-btn">この商品を登録</button>
-      </form>
+      </div>
     </section>
 
     <!-- ===== 家計簿タブ ===== -->
     <section id="finance-panel" class="tab-panel">
-      <div class="section-title">支出を記録する</div>
-      <form id="finance-form">
-        <div class="field"><label>カテゴリ</label>
-          <select id="f-category-select" class="hybrid-select"></select>
-          <input type="text" id="f-category-input" class="hybrid-input" placeholder="新しいカテゴリを入力">
+      <div class="list-head">
+        <div class="section-title">記録の履歴</div>
+      </div>
+      <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
+
+      <button type="button" class="fab" data-compose="finance">＋ 記録</button>
+      <div class="compose" id="finance-compose" role="dialog" aria-labelledby="finance-compose-title">
+        <div class="compose-grip" aria-hidden="true"><span></span></div>
+        <div class="compose-head">
+          <h2 id="finance-compose-title">支出を記録する</h2>
+          <button type="button" class="text-btn compose-close">閉じる</button>
         </div>
-        <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
-        <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
-        <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
-          <div id="f-tags-chips" class="chips"></div>
-          <input type="text" id="f-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
+        <p class="compose-hint">履歴をタップすると、カテゴリ・メモ・タグを入力できます</p>
+        <div class="compose-body">
+          <form id="finance-form">
+            <div class="field"><label>カテゴリ</label>
+              <select id="f-category-select" class="hybrid-select"></select>
+              <input type="text" id="f-category-input" class="hybrid-input" placeholder="新しいカテゴリを入力">
+            </div>
+            <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
+            <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
+            <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
+              <div id="f-tags-chips" class="chips"></div>
+              <input type="text" id="f-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
+            </div>
+            <button type="submit" class="submit-btn">記録する</button>
+          </form>
         </div>
-        <button type="submit" class="submit-btn">記録する</button>
-      </form>
+      </div>
     </section>
 
     <!-- ===== 家事タブ ===== -->
     <section id="chore-panel" class="tab-panel">
+      <div class="list-head">
+        <div class="section-title">今日やる家事</div>
+      </div>
       <div id="chore-list"><p class="empty-msg">読み込み中…</p></div>
-      <div class="section-title">新しい家事を登録する</div>
-      <form id="chore-form">
-        <div class="field"><label>家事名</label><input type="text" id="c-name" required placeholder="例：お風呂掃除"></div>
-        <div class="field"><label>周期</label>
-          <select id="c-cycle-select" class="hybrid-select"></select>
-          <input type="text" id="c-cycle-input" class="hybrid-input" placeholder="新しい周期を入力（例：3ヶ月に1回）">
+
+      <button type="button" class="fab" data-compose="chore">＋ 登録</button>
+      <div class="compose" id="chore-compose" role="dialog" aria-labelledby="chore-compose-title">
+        <div class="compose-grip" aria-hidden="true"><span></span></div>
+        <div class="compose-head">
+          <h2 id="chore-compose-title">新しい家事を登録する</h2>
+          <button type="button" class="text-btn compose-close">閉じる</button>
         </div>
-        <button type="submit" class="submit-btn">この家事を登録</button>
-      </form>
+        <div class="compose-body">
+          <form id="chore-form">
+            <div class="field"><label>家事名</label><input type="text" id="c-name" required placeholder="例：お風呂掃除"></div>
+            <div class="field"><label>周期</label>
+              <select id="c-cycle-select" class="hybrid-select"></select>
+              <input type="text" id="c-cycle-input" class="hybrid-input" placeholder="新しい周期を入力（例：3ヶ月に1回）">
+            </div>
+            <button type="submit" class="submit-btn">この家事を登録</button>
+          </form>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -322,12 +397,13 @@ function escapeHtml(s){
 // ---------- タブ切り替え ----------
 const TAB_INFO = {
   stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
-  finance:{title:'家計簿', sub:'支出を記録'},
+  finance:{title:'家計簿', sub:'支出の履歴と記録'},
   chore:{title:'家事ルーティン', sub:'今日やる家事はこれ'}
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(stockEditMode) setStockEditMode(false);
+    closeCompose();
     document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     btn.classList.add('active');
@@ -337,6 +413,68 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
     document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
   });
 });
+
+// ---------- 登録パネル ----------
+// 「＋ 登録」で開き、一覧の上に重ねて表示する。上端のつまみをドラッグして高さを変えられる
+let composeHeight = null; // ドラッグで変えた高さ（px）。未設定なら表示領域の55%
+function isComposing(){ return document.body.classList.contains('composing'); }
+function activeCompose(){ return document.querySelector('.tab-panel.active .compose'); }
+function applyComposeHeight(){
+  const root = document.documentElement.style;
+  if(!isComposing()){ root.setProperty('--compose-pad', '0px'); return; }
+  if(composeHeight) root.setProperty('--compose-h', composeHeight + 'px');
+  // 一覧の最後まで見られるよう、パネルの高さ分だけ一覧の下に余白を足す
+  const panel = activeCompose();
+  if(panel) root.setProperty('--compose-pad', panel.getBoundingClientRect().height + 'px');
+}
+function openCompose(){
+  document.body.classList.add('composing');
+  applyComposeHeight();
+}
+function closeCompose(){
+  document.body.classList.remove('composing');
+  applyComposeHeight();
+}
+document.querySelectorAll('.fab').forEach(b=>b.addEventListener('click', openCompose));
+document.querySelectorAll('.compose-close').forEach(b=>b.addEventListener('click', closeCompose));
+document.querySelectorAll('.compose-grip').forEach(grip=>{
+  let startY, startH;
+  grip.addEventListener('pointerdown', e=>{
+    startY = e.clientY;
+    startH = grip.parentElement.getBoundingClientRect().height;
+    grip.setPointerCapture(e.pointerId);
+  });
+  grip.addEventListener('pointermove', e=>{
+    if(startY == null) return;
+    const navTop = document.querySelector('nav.tabbar').getBoundingClientRect().top;
+    const max = navTop - 80; // ヘッダー付近までは広げられる
+    composeHeight = Math.round(Math.min(max, Math.max(160, startH + (startY - e.clientY))));
+    applyComposeHeight();
+  });
+  const end = e=>{
+    if(startY == null) return;
+    // 下まで引き下げたら閉じる
+    if(startH + (startY - e.clientY) < 120){ composeHeight = null; document.documentElement.style.removeProperty('--compose-h'); closeCompose(); }
+    startY = null;
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+});
+window.addEventListener('resize', applyComposeHeight);
+// 一覧をタップしてフォームに入力したことを、カードの枠とトーストで知らせる
+function flashPicked(el, label){
+  el.classList.remove('picked');
+  void el.offsetWidth;
+  el.classList.add('picked');
+  toast(`「${label}」を入力しました`);
+}
+// プルダウン＋新規入力の組み合わせに値を入れる（候補になければ新規入力欄に入れる）
+function setHybridValue(selectEl, inputEl, v){
+  v = String(v || '').trim();
+  const has = [...selectEl.options].some(o=>o.value === v && v !== '__new__');
+  if(!v || has){ selectEl.value = v; inputEl.style.display = 'none'; }
+  else { selectEl.value = '__new__'; inputEl.style.display = 'block'; inputEl.value = v; }
+}
 
 // 最新版の読み込み：キャッシュを使わずにページを取り直してキャッシュを上書きし、再読み込みする
 document.getElementById('reload-btn').addEventListener('click', e=>{
@@ -392,7 +530,7 @@ function renderStockList(){
       wrap.appendChild(card);
       return;
     }
-    info.addEventListener('click', ()=>openItemEditor(g));
+    info.addEventListener('click', ()=>isComposing() ? fillStockForm(g, card) : openItemEditor(g));
     if(single){
       card.append(info, makeStepper(g.lots[0]));
     } else {
@@ -532,6 +670,15 @@ function createTagPicker(chipsId, inputId){
     },
     // render の前に呼ぶと、そのタグを選択済みの状態で表示する
     select(tag){ selected.add(tag); },
+    // 選択中のタグを入れ替える（一覧のタップでフォームに入力するとき用）
+    set(tags){
+      // 候補のチップにないタグは、選択状態が見えなくならないよう新規入力欄に入れる
+      const shown = new Set([...wrap.querySelectorAll('.chip')].map(c=>c.textContent));
+      selected.clear();
+      tags.filter(t=>shown.has(t)).forEach(t=>selected.add(t));
+      input.value = tags.filter(t=>!shown.has(t)).join(',');
+      wrap.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on', selected.has(c.textContent)));
+    },
     // 選択中のタグと新規入力のタグを「,」区切りの文字列にする
     value(){
       return [...new Set([...selected, ...splitTags(input.value)])].join(',');
@@ -572,6 +719,17 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
       else toast('登録に失敗しました');
     }).catch(()=>toast('通信エラー'));
 });
+// 一覧の商品をタップすると、商品名・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
+function fillStockForm(g, card){
+  document.getElementById('s-name').value = g.name;
+  setHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'), g.location);
+  stockTagPicker.set(splitTags(g.tags));
+  document.getElementById('s-model').value = g.modelNumber || '';
+  document.getElementById('s-value').value = 1;
+  document.getElementById('s-expiration').value = '';
+  document.querySelector('#stock-form details').open = true; // 買い足しは期限を入れることが多い
+  flashPicked(card, g.name);
+}
 
 // ---------- 家計簿 ----------
 const financeTagPicker = createTagPicker('f-tags-chips', 'f-tags-input');
@@ -598,11 +756,67 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
   if(!amount) return;
   postToGas({type:'finance', category, amount, memo, tags})
     .then(res=>{
-      if(res.status==='success'){ toast('記録しました'); e.target.reset(); financeTagPicker.clear(); loadFinanceOptions(); }
+      if(res.status==='success'){ toast('記録しました'); e.target.reset(); financeTagPicker.clear(); loadFinanceOptions(); loadFinanceHistory(); }
       else toast('記録に失敗しました');
     })
     .catch(()=>toast('通信エラー'));
 });
+
+// 家計簿の履歴：新しい順に30件ずつ読み込み、月ごとの見出しに合計を出す
+const FIN_PAGE = 30;
+const fin = {offset:0, total:0, lastMonth:null, monthTotals:{}, seq:0};
+function loadFinanceHistory(append){
+  const wrap = document.getElementById('finance-list');
+  const seq = append ? fin.seq : ++fin.seq; // 読み込み直しの途中で古い応答が混ざらないようにする
+  if(!append){ fin.offset = 0; fin.lastMonth = null; }
+  const status = h('p', {class:'empty-msg'}, '読み込み中…');
+  wrap.querySelector('.more-btn')?.remove();
+  if(!append) wrap.innerHTML = '';
+  wrap.append(status);
+  return fetch(`${GAS_URL}?action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}&t=${Date.now()}`)
+    .then(r=>r.json())
+    .then(data=>{
+      if(seq !== fin.seq) return;
+      status.remove();
+      fin.total = data.total;
+      fin.monthTotals = data.monthTotals || {};
+      if(!data.total){ wrap.append(h('p', {class:'empty-msg'}, 'まだ記録がありません')); return; }
+      data.rows.forEach(r=>{
+        const d = new Date(r.date);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
+        if(key !== fin.lastMonth){
+          const sum = fin.monthTotals[key];
+          wrap.append(h('div', {class:'fin-month'},
+            h('span', {}, `${d.getFullYear()}年${d.getMonth() + 1}月`),
+            sum != null ? h('span', {class:'sum'}, `合計 ¥${Number(sum).toLocaleString()}`) : ''));
+          fin.lastMonth = key;
+        }
+        const tags = splitTags(r.tags);
+        const row = h('div', {class:'fin-row'},
+          h('div', {class:'fin-date'}, h('b', {}, String(d.getDate())), '日'),
+          h('div', {class:'fin-main'},
+            h('div', {class:'fin-cat'}, r.category || '—'),
+            h('div', {class:'fin-sub'}, [r.memo, tags.join(', ')].filter(Boolean).join(' ・ ') || 'メモなし')),
+          h('div', {class:'fin-amount'}, `¥${(Number(r.amount) || 0).toLocaleString()}`));
+        row.addEventListener('click', ()=>{ if(isComposing()) fillFinanceForm(r, row); });
+        wrap.append(row);
+      });
+      fin.offset += data.rows.length;
+      if(fin.offset < fin.total){
+        wrap.append(h('button', {type:'button', class:'cancel-btn more-btn', onclick:()=>loadFinanceHistory(true)},
+          `さらに${FIN_PAGE}件読み込む（残り${fin.total - fin.offset}件）`));
+      }
+    })
+    .catch(()=>{ if(seq === fin.seq) status.textContent = '読み込みに失敗しました'; });
+}
+// 過去の記録をタップすると、カテゴリ・メモ・タグを入力する（金額は毎回違うので入れない）
+function fillFinanceForm(r, row){
+  setHybridValue(document.getElementById('f-category-select'), document.getElementById('f-category-input'), r.category);
+  document.getElementById('f-memo').value = r.memo || '';
+  financeTagPicker.set(splitTags(r.tags));
+  flashPicked(row, [r.category, r.memo].filter(Boolean).join('・') || '記録');
+  document.getElementById('f-amount').focus({preventScroll:true});
+}
 
 // ---------- タグ管理（在庫・家計簿） ----------
 // 要素を作る小さなヘルパー。文字列の子要素はテキストとして入るのでエスケープ不要
@@ -983,6 +1197,7 @@ document.getElementById('chore-form').addEventListener('submit', e=>{
 // ---------- 初期化 ----------
 loadStock();
 loadFinanceOptions();
+loadFinanceHistory();
 loadChores();
 </script>
 </body>
