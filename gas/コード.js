@@ -582,23 +582,3 @@ function debugForceDiscordNotify() {
   // ※もしエラーが出る場合は、スクリプトプロパティ DISCORD_WEBHOOK_URL が正しく設定されているか確認してください
   sendDiscordMessage("@everyone \n🔔 【テスト成功！】GASからDiscordへの通信が100%成功しました。アプリは正常に動いています！");
 }
-
-// 【一度だけ実行】家計簿の date を「日にち」だけにそろえ、createdAt 列を追加する
-// createdAt には、変換前の date（これまで登録時刻が入っていた）を写す
-function migrateFinanceDates() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE);
-  ensureFinanceCreatedAt(sheet);
-  const values = sheet.getDataRange().getValues();
-  const idxDate = values[0].indexOf("date");
-  if (values.length < 2) return "記録がありません";
-  const dates = values.slice(1).map(r => {
-    const v = r[idxDate];
-    if (!(v instanceof Date)) return [v];
-    return [financeDate(Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd"))];
-  });
-  sheet.getRange(2, idxDate + 1, dates.length, 1).setValues(dates);
-  sheet.getRange(2, idxDate + 1, dates.length, 1).setNumberFormat("yyyy/MM/dd");
-  const msg = `${dates.length}件の date を日にちだけにしました`;
-  Logger.log(msg);
-  return msg;
-}
