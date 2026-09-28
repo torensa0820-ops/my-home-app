@@ -145,13 +145,14 @@
   :root{--tabbar-h:calc(49px + var(--safe-bottom));--compose-pad:0px;}
   .compose{position:fixed;left:0;right:0;bottom:var(--tabbar-h);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.45);display:none;flex-direction:column;z-index:5;}
   body.composing .tab-panel.active .compose{display:flex;}
-  .compose-grip{flex-shrink:0;height:22px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;}
+  .compose-grip{flex-shrink:0;height:24px;display:flex;align-items:center;justify-content:center;}
+  /* つまみ・タイトル・説明文の行はドラッグで高さを変える領域。スクロールやズームに取られないようにする */
+  .compose-grip,.compose-head,.compose-hint{touch-action:none;cursor:ns-resize;user-select:none;-webkit-user-select:none;}
   .compose-grip span{width:40px;height:5px;border-radius:3px;background:var(--border);}
   .compose-head{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px;}
-  .compose-hint + .compose-body{margin-top:0;}
   .compose-head:has(+ .compose-hint){padding-bottom:0;}
   .compose-head h2{margin:0;font-size:16px;}
-  .compose-hint{flex-shrink:0;margin:4px 16px 8px;font-size:12px;color:var(--muted);}
+  .compose-hint{flex-shrink:0;margin:0;padding:4px 16px 10px;font-size:12px;color:var(--muted);}
   .compose-body{flex:1;overflow-y:auto;border-top:1px solid var(--border);-webkit-overflow-scrolling:touch;padding:12px 16px 16px;}
   .compose form{background:none;border:none;border-radius:0;padding:0;}
   main{padding-bottom:calc(96px + var(--safe-bottom) + var(--compose-pad));}
@@ -437,28 +438,36 @@ function closeCompose(){
 }
 document.querySelectorAll('.fab').forEach(b=>b.addEventListener('click', openCompose));
 document.querySelectorAll('.compose-close').forEach(b=>b.addEventListener('click', closeCompose));
-document.querySelectorAll('.compose-grip').forEach(grip=>{
-  let startY, startH;
-  grip.addEventListener('pointerdown', e=>{
+// つまみだけでなく、タイトルと説明文の行（ヘッダー部分）全体をドラッグして高さを変えられるようにする
+document.querySelectorAll('.compose').forEach(panel=>{
+  const areas = panel.querySelectorAll('.compose-grip, .compose-head, .compose-hint');
+  let startY = null, startH, pointerId;
+  const onDown = e=>{
+    if(e.target.closest('button')) return; // 「閉じる」ボタンはタップとして扱う
     startY = e.clientY;
-    startH = grip.parentElement.getBoundingClientRect().height;
-    grip.setPointerCapture(e.pointerId);
-  });
-  grip.addEventListener('pointermove', e=>{
-    if(startY == null) return;
+    startH = panel.getBoundingClientRect().height;
+    pointerId = e.pointerId;
+    try { e.currentTarget.setPointerCapture(pointerId); } catch(_){} // 指が領域の外に出てもドラッグを続ける
+  };
+  const onMove = e=>{
+    if(startY == null || e.pointerId !== pointerId) return;
     const navTop = document.querySelector('nav.tabbar').getBoundingClientRect().top;
     const max = navTop - 80; // ヘッダー付近までは広げられる
     composeHeight = Math.round(Math.min(max, Math.max(160, startH + (startY - e.clientY))));
     applyComposeHeight();
-  });
-  const end = e=>{
-    if(startY == null) return;
+  };
+  const onEnd = e=>{
+    if(startY == null || e.pointerId !== pointerId) return;
     // 下まで引き下げたら閉じる
     if(startH + (startY - e.clientY) < 120){ composeHeight = null; document.documentElement.style.removeProperty('--compose-h'); closeCompose(); }
     startY = null;
   };
-  grip.addEventListener('pointerup', end);
-  grip.addEventListener('pointercancel', end);
+  areas.forEach(el=>{
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onEnd);
+    el.addEventListener('pointercancel', onEnd);
+  });
 });
 window.addEventListener('resize', applyComposeHeight);
 // 一覧をタップしてフォームに入力したことを、カードの枠とトーストで知らせる
