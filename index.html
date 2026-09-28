@@ -69,12 +69,27 @@
 
   .done-btn{flex-shrink:0;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;background:var(--chore);color:#26200E;}
   .done-btn:active{background:var(--chore-dim);color:var(--text);}
+  /* 家事の登録フォーム */
+  [hidden]{display:none !important;}
+  .inline-unit{display:flex;align-items:center;gap:10px;}
+  .inline-unit input{width:90px !important;flex-shrink:0;}
+  .inline-unit span{font-size:13px;color:var(--muted);}
+  .pair{display:flex;gap:10px;}
+  .pair select{flex:1;min-width:0;}
+  label.check{display:flex !important;align-items:center;gap:8px;font-size:14px !important;color:var(--text) !important;margin-bottom:8px !important;}
+  label.check input{width:18px;height:18px;accent-color:var(--chore);}
+  #chore-panel .chip.on{border-color:var(--chore);background:var(--chore-dim);color:var(--text);}
+  .chore-preview{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:8px;}
+  .chore-preview b{color:var(--chore);}
+  .chore-preview .later{color:var(--muted);font-size:12px;}
+  .chore-preview.error{color:var(--danger);}
+  .empty-msg.small{padding:12px 0;}
 
   .section-title{font-size:13px;color:var(--muted);font-weight:600;margin:24px 0 10px;}
   form{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;}
   .field{margin-bottom:12px;}
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
-  input[type=text],input[type=number],input[type=date],select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px;appearance:none;}
+  input[type=text],input[type=number],input[type=date],input[type=time],select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px;appearance:none;}
   select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
   .hybrid-input{margin-top:8px;display:none;}
   .form-note{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.6;}
@@ -318,7 +333,7 @@
     <!-- ===== 家事タブ ===== -->
     <section id="chore-panel" class="tab-panel">
       <div class="list-head">
-        <div class="section-title">今日やる家事</div>
+        <div class="section-title">家事の予定</div>
       </div>
       <div id="chore-list"><p class="empty-msg">読み込み中…</p></div>
 
@@ -333,9 +348,34 @@
           <form id="chore-form">
             <div class="field"><label>家事名</label><input type="text" id="c-name" required placeholder="例：お風呂掃除"></div>
             <div class="field"><label>周期</label>
-              <select id="c-cycle-select" class="hybrid-select"></select>
-              <input type="text" id="c-cycle-input" class="hybrid-input" placeholder="新しい周期を入力（例：3ヶ月に1回）">
+              <select id="c-type">
+                <option value="daily">毎日・N日ごと</option>
+                <option value="weekly">毎週・N週ごと（曜日を指定）</option>
+                <option value="monthlyDay">毎月（日にちを指定）</option>
+                <option value="monthlyWeekday">毎月（第何週・何曜日を指定）</option>
+                <option value="afterDone">完了からN日後</option>
+              </select>
             </div>
+            <div class="field" data-for="daily"><label>間隔</label>
+              <div class="inline-unit"><input type="number" id="c-daily-interval" value="1" min="1" inputmode="numeric"><span>日ごと（1なら毎日）</span></div>
+            </div>
+            <div class="field" data-for="weekly"><label>曜日（複数選択可）</label><div class="chips" id="c-weekdays"></div></div>
+            <div class="field" data-for="weekly"><label>間隔</label>
+              <div class="inline-unit"><input type="number" id="c-weekly-interval" value="1" min="1" inputmode="numeric"><span>週ごと（1なら毎週・2なら隔週）</span></div>
+            </div>
+            <div class="field" data-for="monthlyDay"><label>日にち</label><select id="c-day"></select></div>
+            <div class="field" data-for="monthlyWeekday"><label>第何週・曜日</label>
+              <div class="pair"><select id="c-week"></select><select id="c-weekday"></select></div>
+            </div>
+            <div class="field" data-for="afterDone"><label>日数</label>
+              <div class="inline-unit"><input type="number" id="c-days" value="7" min="1" inputmode="numeric"><span>日後</span></div>
+            </div>
+            <div class="field"><label class="check"><input type="checkbox" id="c-timed">時刻を指定する</label>
+              <input type="time" id="c-time" value="09:00" hidden>
+            </div>
+            <div class="field" data-for="daily weekly afterDone"><label id="c-start-label">開始日</label><input type="date" id="c-start"></div>
+            <div class="chore-preview" id="c-preview"></div>
+            <p class="form-note">時刻を指定しない家事は、その日の朝8:00にまとめて通知します。期限切れの家事も毎朝8:00に再通知します。</p>
             <button type="submit" class="submit-btn">この家事を登録</button>
           </form>
         </div>
@@ -372,6 +412,7 @@
 </div>
 <div id="toast"></div>
 
+<script src="gas/chore-rule.js"></script>
 <script>
 /* ▼▼▼ ここにデプロイしたGASのウェブアプリURLを貼り付けてください ▼▼▼ */
 const GAS_URL = "https://script.google.com/macros/s/AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB-zGssbL1/exec";
@@ -427,7 +468,7 @@ function escapeHtml(s){
 const TAB_INFO = {
   stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
   finance:{title:'家計簿', sub:'記録をタップで編集・削除'},
-  chore:{title:'家事ルーティン', sub:'今日やる家事はこれ'}
+  chore:{title:'家事ルーティン', sub:'完了すると次の予定日に進みます'}
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -519,12 +560,12 @@ function setHybridValue(selectEl, inputEl, v){
   else { selectEl.value = '__new__'; inputEl.style.display = 'block'; inputEl.value = v; }
 }
 
-// 最新版の読み込み：キャッシュを使わずにページを取り直してキャッシュを上書きし、再読み込みする
+// 最新版の読み込み：キャッシュを使わずにページと共通スクリプトを取り直してキャッシュを上書きし、再読み込みする
 document.getElementById('reload-btn').addEventListener('click', e=>{
   const btn = e.currentTarget;
   btn.disabled = true;
   btn.classList.add('spinning');
-  fetch(location.href.split('#')[0], {cache:'reload'})
+  Promise.all([location.href.split('#')[0], 'gas/chore-rule.js'].map(u=>fetch(u, {cache:'reload'})))
     .catch(()=>{})
     .finally(()=>location.reload());
 });
@@ -1371,55 +1412,143 @@ function tmItemView(g){
 }
 
 // ---------- 家事 ----------
-setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), []);
+// 周期のルールの計算は gas/chore-rule.js（GASと共通）を使う
+const choreEl = id=>document.getElementById(id);
+// 周期の入力欄を用意する
+(function setupChoreForm(){
+  const wd = choreEl('c-weekdays');
+  [1,2,3,4,5,6,0].forEach(w=>wd.append(h('button', {type:'button', class:'chip', value:String(w), onclick:e=>{
+    e.currentTarget.classList.toggle('on');
+    updateChoreForm();
+  }}, CHORE_WEEKDAYS[w])));
+  const day = choreEl('c-day');
+  for(let d = 1; d <= 31; d++) day.append(h('option', {value:String(d)}, `${d}日`));
+  day.append(h('option', {value:'-1'}, '末日'));
+  const week = choreEl('c-week');
+  [1,2,3,4].forEach(n=>week.append(h('option', {value:String(n)}, `第${n}`)));
+  week.append(h('option', {value:'-1'}, '最終'));
+  const weekday = choreEl('c-weekday');
+  [1,2,3,4,5,6,0].forEach(w=>weekday.append(h('option', {value:String(w)}, `${CHORE_WEEKDAYS[w]}曜日`)));
+  choreEl('c-start').value = todayStr();
+  choreEl('c-timed').addEventListener('change', ()=>{ choreEl('c-time').hidden = !choreEl('c-timed').checked; });
+  choreEl('chore-form').addEventListener('input', updateChoreForm);
+  choreEl('chore-form').addEventListener('change', updateChoreForm);
+  updateChoreForm();
+})();
+// 入力欄の値からルールを作る
+function buildChoreRule(){
+  const type = choreEl('c-type').value;
+  const rule = {type};
+  if(choreEl('c-timed').checked) rule.time = choreEl('c-time').value;
+  if(type === 'daily') rule.interval = Number(choreEl('c-daily-interval').value);
+  if(type === 'weekly'){
+    rule.interval = Number(choreEl('c-weekly-interval').value);
+    rule.weekdays = [...choreEl('c-weekdays').querySelectorAll('.chip.on')].map(c=>Number(c.value));
+  }
+  if(type === 'monthlyDay') rule.day = Number(choreEl('c-day').value);
+  if(type === 'monthlyWeekday'){ rule.week = Number(choreEl('c-week').value); rule.weekday = Number(choreEl('c-weekday').value); }
+  if(type === 'afterDone') rule.days = Number(choreEl('c-days').value);
+  if(['daily','weekly','afterDone'].includes(type)) rule.start = choreEl('c-start').value || todayStr();
+  return rule;
+}
+// 予定日時の表示（例：今日 9:00 / 明日 / 10/12（月）9:00 / 3日遅れ（9/25（金）））
+function choreDueText(due, timed){
+  const days = Math.round((choreDayStart(due) - choreDayStart(new Date())) / 86400000);
+  const time = timed ? ` ${due.getHours()}:${String(due.getMinutes()).padStart(2,'0')}` : '';
+  const md = `${due.getMonth() + 1}/${due.getDate()}（${CHORE_WEEKDAYS[due.getDay()]}）`;
+  if(days < 0) return {text:`${-days}日遅れ（${md}${time}）`, cls:'expired'};
+  if(days === 0) return {text:`今日${time}`, cls: timed && due < new Date() ? 'expired' : 'soon'};
+  if(days === 1) return {text:`明日${time}`, cls:''};
+  return {text:`${md}${time}`, cls:''};
+}
+// 周期の種類に合った入力欄だけを出し、次回の予定日時をその場で表示する
+function updateChoreForm(){
+  const type = choreEl('c-type').value;
+  document.querySelectorAll('#chore-form [data-for]').forEach(el=>{ el.hidden = !el.dataset.for.split(' ').includes(type); });
+  choreEl('c-start-label').textContent = type === 'afterDone' ? '初回の日' : '開始日';
+  const rule = buildChoreRule();
+  const preview = choreEl('c-preview');
+  preview.innerHTML = '';
+  const err = choreValidate(rule);
+  if(err){ preview.className = 'chore-preview error'; preview.textContent = err; return; }
+  const first = choreFirst(rule, new Date());
+  const later = [];
+  // 完了した日で決まる afterDone 以外は、その後の予定も出して周期を確かめられるようにする
+  if(first && rule.type !== 'afterDone'){
+    let d = first;
+    for(let i = 0; i < 2 && d; i++){ d = choreNext(rule, d, null); if(d) later.push(d); }
+  }
+  preview.className = 'chore-preview';
+  preview.append(
+    h('b', {}, choreLabel(rule)),
+    h('div', {}, '次回：' + (first ? choreDueText(first, !!rule.time).text : '該当する日がありません')),
+    later.length ? h('div', {class:'later'}, 'その後：' + later.map(d=>choreDueText(d, !!rule.time).text).join('、')) : '');
+}
 
 function renderChoreList(){
-  const wrap = document.getElementById('chore-list');
-  const todo = choreCache.filter(t => !(t.isDone === true || String(t.isDone).toUpperCase() === 'TRUE'));
-  if(!todo.length){ wrap.innerHTML = '<p class="empty-msg">今日やる家事はありません</p>'; return; }
+  const wrap = choreEl('chore-list');
+  if(!choreCache.length){ wrap.innerHTML = '<p class="empty-msg">まだ家事が登録されていません</p>'; return; }
   wrap.innerHTML = '';
-  todo.forEach(t=>{
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.innerHTML = `
-      <div class="card-info">
-        <div class="card-name">${escapeHtml(t.taskName)}</div>
-        <div class="card-meta">${escapeHtml(t.cycle || '—')}</div>
-      </div>
-      <button class="done-btn" type="button">完了</button>`;
-    card.querySelector('.done-btn').addEventListener('click', ()=>completeChore(t, card));
-    wrap.appendChild(card);
+  const tomorrow = choreDayStart(new Date());
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const items = choreCache.map(t=>({t, rule:choreParseRule(t.rule), due: t.nextDue ? new Date(t.nextDue) : null}));
+  items.sort((a,b)=>(a.due ? a.due.getTime() : Infinity) - (b.due ? b.due.getTime() : Infinity));
+  const groups = [
+    ['今日やる家事', items.filter(x=>x.rule && x.due && x.due < tomorrow), '今日やる家事はありません'],
+    ['今後の予定', items.filter(x=>x.rule && x.due && x.due >= tomorrow), ''],
+    ['周期が未設定の家事', items.filter(x=>!x.rule || !x.due), '']
+  ];
+  groups.forEach(([title, list, empty])=>{
+    if(!list.length && !empty) return;
+    wrap.append(h('div', {class:'fin-month'}, h('span', {}, title)));
+    if(!list.length) wrap.append(h('p', {class:'empty-msg small'}, empty));
+    list.forEach(({t, rule, due})=>{
+      const d = due ? choreDueText(due, !!(rule && rule.time)) : null;
+      const card = h('div', {class:'card'},
+        h('div', {class:'card-info'},
+          h('div', {class:'card-name'}, t.taskName),
+          h('div', {class:'card-meta'},
+            d ? h('span', {class:'exp ' + d.cls}, d.text) : '周期が未設定です（シートから削除してください）',
+            t.cycle ? ` ・ ${t.cycle}` : '')));
+      if(rule && due) card.append(h('button', {type:'button', class:'done-btn', onclick:()=>completeChore(t, card)}, '完了'));
+      wrap.append(card);
+    });
   });
 }
 function completeChore(t, card){
   card.style.opacity = '0.4';
   postToGas({type:'todo', action:'done', id:t.id})
     .then(res=>{
-      if(res.status === 'success'){ toast('完了しました'); t.isDone = true; renderChoreList(); }
-      else { card.style.opacity='1'; toast('更新に失敗しました'); }
-    }).catch(()=>{ card.style.opacity='1'; toast('通信エラー'); });
+      if(res.status !== 'success') throw new Error(res.message || '更新に失敗しました');
+      t.lastDone = res.task.lastDone;
+      t.nextDue = res.task.nextDue;
+      renderChoreList();
+      const rule = choreParseRule(t.rule);
+      toast(t.nextDue ? `完了しました。次回：${choreDueText(new Date(t.nextDue), !!(rule && rule.time)).text}` : '完了しました');
+    })
+    .catch(err=>{ card.style.opacity = '1'; toast(errMsg(err)); });
 }
 function loadChores(){
-  fetch(`${GAS_URL}?action=getTasks&t=${Date.now()}`)
+  return fetch(`${GAS_URL}?action=getTasks&t=${Date.now()}`)
     .then(r=>r.json())
-    .then(rows=>{
-      choreCache = rows;
-      renderChoreList();
-      // 周期の候補は家事シートに登録済みの値から作る
-      setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), uniqSorted(rows.map(r=>r.cycle)));
-    })
-    .catch(()=>{ document.getElementById('chore-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
+    .then(rows=>{ choreCache = rows; renderChoreList(); })
+    .catch(()=>{ choreEl('chore-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
-document.getElementById('chore-form').addEventListener('submit', e=>{
+choreEl('chore-form').addEventListener('submit', e=>{
   e.preventDefault();
-  const taskName = document.getElementById('c-name').value.trim();
+  const taskName = choreEl('c-name').value.trim();
   if(!taskName) return;
-  const cycle = getHybridValue(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'));
-  postToGas({type:'todo', action:'add', taskName, cycle})
+  const rule = buildChoreRule();
+  const err = choreValidate(rule);
+  if(err){ toast(err); return; }
+  postToGas({type:'todo', action:'add', taskName, rule})
     .then(res=>{
-      if(res.status==='success'){ toast('登録しました'); e.target.reset(); loadChores(); }
-      else toast('登録に失敗しました');
-    }).catch(()=>toast('通信エラー'));
+      if(res.status !== 'success') throw new Error(res.message || '登録に失敗しました');
+      toast('登録しました');
+      choreEl('c-name').value = '';
+      loadChores();
+    })
+    .catch(err=>toast(errMsg(err)));
 });
 
 // ---------- 初期化 ----------
