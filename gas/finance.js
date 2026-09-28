@@ -72,10 +72,9 @@ function ensureFinanceCreatedAt(sheet) {
   }
 }
 
-// "yyyy-MM-dd" を日本時間のその日の0時にする。未指定なら今日
+// "yyyy-MM-dd" を日本時間のその日の0時にする
 function financeDate(str) {
-  if (!str) str = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) throw new Error("日付が不正です: " + str);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str || "")) throw new Error("日付が不正です: " + str);
   return Utilities.parseDate(str, "Asia/Tokyo", "yyyy-MM-dd");
 }
 

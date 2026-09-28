@@ -1,5 +1,5 @@
 // =========================================================
-// Webアプリの入口：画面（GitHub Pages）や iPhone のショートカットからのリクエストを振り分ける
+// Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
 // 各処理は stock.js / finance.js / tags.js / chore.js にある
@@ -14,7 +14,7 @@ function doGet(e) {
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
-// ショートカット/Webアプリからの書き込みを受け取るメイン処理
+// 画面からの書き込みを受け取るメイン処理
 function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);

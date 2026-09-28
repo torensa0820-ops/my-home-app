@@ -42,9 +42,7 @@ function updateStock(ss, data) {
   for (let i = 1; i < values.length; i++) {
     if (values[i][col.itemName] === name) lots.push(i);
   }
-  let target = lots.find(i => normDate(values[i][col.expirationDate]) === exp);
-  // 期限の指定がない登録（ショートカットなど）で、ロットが1つだけならそのロットに加算する
-  if (target === undefined && !exp && lots.length === 1) target = lots[0];
+  const target = lots.find(i => normDate(values[i][col.expirationDate]) === exp);
 
   const now = new Date();
   if (target === undefined) {
