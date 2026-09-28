@@ -466,5 +466,37 @@ document.getElementById('chore-form').addEventListener('submit', e=>{
 loadStock();
 loadChores();
 </script>
+<!-- ===== DEBUG: タブバー位置の実測用（確認後に削除する） ===== -->
+<style>
+  html{background:#FF00FF;}
+  #dbg-frame{position:fixed;top:0;bottom:0;left:0;right:0;border:2px solid red;pointer-events:none;z-index:99;}
+  #dbg-probe{position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
+  #dbg-info{position:fixed;left:8px;right:8px;top:calc(var(--safe-top) + 4px);z-index:100;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.5 monospace;padding:8px;border-radius:8px;white-space:pre-wrap;}
+</style>
+<div id="dbg-frame"></div>
+<div id="dbg-probe"></div>
+<div id="dbg-info"></div>
+<script>
+function dbgUpdate(){
+  const probe = getComputedStyle(document.getElementById('dbg-probe'));
+  const nav = document.querySelector('nav.tabbar').getBoundingClientRect();
+  const vv = window.visualViewport;
+  document.getElementById('dbg-info').textContent = [
+    `standalone: ${navigator.standalone}`,
+    `screen: ${screen.width} x ${screen.height}`,
+    `innerHeight: ${window.innerHeight}`,
+    `clientHeight: ${document.documentElement.clientHeight}`,
+    `visualViewport: ${vv ? vv.height + ' (offsetTop ' + vv.offsetTop + ')' : 'なし'}`,
+    `body height: ${document.body.getBoundingClientRect().height}`,
+    `safe-area top/bottom: ${probe.paddingTop} / ${probe.paddingBottom}`,
+    `nav top/bottom/height: ${nav.top} / ${nav.bottom} / ${nav.height}`,
+    `UA: ${navigator.userAgent}`,
+  ].join('\n');
+}
+dbgUpdate();
+window.addEventListener('resize', dbgUpdate);
+setTimeout(dbgUpdate, 1000);
+</script>
+<!-- ===== /DEBUG ===== -->
 </body>
 </html>
