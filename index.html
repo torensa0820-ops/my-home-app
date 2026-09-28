@@ -140,25 +140,34 @@
   nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
 
   .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
-  /* タグの絞り込みバー：横にスクロールするチップと、右端の「管理」ボタン */
-  .filter-bar{display:flex;align-items:center;gap:8px;margin:0 -16px 12px;padding:0 16px;}
+  /* タグの絞り込み：一覧の上は「絞り込み」ボタン・選択中のタグ・「管理」ボタンの1行 */
+  .filter-bar{display:flex;align-items:center;gap:8px;margin:0 0 12px;}
   .filter-bar:empty{display:none;}
+  .filter-open,.filter-manage{flex-shrink:0;border:1px solid var(--border);background:none;color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;}
   .filter-chips{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0;}
   .filter-chips::-webkit-scrollbar{display:none;}
-  .filter-chips .chip{flex-shrink:0;padding:6px 12px;font-size:12px;}
-  .filter-chips .none{font-size:12px;color:var(--muted);padding:6px 0;white-space:nowrap;}
-  .filter-manage{flex-shrink:0;border:1px solid var(--border);background:none;color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;}
-  .filter-status{display:flex;align-items:center;gap:10px;margin:-4px 0 12px;font-size:12px;color:var(--muted);}
+  .filter-chips .chip{flex-shrink:0;padding:5px 10px;font-size:12px;}
+  .filter-status{display:flex;align-items:center;gap:4px;margin:-4px 0 12px;font-size:12px;color:var(--muted);}
   .filter-status:empty{display:none;}
-  .filter-status button{background:none;border:1px solid var(--border);border-radius:999px;color:var(--text);font-size:12px;font-weight:600;padding:4px 10px;}
-  .filter-status .clear{margin-left:auto;border:none;color:var(--muted);text-decoration:underline;padding:4px 0;}
-  #stock-panel .filter-manage{color:var(--stock);}
-  #finance-panel .filter-manage{color:var(--finance);}
+  .filter-status .clear{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;padding:4px 0;}
+  #stock-panel .filter-manage,#stock-panel .filter-open.on{color:var(--stock);border-color:var(--stock);}
+  #finance-panel .filter-manage,#finance-panel .filter-open.on{color:var(--finance);border-color:var(--finance);}
+  #stock-panel .filter-manage,#finance-panel .filter-manage{border-color:var(--border);}
+  /* 絞り込みパネル：タグを折り返して並べる */
+  .filter-tools{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
+  .filter-search{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:16px;appearance:none;}
+  .seg{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;}
+  .seg button{flex:1;border:none;background:none;color:var(--muted);border-radius:7px;padding:8px 0;font-size:13px;font-weight:700;}
+  .seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.4);}
+  .filter-cloud{margin-bottom:16px;}
+  .filter-actions{display:flex;gap:8px;}
+  .filter-actions .cancel-btn{margin-top:0;}
 
   /* 登録パネル：一覧を見ながら入力できるよう、タブバーの上に半分ほどの高さで重ねる */
   :root{--tabbar-h:calc(49px + var(--safe-bottom));--compose-pad:0px;}
   .compose{position:fixed;left:0;right:0;bottom:var(--tabbar-h);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.45);display:none;flex-direction:column;z-index:5;}
-  body.composing .tab-panel.active .compose{display:flex;}
+  body[data-compose="form"] .tab-panel.active .compose[data-kind="form"],
+  body[data-compose="filter"] .tab-panel.active .compose[data-kind="filter"]{display:flex;}
   .compose-grip{flex-shrink:0;height:24px;display:flex;align-items:center;justify-content:center;}
   /* つまみ・タイトル・説明文の行はドラッグで高さを変える領域。スクロールやズームに取られないようにする */
   .compose-grip,.compose-head,.compose-hint{touch-action:none;cursor:ns-resize;user-select:none;-webkit-user-select:none;}
@@ -171,12 +180,12 @@
   .compose form{background:none;border:none;border-radius:0;padding:0;}
   main{padding-bottom:calc(96px + var(--safe-bottom) + var(--compose-pad));}
   .fab{position:fixed;right:16px;bottom:calc(var(--tabbar-h) + 16px);z-index:4;border:none;border-radius:999px;padding:13px 20px;font-size:15px;font-weight:700;color:#0B1210;box-shadow:0 6px 18px rgba(0,0,0,.45);}
-  .tab-panel:not(.active) .fab, body.composing .fab{display:none;}
+  .tab-panel:not(.active) .fab, body[data-compose] .fab{display:none;}
   #stock-panel .fab{background:var(--stock);}
   #finance-panel .fab{background:var(--finance);}
   #chore-panel .fab{background:var(--chore);}
   /* 登録パネルが開いている間、一覧のタップで入力できることを示す */
-  body.composing #stock-panel .card-info, body.composing #finance-panel .fin-row{cursor:copy;}
+  body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #finance-panel .fin-row{cursor:copy;}
   .picked{animation:picked .6s ease-out;}
   @keyframes picked{from{box-shadow:0 0 0 2px var(--text);}to{box-shadow:0 0 0 2px transparent;}}
 
@@ -241,7 +250,7 @@
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
 
       <button type="button" class="fab" data-compose="stock">＋ 登録</button>
-      <div class="compose" id="stock-compose" role="dialog" aria-labelledby="stock-compose-title">
+      <div class="compose" data-kind="form" id="stock-compose" role="dialog" aria-labelledby="stock-compose-title">
         <div class="compose-grip" aria-hidden="true"><span></span></div>
         <div class="compose-head">
           <h2 id="stock-compose-title">新しく登録する</h2>
@@ -280,7 +289,7 @@
       <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
 
       <button type="button" class="fab" data-compose="finance">＋ 記録</button>
-      <div class="compose" id="finance-compose" role="dialog" aria-labelledby="finance-compose-title">
+      <div class="compose" data-kind="form" id="finance-compose" role="dialog" aria-labelledby="finance-compose-title">
         <div class="compose-grip" aria-hidden="true"><span></span></div>
         <div class="compose-head">
           <h2 id="finance-compose-title">支出を記録する</h2>
@@ -314,7 +323,7 @@
       <div id="chore-list"><p class="empty-msg">読み込み中…</p></div>
 
       <button type="button" class="fab" data-compose="chore">＋ 登録</button>
-      <div class="compose" id="chore-compose" role="dialog" aria-labelledby="chore-compose-title">
+      <div class="compose" data-kind="form" id="chore-compose" role="dialog" aria-labelledby="chore-compose-title">
         <div class="compose-grip" aria-hidden="true"><span></span></div>
         <div class="compose-head">
           <h2 id="chore-compose-title">新しい家事を登録する</h2>
@@ -433,32 +442,37 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
     document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
   });
 });
-
-// ---------- 登録パネル ----------
-// 「＋ 登録」で開き、一覧の上に重ねて表示する。上端のつまみをドラッグして高さを変えられる
+// ---------- 下から出るパネル（登録フォーム・タグの絞り込み） ----------
+// 「＋ 登録」や「絞り込み」で開き、一覧の上に重ねて表示する。上端のつまみをドラッグして高さを変えられる
+// body の data-compose に開いているパネルの種類（form / filter）を入れる
 let composeHeight = null; // ドラッグで変えた高さ（px）。未設定なら表示領域の55%
-function isComposing(){ return document.body.classList.contains('composing'); }
-function activeCompose(){ return document.querySelector('.tab-panel.active .compose'); }
+function openPanelKind(){ return document.body.dataset.compose || ''; }
+// 登録フォームが開いているか（一覧のタップでフォームに入力するかの判定に使う）
+function isComposing(){ return openPanelKind() === 'form'; }
+function activeCompose(){
+  const kind = openPanelKind();
+  return kind ? document.querySelector(`.tab-panel.active .compose[data-kind="${kind}"]`) : null;
+}
 function applyComposeHeight(){
   const root = document.documentElement.style;
-  if(!isComposing()){ root.setProperty('--compose-pad', '0px'); return; }
+  if(!openPanelKind()){ root.setProperty('--compose-pad', '0px'); return; }
   if(composeHeight) root.setProperty('--compose-h', composeHeight + 'px');
   // 一覧の最後まで見られるよう、パネルの高さ分だけ一覧の下に余白を足す
   const panel = activeCompose();
   if(panel) root.setProperty('--compose-pad', panel.getBoundingClientRect().height + 'px');
 }
-function openCompose(){
-  document.body.classList.add('composing');
+function openCompose(kind = 'form'){
+  document.body.dataset.compose = kind;
   applyComposeHeight();
 }
 function closeCompose(){
-  document.body.classList.remove('composing');
+  delete document.body.dataset.compose;
   applyComposeHeight();
 }
-document.querySelectorAll('.fab').forEach(b=>b.addEventListener('click', openCompose));
+document.querySelectorAll('.fab').forEach(b=>b.addEventListener('click', ()=>openCompose('form')));
 document.querySelectorAll('.compose-close').forEach(b=>b.addEventListener('click', closeCompose));
 // つまみだけでなく、タイトルと説明文の行（ヘッダー部分）全体をドラッグして高さを変えられるようにする
-document.querySelectorAll('.compose').forEach(panel=>{
+function enableComposeDrag(panel){
   const areas = panel.querySelectorAll('.compose-grip, .compose-head, .compose-hint');
   let startY = null, startH, pointerId;
   const onDown = e=>{
@@ -487,7 +501,8 @@ document.querySelectorAll('.compose').forEach(panel=>{
     el.addEventListener('pointerup', onEnd);
     el.addEventListener('pointercancel', onEnd);
   });
-});
+}
+document.querySelectorAll('.compose').forEach(enableComposeDrag);
 window.addEventListener('resize', applyComposeHeight);
 // 一覧をタップしてフォームに入力したことを、カードの枠とトーストで知らせる
 function flashPicked(el, label){
@@ -721,35 +736,70 @@ function createTagPicker(chipsId, inputId){
     }
   };
 }
-// タグの絞り込みバー。複数選択でき、2つ以上選ぶと「いずれかを含む／すべてを含む」を切り替えられる
+// タグの絞り込み
+// 一覧の上には「絞り込み」ボタンと選択中のタグだけを出し、タグの一覧は下から出るパネルに折り返して並べる
+// パネルは一覧に重ねて表示するので、選ぶとすぐ上の一覧に結果が反映される
 function createFilterBar(barId, sheet, onChange){
   const bar = document.getElementById(barId);
+  const section = bar.closest('.tab-panel');
   const status = h('div', {class:'filter-status'});
   bar.after(status);
   const selected = new Set();
   let mode = 'any';
   let tags = [];
+
+  // ---- パネル ----
+  const search = h('input', {type:'search', class:'filter-search', placeholder:'タグを検索', oninput:()=>drawPanel()});
+  const modeSeg = h('div', {class:'seg'});
+  const cloud = h('div', {class:'chips filter-cloud'});
+  const panel = h('div', {class:'compose', role:'dialog'},
+    h('div', {class:'compose-grip'}, h('span')),
+    h('div', {class:'compose-head'},
+      h('h2', {}, 'タグで絞り込む'),
+      h('button', {type:'button', class:'text-btn', onclick:closeCompose}, '閉じる')),
+    h('p', {class:'compose-hint'}, '選んだタグの付いたデータだけを一覧に表示します'),
+    h('div', {class:'compose-body'},
+      h('div', {class:'filter-tools'}, search, modeSeg),
+      cloud,
+      h('div', {class:'filter-actions'},
+        h('button', {type:'button', class:'cancel-btn', onclick:()=>{ selected.clear(); changed(); }}, '選択をすべて解除'),
+        h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeCompose(); openTagManager(sheet); }}, 'タグを管理'))));
+  panel.dataset.kind = 'filter';
+  section.append(panel);
+  enableComposeDrag(panel);
+
   const changed = ()=>{ draw(); onChange(); };
-  function draw(){
-    bar.innerHTML = '';
-    const chips = h('div', {class:'filter-chips'});
-    if(!tags.length) chips.append(h('span', {class:'none'}, 'タグはまだありません'));
-    // 選択中のタグが横スクロールの外に隠れないよう、先頭に並べる
-    [...tags.filter(t=>selected.has(t)), ...tags.filter(t=>!selected.has(t))].forEach(t=>chips.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>{
+  function drawPanel(){
+    modeSeg.innerHTML = '';
+    [['any', 'いずれかを含む'], ['all', 'すべてを含む']].forEach(([m, label])=>modeSeg.append(
+      h('button', {type:'button', class: mode === m ? 'on' : '', onclick:()=>{ if(mode !== m){ mode = m; changed(); } }}, label)));
+    cloud.innerHTML = '';
+    const q = search.value.trim().toLowerCase();
+    const shown = tags.filter(t=>!q || t.toLowerCase().includes(q));
+    if(!shown.length) cloud.append(h('p', {class:'tm-note'}, tags.length ? '該当するタグがありません' : 'タグはまだありません'));
+    shown.forEach(t=>cloud.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>{
       if(selected.has(t)) selected.delete(t); else selected.add(t);
       changed();
     }}, t)));
-    bar.append(chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
+  }
+  // ---- 一覧の上のバー ----
+  function drawBar(){
+    bar.innerHTML = '';
+    const open = h('button', {type:'button', class:'filter-open' + (selected.size ? ' on' : ''), onclick:()=>openCompose('filter')},
+      selected.size ? `絞り込み（${selected.size}）` : '絞り込み');
+    // 選択中のタグは×付きで並べ、タップで外せるようにする
+    const chips = h('div', {class:'filter-chips'});
+    [...selected].forEach(t=>chips.append(h('button', {type:'button', class:'chip on', onclick:()=>{ selected.delete(t); changed(); }}, `${t} ×`)));
+    bar.append(open, chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
     status.innerHTML = '';
     if(selected.size){
-      status.append(h('span', {class:'count'}));
-      if(selected.size > 1){
-        status.append(h('button', {type:'button', onclick:()=>{ mode = mode === 'any' ? 'all' : 'any'; changed(); }},
-          mode === 'any' ? 'いずれかを含む ⇄' : 'すべてを含む ⇄'));
-      }
-      status.append(h('button', {type:'button', class:'clear', onclick:()=>{ selected.clear(); changed(); }}, '絞り込みを解除'));
+      status.append(h('span', {class:'count'}),
+        selected.size > 1 ? h('span', {}, mode === 'any' ? '・いずれかを含む' : '・すべてを含む') : '',
+        h('button', {type:'button', class:'clear', onclick:()=>{ selected.clear(); changed(); }}, '絞り込みを解除'));
     }
   }
+  function draw(){ drawBar(); drawPanel(); }
+
   return {
     // タグ一覧を描き直す。名称変更・削除で無くなったタグは選択から外し、絞り込みを更新する
     render(list){
