@@ -69,8 +69,8 @@
   #chore-panel .submit-btn{background:var(--chore);}
   .submit-btn:active{opacity:.8;}
 
-  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:0 8px max(0px, calc(var(--safe-bottom) - 29px));}
-  nav.tabbar button{position:relative;flex:1;height:40px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:0;display:flex;align-items:center;justify-content:center;}
+  nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:0 8px var(--safe-bottom);}
+  nav.tabbar button{position:relative;flex:1;height:49px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:0;display:flex;align-items:center;justify-content:center;}
   nav.tabbar button .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:transparent;}
   nav.tabbar button.active{color:var(--text);}
   nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
@@ -466,38 +466,5 @@ document.getElementById('chore-form').addEventListener('submit', e=>{
 loadStock();
 loadChores();
 </script>
-<!-- ===== DEBUG: タブバー位置の実測用（確認後に削除する） ===== -->
-<style>
-  html{background:#FF00FF;}
-  #dbg-frame{position:fixed;top:0;bottom:0;left:0;right:0;border:2px solid red;pointer-events:none;z-index:99;}
-  #dbg-probe{position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);}
-  #dbg-info{position:fixed;left:8px;right:8px;top:calc(var(--safe-top) + 4px);z-index:100;background:rgba(0,0,0,.85);color:#0f0;font:11px/1.5 monospace;padding:8px;border-radius:8px;white-space:pre-wrap;}
-</style>
-<div id="dbg-frame"></div>
-<div id="dbg-probe"></div>
-<div id="dbg-info"></div>
-<script>
-function dbgUpdate(){
-  const probe = getComputedStyle(document.getElementById('dbg-probe'));
-  const nav = document.querySelector('nav.tabbar').getBoundingClientRect();
-  const vv = window.visualViewport;
-  document.getElementById('dbg-info').textContent = [
-    `standalone: ${navigator.standalone}`,
-    `screen: ${screen.width} x ${screen.height}`,
-    `innerHeight: ${window.innerHeight}`,
-    `clientHeight: ${document.documentElement.clientHeight}`,
-    `visualViewport: ${vv ? vv.height + ' (offsetTop ' + vv.offsetTop + ')' : 'なし'}`,
-    `body height: ${document.body.getBoundingClientRect().height}`,
-    `safe-area top/bottom: ${probe.paddingTop} / ${probe.paddingBottom}`,
-    `nav top/bottom/height: ${nav.top} / ${nav.bottom} / ${nav.height}`,
-    `100vh/100lvh/100svh/100dvh: ${['vh','lvh','svh','dvh'].map(u=>{const d=document.createElement('div');d.style.cssText=`position:fixed;visibility:hidden;height:100${u}`;document.body.appendChild(d);const h=d.getBoundingClientRect().height;d.remove();return h;}).join(' / ')}`,
-    `UA: ${navigator.userAgent}`,
-  ].join('\n');
-}
-dbgUpdate();
-window.addEventListener('resize', dbgUpdate);
-setTimeout(dbgUpdate, 1000);
-</script>
-<!-- ===== /DEBUG ===== -->
 </body>
 </html>
