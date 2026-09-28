@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>くらしログ</title>
 <style>
@@ -490,6 +490,7 @@ function dbgUpdate(){
     `body height: ${document.body.getBoundingClientRect().height}`,
     `safe-area top/bottom: ${probe.paddingTop} / ${probe.paddingBottom}`,
     `nav top/bottom/height: ${nav.top} / ${nav.bottom} / ${nav.height}`,
+    `100vh/100lvh/100svh/100dvh: ${['vh','lvh','svh','dvh'].map(u=>{const d=document.createElement('div');d.style.cssText=`position:fixed;visibility:hidden;height:100${u}`;document.body.appendChild(d);const h=d.getBoundingClientRect().height;d.remove();return h;}).join(' / ')}`,
     `UA: ${navigator.userAgent}`,
   ].join('\n');
 }
