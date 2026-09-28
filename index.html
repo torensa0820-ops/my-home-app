@@ -29,7 +29,14 @@
   html,body{height:100%;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
   #app{display:flex;flex-direction:column;height:100%;}
-  header{padding:calc(18px + var(--safe-top)) 20px 16px;flex-shrink:0;border-bottom:1px solid var(--border);}
+  header{padding:calc(12px + var(--safe-top)) 20px 16px;flex-shrink:0;border-bottom:1px solid var(--border);}
+  .app-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .brand{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;}
+  .brand img{width:22px;height:22px;border-radius:6px;}
+  .icon-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;padding:0;}
+  .icon-btn:active{background:var(--surface-2);}
+  .icon-btn.spinning svg{animation:spin .8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
   header h1{margin:0;font-size:20px;font-weight:700;}
   header p{margin:4px 0 0;font-size:13px;color:var(--muted);}
   main{flex:1;overflow-y:auto;padding:16px 16px calc(96px + var(--safe-bottom));-webkit-overflow-scrolling:touch;}
@@ -105,6 +112,12 @@
 <body>
 <div id="app">
   <header>
+    <div class="app-bar">
+      <div class="brand"><img src="apple-touch-icon.png" alt="">くらしログ</div>
+      <button type="button" id="reload-btn" class="icon-btn" aria-label="最新版を読み込む">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+      </button>
+    </div>
     <h1 id="page-title">在庫管理</h1>
     <p id="page-sub">タップして数量を更新</p>
   </header>
@@ -255,6 +268,16 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
     document.getElementById('page-title').textContent = TAB_INFO[tab].title;
     document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
   });
+});
+
+// 最新版の読み込み：キャッシュを使わずにページを取り直してキャッシュを上書きし、再読み込みする
+document.getElementById('reload-btn').addEventListener('click', e=>{
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.classList.add('spinning');
+  fetch(location.href.split('#')[0], {cache:'reload'})
+    .catch(()=>{})
+    .finally(()=>location.reload());
 });
 
 // ---------- 在庫 ----------
