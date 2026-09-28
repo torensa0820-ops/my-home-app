@@ -52,6 +52,19 @@
   .stepper button{width:36px;height:36px;border-radius:10px;border:none;background:var(--surface-2);color:var(--stock);font-size:20px;font-weight:700;display:flex;align-items:center;justify-content:center;}
   .stepper button:active{background:var(--stock-dim);}
   .stepper .count{min-width:26px;text-align:center;font-size:17px;font-weight:700;}
+  /* 賞味期限の異なるロットを持つ商品 */
+  .card.multi{flex-direction:column;align-items:stretch;gap:10px;}
+  .card-top{display:flex;align-items:center;gap:12px;}
+  .card-total{flex-shrink:0;font-size:13px;font-weight:700;color:var(--muted);}
+  .lots{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:10px;}
+  .lot{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .lot-exp{font-size:13px;color:var(--muted);}
+  .exp.soon{color:var(--chore);font-weight:700;}
+  .exp.expired{color:var(--danger);font-weight:700;}
+  .lot-edit{display:grid;grid-template-columns:1fr 84px 40px;gap:8px;align-items:center;margin-bottom:8px;}
+  .lot-head{margin-bottom:6px;}
+  .lot-head label{margin:0 !important;}
+  .lot-remove{height:40px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--muted);font-size:18px;}
   .empty-msg{color:var(--muted);font-size:14px;text-align:center;padding:32px 0;}
 
   .done-btn{flex-shrink:0;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;background:var(--chore);color:#26200E;}
@@ -64,6 +77,7 @@
   input[type=text],input[type=number],input[type=date],select{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px;appearance:none;}
   select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
   .hybrid-input{margin-top:8px;display:none;}
+  .form-note{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.6;}
   .chips{display:flex;flex-wrap:wrap;gap:8px;}
   .chips:not(:empty){margin-bottom:10px;}
   .chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
@@ -185,7 +199,7 @@
         </div>
         <details>
           <summary>賞味期限・型番（任意）</summary>
-          <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"></div>
+          <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"><p class="form-note">登録済みの商品名で登録すると、賞味期限が同じなら個数を足し、違えば期限ごとに分けて管理します。</p></div>
           <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"></div>
         </details>
         <button type="submit" class="submit-btn">この商品を登録</button>
@@ -335,46 +349,80 @@ document.getElementById('reload-btn').addEventListener('click', e=>{
 });
 
 // ---------- 在庫 ----------
+// 在庫は1行＝1ロット（賞味期限ごと）。画面では商品名ごとにまとめて表示する
+function groupStock(){
+  const map = new Map();
+  stockCache.forEach(r=>{
+    const name = String(r.itemName);
+    if(!map.has(name)) map.set(name, []);
+    map.get(name).push(r);
+  });
+  // 期限の早い順（期限なしは最後）
+  const expKey = r=>toDateInputValue(r.expirationDate) || '9999-99-99';
+  return [...map.entries()].map(([name, lots])=>{
+    lots.sort((a,b)=>expKey(a).localeCompare(expKey(b)));
+    const pick = key=>(lots.find(l=>l[key]) || {})[key] || '';
+    return {name, lots, location:pick('location'), tags:pick('tags'), modelNumber:pick('modelNumber')};
+  });
+}
+// 期限の表示（「期限 10/5」）と、3日以内・期限切れの判定
+function expInfo(lot){
+  const exp = toDateInputValue(lot.expirationDate);
+  if(!exp) return {label:'', cls:''};
+  const today = new Date(); today.setHours(0,0,0,0);
+  const days = Math.round((new Date(exp + 'T00:00:00') - today) / 86400000);
+  return {label:`期限 ${Number(exp.slice(5,7))}/${Number(exp.slice(8,10))}`, cls: days < 0 ? 'expired' : days <= 3 ? 'soon' : ''};
+}
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
   if(!stockCache.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   wrap.innerHTML = '';
-  stockCache.forEach(item=>{
-    const card = document.createElement('div');
-    card.className = 'card';
-    const exp = toDateInputValue(item.expirationDate);
-    const metaParts = [exp && `期限 ${Number(exp.slice(5,7))}/${Number(exp.slice(8,10))}`, item.location, splitTags(item.tags).join(', ')].filter(Boolean).join(' ・ ');
-    const info = `
-      <div class="card-info">
-        <div class="card-name">${escapeHtml(item.itemName)}</div>
-        <div class="card-meta">${escapeHtml(metaParts || '—')}</div>
-      </div>`;
+  groupStock().forEach(g=>{
+    const single = g.lots.length === 1;
+    const exp = single ? expInfo(g.lots[0]) : null;
+    const meta = h('div', {class:'card-meta'});
+    if(exp && exp.label) meta.append(h('span', {class:'exp ' + exp.cls}, exp.label), (g.location || g.tags) ? ' ・ ' : '');
+    meta.append([g.location, splitTags(g.tags).join(', ')].filter(Boolean).join(' ・ ') || (exp && exp.label ? '' : '—'));
+    const info = h('div', {class:'card-info'}, h('div', {class:'card-name'}, g.name), meta);
+    const card = h('div', {class:'card' + (single ? '' : ' multi')});
+
     if(stockEditMode){
-      card.innerHTML = info + '<button class="delete-btn" type="button">削除</button>';
-      card.querySelector('.delete-btn').addEventListener('click', ()=>openDeleteSheet(item));
+      card.classList.remove('multi');
+      card.append(info, h('button', {type:'button', class:'delete-btn', onclick:()=>openDeleteSheet(g)}, '削除'));
       wrap.appendChild(card);
       return;
     }
-    card.innerHTML = info + `
-      <div class="stepper">
-        <button data-action="minus" type="button">−</button>
-        <span class="count">${item.stock ?? 0}</span>
-        <button data-action="plus" type="button">＋</button>
-      </div>`;
-    card.querySelector('.card-info').addEventListener('click', ()=>openItemEditor(item));
-    const countEl = card.querySelector('.count');
-    card.querySelector('[data-action="minus"]').addEventListener('click', ()=>bumpStock(item,-1,countEl));
-    card.querySelector('[data-action="plus"]').addEventListener('click', ()=>bumpStock(item,1,countEl));
+    info.addEventListener('click', ()=>openItemEditor(g));
+    if(single){
+      card.append(info, makeStepper(g.lots[0]));
+    } else {
+      const total = h('div', {class:'card-total'});
+      const updateTotal = ()=>{ total.textContent = `計 ${g.lots.reduce((s,l)=>s + (Number(l.stock) || 0), 0)}`; };
+      updateTotal();
+      card.append(
+        h('div', {class:'card-top'}, info, total),
+        h('div', {class:'lots'}, g.lots.map(l=>{
+          const e = expInfo(l);
+          return h('div', {class:'lot'}, h('span', {class:'lot-exp exp ' + e.cls}, e.label || '期限なし'), makeStepper(l, updateTotal));
+        }))
+      );
+    }
     wrap.appendChild(card);
   });
 }
-function bumpStock(item, delta, countEl){
-  const prev = Number(item.stock) || 0;
-  item.stock = prev + delta;
-  countEl.textContent = item.stock;
-  postToGas({type:'stock', target:item.itemName, value:delta, location:'', tags:'', expirationDate:'', modelNumber:''})
-    .then(res=>{ if(res.status !== 'success'){ item.stock=prev; countEl.textContent=prev; toast('更新に失敗しました'); } })
-    .catch(()=>{ item.stock=prev; countEl.textContent=prev; toast('通信エラー'); });
+// ロットの個数を＋−するボタン（idで更新）
+function makeStepper(lot, onChange){
+  const count = h('span', {class:'count'}, String(lot.stock ?? 0));
+  const bump = delta=>{
+    const prev = Number(lot.stock) || 0;
+    const set = v=>{ lot.stock = v; count.textContent = v; if(onChange) onChange(); };
+    set(prev + delta);
+    postToGas({type:'stock', action:'bump', id:lot.id, value:delta})
+      .then(res=>{ if(res.status !== 'success'){ set(prev); toast(res.message || '更新に失敗しました'); } })
+      .catch(()=>{ set(prev); toast('通信エラー'); });
+  };
+  return h('div', {class:'stepper'},
+    h('button', {type:'button', onclick:()=>bump(-1)}, '−'), count, h('button', {type:'button', onclick:()=>bump(1)}, '＋'));
 }
 // 削除は「整理モード → 削除ボタン → 確認シートで長押し」の3段階にして誤操作を防ぐ
 let stockEditMode = false;
@@ -395,11 +443,13 @@ function setStockEditMode(on){
 }
 editToggle.addEventListener('click', ()=>setStockEditMode(!stockEditMode));
 
-function openDeleteSheet(item){
-  deleteTarget = item;
-  document.getElementById('sheet-item-name').textContent = item.itemName;
-  const stock = Number(item.stock) || 0;
-  document.getElementById('sheet-stock-warn').textContent = stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '';
+// 削除は商品単位（その商品の全ロット）。1つのロットだけ消すときは編集画面から
+function openDeleteSheet(g){
+  deleteTarget = g;
+  document.getElementById('sheet-item-name').textContent = g.name;
+  const stock = g.lots.reduce((s,l)=>s + (Number(l.stock) || 0), 0);
+  const lotsNote = g.lots.length > 1 ? `賞味期限の異なる${g.lots.length}件をすべて削除します。` : '';
+  document.getElementById('sheet-stock-warn').textContent = (stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '') + lotsNote;
   holdBtn.disabled = false;
   holdBtn.querySelector('span').textContent = '長押しで削除';
   sheetBackdrop.classList.add('show');
@@ -428,17 +478,17 @@ holdBtn.addEventListener('pointerdown', startHold);
 holdBtn.addEventListener('contextmenu', e=>e.preventDefault());
 
 function executeDelete(){
-  const item = deleteTarget;
-  if(!item) return;
+  const g = deleteTarget;
+  if(!g) return;
   holdBtn.disabled = true;
   holdBtn.querySelector('span').textContent = '削除中…';
-  postToGas({type:'stock', action:'delete', target:item.itemName})
+  postToGas({type:'stock', action:'delete', target:g.name})
     .then(res=>{
       if(res.status === 'success'){
-        stockCache = stockCache.filter(r=>r !== item);
+        stockCache = stockCache.filter(r=>String(r.itemName) !== g.name);
         closeDeleteSheet();
         renderStockList();
-        toast(`「${item.itemName}」を削除しました`);
+        toast(`「${g.name}」を削除しました`);
       } else {
         cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
         toast(res.message || '削除に失敗しました');
@@ -561,6 +611,7 @@ function h(tag, props = {}, ...children){
   Object.entries(props).forEach(([k, v])=>{
     if(k === 'class') el.className = v;
     else if(k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if(k.includes('-')) el.setAttribute(k, v);
     else el[k] = v;
   });
   children.flat().forEach(c=>{ if(c != null && c !== false) el.append(c); });
@@ -599,7 +650,8 @@ const tmBack = document.getElementById('tm-back');
 function tmTagCounts(){
   if(tm.sheet === 'finance') return financeOpts.tagCounts || {};
   const counts = {};
-  stockCache.forEach(r=>splitTags(r.tags).forEach(t=>counts[t] = (counts[t] || 0) + 1));
+  // 在庫は商品単位で数える（同じ商品のロットは1件）
+  groupStock().forEach(g=>splitTags(g.tags).forEach(t=>counts[t] = (counts[t] || 0) + 1));
   return counts;
 }
 function openTagManager(sheet){
@@ -733,12 +785,12 @@ function tmAssignView(tag){
   };
 
   if(tm.sheet === 'stock'){
-    const items = [...stockCache].sort((a,b)=>String(a.itemName).localeCompare(String(b.itemName), 'ja'));
-    if(!items.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
-    items.forEach(it=>{
-      const tags = splitTags(it.tags);
-      const sub = [it.location, tags.join(', ')].filter(Boolean).join(' ・ ') || '収納場所・タグなし';
-      tmBody.append(makeRow(it.itemName, it.itemName, it.itemName, sub, tags.includes(tag)));
+    const groups = groupStock().sort((a,b)=>a.name.localeCompare(b.name, 'ja'));
+    if(!groups.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
+    groups.forEach(g=>{
+      const tags = splitTags(g.tags);
+      const sub = [g.location, tags.join(', ')].filter(Boolean).join(' ・ ') || '収納場所・タグなし';
+      tmBody.append(makeRow(g.name, g.name, g.name, sub, tags.includes(tag)));
     });
     return;
   }
@@ -792,57 +844,80 @@ function toDateInputValue(v){
   const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
   return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : '';
 }
-function openItemEditor(item){
+function openItemEditor(g){
   tm.sheet = 'stock';
   tm.stack = [];
   tmBackdrop.dataset.sheet = 'stock';
   tmBackdrop.classList.add('show');
-  tmShow(tmItemView, item);
+  tmShow(tmItemView, g);
 }
-function tmItemView(item){
+// 商品の編集：商品情報（全ロット共通）と、賞味期限ごとの個数（ロット）をまとめて保存する
+function tmItemView(g){
   tmTitle.textContent = '商品を編集';
   const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
-  const name = h('input', {type:'text', value:item.itemName || ''});
-  const stock = h('input', {type:'number', value:Number(item.stock) || 0, inputMode:'numeric'});
+  const name = h('input', {type:'text', value:g.name});
   const locSelect = h('select');
   const locInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しい収納場所を入力'});
-  const locs = uniqSorted(stockCache.map(r=>r.location));
-  setupHybrid(locSelect, locInput, locs);
-  if(item.location) locSelect.value = item.location;
+  setupHybrid(locSelect, locInput, uniqSorted(stockCache.map(r=>r.location)));
+  if(g.location) locSelect.value = g.location;
   const chips = h('div', {class:'chips', id:'e-tags-chips'});
   const tagInput = h('input', {type:'text', id:'e-tags-input', placeholder:'新しいタグを追加（カンマ区切り可）'});
-  const exp = h('input', {type:'date', value:toDateInputValue(item.expirationDate)});
-  const model = h('input', {type:'text', value:item.modelNumber || ''});
+  const model = h('input', {type:'text', value:g.modelNumber || ''});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
+
+  // 賞味期限ごとの行。既存ロットは id を持ち、×で消すと deleteIds に入る
+  const lotRows = [];
+  const deleteIds = [];
+  const lotList = h('div');
+  const addLotRow = (lot)=>{
+    const exp = h('input', {type:'date', value:lot ? toDateInputValue(lot.expirationDate) : ''});
+    const count = h('input', {type:'number', value:lot ? (Number(lot.stock) || 0) : 1, inputMode:'numeric'});
+    const entry = {id: lot ? lot.id : undefined, exp, count};
+    const row = h('div', {class:'lot-edit'}, exp, count,
+      h('button', {type:'button', class:'lot-remove', 'aria-label':'この行を削除', onclick:()=>{
+        if(lotRows.length <= 1){ toast('賞味期限の行は1つ以上必要です（商品ごと消すときは「整理」から）'); return; }
+        if(entry.id !== undefined) deleteIds.push(entry.id);
+        lotRows.splice(lotRows.indexOf(entry), 1);
+        row.remove();
+      }}, '×'));
+    lotRows.push(entry);
+    lotList.append(row);
+  };
+  g.lots.forEach(addLotRow);
 
   tmBody.append(
     field('商品名', name),
-    field('個数', stock),
     field('収納場所', locSelect, locInput),
     field('タグ（複数選択可）', chips, tagInput),
-    field('賞味期限', exp),
-    field('型番', model)
+    field('型番', model),
+    h('div', {class:'field'},
+      h('div', {class:'lot-edit lot-head'}, h('label', {}, '賞味期限'), h('label', {}, '個数'), h('span')),
+      lotList,
+      h('button', {type:'button', class:'cancel-btn', onclick:()=>addLotRow(null)}, '＋ 賞味期限を追加'),
+      h('p', {class:'tm-note'}, '賞味期限の違うものを買い足したときは、行を追加して期限ごとに個数を入れてください。'))
   );
   tmFoot.append(save);
 
   // タグ候補は在庫全体のタグ。この商品に付いているタグを選択済みにしておく
   const picker = createTagPicker('e-tags-chips', 'e-tags-input');
-  splitTags(item.tags).forEach(t=>picker.select(t));
+  splitTags(g.tags).forEach(t=>picker.select(t));
   picker.render(uniqSorted(stockCache.flatMap(r=>splitTags(r.tags))));
 
   save.addEventListener('click', ()=>{
     const itemName = name.value.trim();
     if(!itemName){ toast('商品名を入力してください'); return; }
+    const lots = lotRows.map(r=>({id:r.id, expirationDate:r.exp.value, stock:Number(r.count.value) || 0}));
+    const exps = lots.map(l=>l.expirationDate);
+    if(new Set(exps).size !== exps.length){ toast('同じ賞味期限の行が重複しています'); return; }
     save.disabled = true;
     save.textContent = '保存中…';
     tm.busy = true;
     postToGas({
-      type:'stock', action:'edit', id:item.id, itemName,
-      stock:Number(stock.value) || 0,
+      type:'stock', action:'editItem', oldName:g.name, itemName,
       location:getHybridValue(locSelect, locInput),
       tags:picker.value(),
-      expirationDate:exp.value,
-      modelNumber:model.value.trim()
+      modelNumber:model.value.trim(),
+      lots, deleteIds
     })
       .then(res=>{
         if(res.status !== 'success') throw new Error(res.message || '保存に失敗しました');

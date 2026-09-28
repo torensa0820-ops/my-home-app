@@ -80,8 +80,10 @@ function doPost(e) {
 
     if (data.type === "stock" && data.action === "delete") {
       deleteStock(ss, data);
-    } else if (data.type === "stock" && data.action === "edit") {
-      editStock(ss, data);
+    } else if (data.type === "stock" && data.action === "bump") {
+      bumpStock(ss, data);
+    } else if (data.type === "stock" && data.action === "editItem") {
+      editItem(ss, data);
     } else if (data.type === "stock") {
       updateStock(ss, data);
     } else if (data.type === "finance") {
@@ -104,13 +106,13 @@ function jsonOutput(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// ---- 在庫タブの更新（上書き or 新規追加）----
-function updateStock(ss, data) {
-  const sheet = ss.getSheetByName(SHEET_STOCK);
-  const values = sheet.getDataRange().getValues();
-  const headers = values[0];
+// =========================================================
+// 在庫：1行＝1ロット（同じ商品でも賞味期限ごとに別の行）
+// 収納場所・タグ・型番は商品単位の情報として、同じ商品名の全ロットで揃える
+// =========================================================
 
-  const col = {
+function stockColumns(headers) {
+  return {
     id: headers.indexOf("id"),
     itemName: headers.indexOf("itemName"),
     stock: headers.indexOf("stock"),
@@ -120,84 +122,162 @@ function updateStock(ss, data) {
     modelNumber: headers.indexOf("modelNumber"),
     lastUpdated: headers.indexOf("lastUpdated"),
   };
+}
 
-  let targetRowIndex = -1; // 0-indexed（values配列内での位置）
+// 賞味期限を比較用の "yyyy-MM-dd" にそろえる（未設定は ""）
+function normDate(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, "Asia/Tokyo", "yyyy-MM-dd");
+  const m = String(v || "").trim().match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
+}
+
+// ---- 在庫の登録（同じ商品名・同じ期限のロットがあれば個数を加算、なければロットを追加）----
+function updateStock(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_STOCK);
+  const values = sheet.getDataRange().getValues();
+  const col = stockColumns(values[0]);
+  const name = String(data.target || "").trim();
+  if (!name) throw new Error("商品名が空です。");
+  const exp = normDate(data.expirationDate);
+
+  const lots = [];
   for (let i = 1; i < values.length; i++) {
-    if (values[i][col.itemName] === data.target) {
-      targetRowIndex = i;
-      break;
-    }
+    if (values[i][col.itemName] === name) lots.push(i);
   }
+  let target = lots.find(i => normDate(values[i][col.expirationDate]) === exp);
+  // 期限の指定がない登録（ショートカットなど）で、ロットが1つだけならそのロットに加算する
+  if (target === undefined && !exp && lots.length === 1) target = lots[0];
 
   const now = new Date();
-
-  if (targetRowIndex === -1) {
-    // 新規品目として1行追加
-    const newRow = new Array(headers.length).fill("");
+  if (target === undefined) {
+    // 既存商品の新しいロットなら、未指定の商品情報は既存ロットから引き継ぐ
+    const base = lots.length ? values[lots[0]] : null;
+    const inherit = (key) => data[key] || (base ? base[col[key]] : "");
+    const newRow = new Array(values[0].length).fill("");
     newRow[col.id] = Utilities.getUuid();
-    newRow[col.itemName] = data.target || "";
+    newRow[col.itemName] = name;
     newRow[col.stock] = Number(data.value) || 0;
-    newRow[col.location] = data.location || "";
-    newRow[col.tags] = data.tags || "";
-    newRow[col.expirationDate] = data.expirationDate || "";
-    newRow[col.modelNumber] = data.modelNumber || "";
+    newRow[col.location] = inherit("location");
+    newRow[col.tags] = inherit("tags");
+    newRow[col.expirationDate] = exp;
+    newRow[col.modelNumber] = inherit("modelNumber");
     newRow[col.lastUpdated] = now;
     sheet.appendRow(newRow);
   } else {
-    // 既存品目を更新（stockは加算、他は値があれば上書き）
-    const sheetRowNum = targetRowIndex + 1; // シート上の実際の行番号
-    const currentStock = Number(values[targetRowIndex][col.stock]) || 0;
-    const newStock = currentStock + (Number(data.value) || 0);
-
-    sheet.getRange(sheetRowNum, col.stock + 1).setValue(newStock);
-    if (data.location) sheet.getRange(sheetRowNum, col.location + 1).setValue(data.location);
-    if (data.tags) sheet.getRange(sheetRowNum, col.tags + 1).setValue(data.tags);
-    if (data.expirationDate) sheet.getRange(sheetRowNum, col.expirationDate + 1).setValue(data.expirationDate);
-    if (data.modelNumber) sheet.getRange(sheetRowNum, col.modelNumber + 1).setValue(data.modelNumber);
-    sheet.getRange(sheetRowNum, col.lastUpdated + 1).setValue(now);
+    const current = Number(values[target][col.stock]) || 0;
+    sheet.getRange(target + 1, col.stock + 1).setValue(current + (Number(data.value) || 0));
+    sheet.getRange(target + 1, col.lastUpdated + 1).setValue(now);
   }
+
+  // 商品情報の指定があれば、同じ商品名の既存ロットすべてに反映する
+  ["location", "tags", "modelNumber"].forEach(key => {
+    if (!data[key]) return;
+    lots.forEach(i => sheet.getRange(i + 1, col[key] + 1).setValue(data[key]));
+  });
 }
 
-// ---- 在庫タブから品目の行を削除 ----
+// ---- ロットの個数を増減（idで特定）----
+function bumpStock(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_STOCK);
+  const values = sheet.getDataRange().getValues();
+  const col = stockColumns(values[0]);
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][col.id]) === String(data.id)) {
+      const current = Number(values[i][col.stock]) || 0;
+      sheet.getRange(i + 1, col.stock + 1).setValue(current + (Number(data.value) || 0));
+      sheet.getRange(i + 1, col.lastUpdated + 1).setValue(new Date());
+      return;
+    }
+  }
+  throw new Error("商品が見つかりませんでした。一覧を読み込み直してください。");
+}
+
+// ---- 商品の削除（商品名で指定し、その商品の全ロットを削除）----
 function deleteStock(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
   const idxName = values[0].indexOf("itemName");
 
-  for (let i = 1; i < values.length; i++) {
+  let deleted = 0;
+  // 下の行から消すことで、行番号がずれないようにする
+  for (let i = values.length - 1; i >= 1; i--) {
     if (values[i][idxName] === data.target) {
-      sheet.deleteRow(i + 1); // シート上の実際の行番号
-      return;
+      sheet.deleteRow(i + 1);
+      deleted++;
     }
   }
-  throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
+  if (!deleted) throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
 }
 
-// ---- 在庫タブの品目を編集（idで特定し、送られた値で上書き。空欄は空欄にする）----
-function editStock(ss, data) {
+// ---- 商品の編集 ----
+// data: { oldName, itemName, location, tags, modelNumber,
+//         lots: [{ id（新規ロットは省略）, expirationDate, stock }], deleteIds: [id, ...] }
+function editItem(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
-  const headers = values[0];
-  const col = name => headers.indexOf(name);
-  const itemName = String(data.itemName || "").trim();
-  if (!itemName) throw new Error("商品名が空です。");
+  const col = stockColumns(values[0]);
+  const name = String(data.itemName || "").trim();
+  if (!name) throw new Error("商品名が空です。");
 
-  let rowIndex = -1;
+  const itemRows = [];
   for (let i = 1; i < values.length; i++) {
-    if (String(values[i][col("id")]) === String(data.id)) rowIndex = i;
-    else if (values[i][col("itemName")] === itemName) throw new Error(`「${itemName}」は既に登録されています。`);
+    const rowName = values[i][col.itemName];
+    if (rowName === data.oldName) itemRows.push(i);
+    else if (rowName === name) throw new Error(`「${name}」は既に登録されています。`);
   }
-  if (rowIndex === -1) throw new Error("商品が見つかりませんでした。一覧を読み込み直してください。");
+  if (!itemRows.length) throw new Error("商品が見つかりませんでした。一覧を読み込み直してください。");
 
-  const row = values[rowIndex].slice();
-  row[col("itemName")] = itemName;
-  row[col("stock")] = Number(data.stock) || 0;
-  row[col("location")] = data.location || "";
-  row[col("tags")] = data.tags || "";
-  row[col("expirationDate")] = data.expirationDate || "";
-  row[col("modelNumber")] = data.modelNumber || "";
-  row[col("lastUpdated")] = new Date();
-  sheet.getRange(rowIndex + 1, 1, 1, row.length).setValues([row]);
+  const lots = data.lots || [];
+  const deleteIds = new Set((data.deleteIds || []).map(String));
+  if (!lots.length) throw new Error("賞味期限の行を1つ以上残してください。");
+  const exps = lots.map(l => normDate(l.expirationDate));
+  if (new Set(exps).size !== exps.length) throw new Error("同じ賞味期限の行が重複しています。");
+
+  const now = new Date();
+  const lotById = {};
+  lots.forEach(l => { if (l.id !== undefined && l.id !== "") lotById[String(l.id)] = l; });
+  // 書き込む前に、送られたロットがすべてこの商品の行として存在するか確認する
+  const itemIds = new Set(itemRows.map(i => String(values[i][col.id])));
+  if (Object.keys(lotById).some(id => !itemIds.has(id))) {
+    throw new Error("商品のデータが変更されています。一覧を読み込み直してください。");
+  }
+
+  // 既存ロット：商品情報を揃え、編集されたロットは期限と個数も更新する
+  itemRows.forEach(i => {
+    const id = String(values[i][col.id]);
+    if (deleteIds.has(id)) return;
+    const row = values[i].slice();
+    row[col.itemName] = name;
+    row[col.location] = data.location || "";
+    row[col.tags] = data.tags || "";
+    row[col.modelNumber] = data.modelNumber || "";
+    const lot = lotById[id];
+    if (lot) {
+      row[col.expirationDate] = normDate(lot.expirationDate);
+      row[col.stock] = Number(lot.stock) || 0;
+    }
+    row[col.lastUpdated] = now;
+    sheet.getRange(i + 1, 1, 1, row.length).setValues([row]);
+  });
+
+  // 新しいロットを追加
+  lots.filter(l => l.id === undefined || l.id === "").forEach(l => {
+    const newRow = new Array(values[0].length).fill("");
+    newRow[col.id] = Utilities.getUuid();
+    newRow[col.itemName] = name;
+    newRow[col.stock] = Number(l.stock) || 0;
+    newRow[col.location] = data.location || "";
+    newRow[col.tags] = data.tags || "";
+    newRow[col.expirationDate] = normDate(l.expirationDate);
+    newRow[col.modelNumber] = data.modelNumber || "";
+    newRow[col.lastUpdated] = now;
+    sheet.appendRow(newRow);
+  });
+
+  // 削除するロット（追加した行は末尾なので、既存の行番号は変わらない。下の行から消す）
+  itemRows.filter(i => deleteIds.has(String(values[i][col.id])))
+    .sort((a, b) => b - a)
+    .forEach(i => sheet.deleteRow(i + 1));
 }
 
 // タグ文字列を配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
@@ -309,6 +389,7 @@ function checkExpirationAndNotifyDiscord() {
   const headers = values[0];
   const idxName = headers.indexOf("itemName");
   const idxExp = headers.indexOf("expirationDate");
+  const idxStock = headers.indexOf("stock");
 
   // 【修正】確実に「日本時間の今日（午前0時0分）」を取得する
   const todayStr = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
@@ -320,6 +401,9 @@ function checkExpirationAndNotifyDiscord() {
     const name = values[i][idxName];
     const expRaw = values[i][idxExp];
     if (!name || expRaw === "") continue;
+    // 使い切ったロット（個数0以下）は通知しない
+    const stock = Number(values[i][idxStock]) || 0;
+    if (stock <= 0) continue;
 
     const expDate = parseExpirationDate(expRaw);
     if (!expDate) continue;
@@ -330,7 +414,7 @@ function checkExpirationAndNotifyDiscord() {
 
     // 本日（0日）〜3日以内が対象
     if (diffDays >= 0 && diffDays <= 3) {
-      alerts.push({ name: name, diffDays: diffDays });
+      alerts.push({ name: name, diffDays: diffDays, stock: stock });
     }
   }
 
@@ -341,7 +425,7 @@ function checkExpirationAndNotifyDiscord() {
 
   const lines = alerts.map(a => {
     const label = a.diffDays === 0 ? "本日期限" : `残り${a.diffDays}日`;
-    return `・${a.name}（${label}）`;
+    return `・${a.name}（${label}・${a.stock}個）`;
   });
 
   const message = "@everyone 【賞味期限アラート】期限が迫っている食材があります！\n" + lines.join("\n");
