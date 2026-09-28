@@ -18,6 +18,7 @@
     --stock:#3DDC97;
     --stock-dim:#245C43;
     --finance:#4FA3E3;
+    --finance-dim:#1F4A6B;
     --chore:#F2B84B;
     --chore-dim:#7A5A1E;
     --danger:#F0616D;
@@ -67,6 +68,7 @@
   .chips:not(:empty){margin-bottom:10px;}
   .chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
   .chip.on{border-color:var(--stock);background:var(--stock-dim);color:var(--text);}
+  #finance-panel .chip.on{border-color:var(--finance);background:var(--finance-dim);}
   details{border-top:1px solid var(--border);margin:6px 0 12px;}
   summary{display:block;padding:12px 0;font-size:13px;color:var(--muted);cursor:pointer;list-style:none;}
   summary::-webkit-details-marker{display:none;}
@@ -165,9 +167,9 @@
         </div>
         <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
         <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
-        <div class="field"><label>タグ</label>
-          <select id="f-tags-select" class="hybrid-select"></select>
-          <input type="text" id="f-tags-input" class="hybrid-input" placeholder="新しいタグを入力（カンマ区切り可）">
+        <div class="field"><label>タグ（複数選択可）</label>
+          <div id="f-tags-chips" class="chips"></div>
+          <input type="text" id="f-tags-input" placeholder="新しいタグを追加（カンマ区切り可）">
         </div>
         <button type="submit" class="submit-btn">記録する</button>
       </form>
@@ -243,6 +245,8 @@ function setupHybrid(selectEl, inputEl, presetValues){
   const newOpt = document.createElement('option');
   newOpt.value='__new__'; newOpt.textContent='＋ 新規入力';
   selectEl.appendChild(newOpt);
+  selectEl.value = ''; // 先頭の候補が自動選択されないよう「（未選択）」にする
+  inputEl.style.display = 'none';
   selectEl.onchange = () => {
     if(selectEl.value === '__new__'){ inputEl.style.display='block'; inputEl.value=''; inputEl.focus(); }
     else { inputEl.style.display='none'; }
@@ -402,22 +406,42 @@ function executeDelete(){
 function splitTags(s){
   return String(s ?? '').split(/[,，、]/).map(t=>t.trim()).filter(Boolean);
 }
-const selectedTags = new Set();
-function renderTagChips(tags){
-  const wrap = document.getElementById('s-tags-chips');
-  wrap.innerHTML = '';
-  tags.forEach(tag=>{
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'chip' + (selectedTags.has(tag) ? ' on' : '');
-    chip.textContent = tag;
-    chip.addEventListener('click', ()=>{
-      if(selectedTags.has(tag)) selectedTags.delete(tag); else selectedTags.add(tag);
-      chip.classList.toggle('on', selectedTags.has(tag));
-    });
-    wrap.appendChild(chip);
-  });
+// 重複と空欄を除いて五十音順に並べる
+function uniqSorted(values){
+  return [...new Set(values.map(v=>String(v ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
 }
+// タグのチップ選択（複数選択）＋新規タグ入力欄
+function createTagPicker(chipsId, inputId){
+  const wrap = document.getElementById(chipsId);
+  const input = document.getElementById(inputId);
+  const selected = new Set();
+  return {
+    render(tags){
+      wrap.innerHTML = '';
+      tags.forEach(tag=>{
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'chip' + (selected.has(tag) ? ' on' : '');
+        chip.textContent = tag;
+        chip.addEventListener('click', ()=>{
+          if(selected.has(tag)) selected.delete(tag); else selected.add(tag);
+          chip.classList.toggle('on', selected.has(tag));
+        });
+        wrap.appendChild(chip);
+      });
+    },
+    // 選択中のタグと新規入力のタグを「,」区切りの文字列にする
+    value(){
+      return [...new Set([...selected, ...splitTags(input.value)])].join(',');
+    },
+    clear(){
+      selected.clear();
+      input.value = '';
+      wrap.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
+    }
+  };
+}
+const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 
 function loadStock(){
   fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
@@ -426,12 +450,8 @@ function loadStock(){
       stockCache = rows;
       renderStockList();
       // 収納場所・タグの候補はスプレッドシートに登録済みの値から作る
-      const locs = [...new Set(rows.map(r=>String(r.location||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
-      const tagsAll = [...new Set(rows.flatMap(r=>splitTags(r.tags)))].sort((a,b)=>a.localeCompare(b,'ja'));
-      const locSelect = document.getElementById('s-location-select');
-      setupHybrid(locSelect, document.getElementById('s-location-input'), locs);
-      locSelect.value = ''; // 先頭の候補が自動選択されないよう「（未選択）」にする
-      renderTagChips(tagsAll);
+      setupHybrid(document.getElementById('s-location-select'), document.getElementById('s-location-input'), uniqSorted(rows.map(r=>r.location)));
+      stockTagPicker.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
     })
     .catch(()=>{ document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
@@ -441,33 +461,47 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
   if(!name) return;
   const value = Number(document.getElementById('s-value').value) || 0;
   const location = getHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'));
-  const tags = [...new Set([...selectedTags, ...splitTags(document.getElementById('s-tags-input').value)])].join(',');
+  const tags = stockTagPicker.value();
   const expirationDate = document.getElementById('s-expiration').value;
   const modelNumber = document.getElementById('s-model').value.trim();
   postToGas({type:'stock', target:name, value, location, tags, expirationDate, modelNumber})
     .then(res=>{
-      if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; selectedTags.clear(); loadStock(); }
+      if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
       else toast('登録に失敗しました');
     }).catch(()=>toast('通信エラー'));
 });
 
 // ---------- 家計簿 ----------
-setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), ['食費','日用品','交通費','娯楽','医療','その他']);
-setupHybrid(document.getElementById('f-tags-select'), document.getElementById('f-tags-input'), ['外食','贅沢','必需品','特売']);
+const financeTagPicker = createTagPicker('f-tags-chips', 'f-tags-input');
+// カテゴリ・タグの候補は家計簿シートに登録済みの値から作る
+function loadFinanceOptions(){
+  fetch(`${GAS_URL}?action=getFinanceOptions&t=${Date.now()}`)
+    .then(r=>r.json())
+    .then(opts=>{
+      setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), uniqSorted(opts.categories || []));
+      financeTagPicker.render(uniqSorted(opts.tags || []));
+    })
+    .catch(()=>toast('家計簿の候補の読み込みに失敗しました'));
+}
+setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), []);
 document.getElementById('finance-form').addEventListener('submit', e=>{
   e.preventDefault();
   const category = getHybridValue(document.getElementById('f-category-select'), document.getElementById('f-category-input'));
   const amount = Number(document.getElementById('f-amount').value) || 0;
   const memo = document.getElementById('f-memo').value.trim();
-  const tags = getHybridValue(document.getElementById('f-tags-select'), document.getElementById('f-tags-input'));
-  if(!category || !amount) return;
+  const tags = financeTagPicker.value();
+  if(!category){ toast('カテゴリを選択してください'); return; }
+  if(!amount) return;
   postToGas({type:'finance', category, amount, memo, tags})
-    .then(res=>{ if(res.status==='success'){ toast('記録しました'); e.target.reset(); } else toast('記録に失敗しました'); })
+    .then(res=>{
+      if(res.status==='success'){ toast('記録しました'); e.target.reset(); financeTagPicker.clear(); loadFinanceOptions(); }
+      else toast('記録に失敗しました');
+    })
     .catch(()=>toast('通信エラー'));
 });
 
 // ---------- 家事 ----------
-setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), ['毎日','毎週月曜','毎週日曜','毎月1回','3ヶ月に1回']);
+setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), []);
 
 function renderChoreList(){
   const wrap = document.getElementById('chore-list');
@@ -498,7 +532,12 @@ function completeChore(t, card){
 function loadChores(){
   fetch(`${GAS_URL}?action=getTasks&t=${Date.now()}`)
     .then(r=>r.json())
-    .then(rows=>{ choreCache = rows; renderChoreList(); })
+    .then(rows=>{
+      choreCache = rows;
+      renderChoreList();
+      // 周期の候補は家事シートに登録済みの値から作る
+      setupHybrid(document.getElementById('c-cycle-select'), document.getElementById('c-cycle-input'), uniqSorted(rows.map(r=>r.cycle)));
+    })
     .catch(()=>{ document.getElementById('chore-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
 document.getElementById('chore-form').addEventListener('submit', e=>{
@@ -515,6 +554,7 @@ document.getElementById('chore-form').addEventListener('submit', e=>{
 
 // ---------- 初期化 ----------
 loadStock();
+loadFinanceOptions();
 loadChores();
 </script>
 </body>

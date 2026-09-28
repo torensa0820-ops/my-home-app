@@ -38,6 +38,21 @@ function doGet(e) {
         });
       return ContentService.createTextOutput(JSON.stringify(rows)).setMimeType(ContentService.MimeType.JSON);
     }
+  if (e.parameter.action === "getFinanceOptions") {
+    // 家計簿の入力候補（登録済みのカテゴリとタグ）を返す
+    const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
+    const headers = values[0];
+    const idxCat = headers.indexOf("category");
+    const idxTags = headers.indexOf("tags");
+    const categories = new Set();
+    const tags = new Set();
+    values.slice(1).forEach(r => {
+      const cat = String(r[idxCat]).trim();
+      if (cat) categories.add(cat);
+      String(r[idxTags]).split(/[,，、]/).map(t => t.trim()).filter(Boolean).forEach(t => tags.add(t));
+    });
+    return jsonOutput({ categories: [...categories], tags: [...tags] });
+  }
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
