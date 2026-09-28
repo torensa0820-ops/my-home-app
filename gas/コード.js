@@ -99,6 +99,8 @@ function doPost(e) {
       updateStock(ss, data);
     } else if (data.type === "finance" && data.action === "delete") {
       deleteFinance(ss, data);
+    } else if (data.type === "finance" && data.action === "edit") {
+      editFinance(ss, data);
     } else if (data.type === "finance") {
       addFinance(ss, data);
     } else if (data.type === "todo") {
@@ -415,10 +417,9 @@ function addFinance(ss, data) {
   sheet.appendRow(newRow);
 }
 
-// ---- 家計簿の記録を削除 ----
-// 行番号で指定し、一覧取得後にシートが変わっていないか date と createdAt で確認してから消す
-function deleteFinance(ss, data) {
-  const sheet = ss.getSheetByName(SHEET_FINANCE);
+// ---- 家計簿の記録を特定 ----
+// 行番号で指定し、一覧取得後にシートが変わっていないか date と createdAt で確認する
+function findFinanceRow(sheet, data) {
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
   const iso = v => v instanceof Date ? v.toISOString() : String(v === undefined ? "" : v);
@@ -429,7 +430,33 @@ function deleteFinance(ss, data) {
     || (idxCreated !== -1 && iso(r[idxCreated]) !== String(data.createdAt || ""))) {
     throw new Error("家計簿のデータが変更されています。一覧を読み込み直してください。");
   }
+  return { headers: headers, row: r.slice() };
+}
+
+// ---- 家計簿の記録を削除 ----
+function deleteFinance(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_FINANCE);
+  findFinanceRow(sheet, data);
   sheet.deleteRow(Number(data.row));
+}
+
+// ---- 家計簿の記録を編集（日付・カテゴリ・金額・メモ・タグを上書き。createdAt は変えない）----
+// data.values に新しい値を入れる
+function editFinance(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_FINANCE);
+  const found = findFinanceRow(sheet, data);
+  const col = name => found.headers.indexOf(name);
+  const v = data.values || {};
+  const amount = Number(v.amount);
+  if (!String(v.category || "").trim()) throw new Error("カテゴリが空です。");
+  if (!amount) throw new Error("金額が不正です。");
+  const row = found.row;
+  row[col("date")] = financeDate(v.date);
+  row[col("category")] = String(v.category).trim();
+  row[col("amount")] = amount;
+  row[col("memo")] = v.memo || "";
+  row[col("tags")] = v.tags || "";
+  sheet.getRange(Number(data.row), 1, 1, row.length).setValues([row]);
 }
 
 // =========================================================

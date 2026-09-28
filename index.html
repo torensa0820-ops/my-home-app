@@ -82,7 +82,7 @@
   .chips:not(:empty){margin-bottom:10px;}
   .chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
   .chip.on{border-color:var(--stock);background:var(--stock-dim);color:var(--text);}
-  #finance-panel .chip.on{border-color:var(--finance);background:var(--finance-dim);}
+  #finance-panel .chip.on,#tm-backdrop[data-sheet="finance"] .chip.on{border-color:var(--finance);background:var(--finance-dim);}
   .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
   .label-row label{margin:0 !important;}
   .text-btn{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:4px 2px;}
@@ -178,10 +178,7 @@
   .fin-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .fin-amount{flex-shrink:0;font-size:16px;font-weight:700;}
   .fin-row{cursor:pointer;}
-  .fin-detail{display:flex;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--border);font-size:14px;}
-  .fin-detail .k{flex-shrink:0;color:var(--muted);}
-  .fin-detail .v{text-align:right;word-break:break-all;}
-  .fin-detail + .tm-section{margin-top:22px;}
+  .tm-danger{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);}
   .list-head .section-title{margin:0;}
   .edit-toggle{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;}
   .edit-toggle.on{border-color:var(--danger);color:var(--danger);}
@@ -404,7 +401,7 @@ function escapeHtml(s){
 // ---------- タブ切り替え ----------
 const TAB_INFO = {
   stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
-  finance:{title:'家計簿', sub:'記録をタップで詳細・削除'},
+  finance:{title:'家計簿', sub:'記録をタップで編集・削除'},
   chore:{title:'家事ルーティン', sub:'今日やる家事はこれ'}
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
@@ -841,12 +838,23 @@ function openFinanceDetail(r){
   tmBackdrop.classList.add('show');
   tmShow(tmFinanceView, r);
 }
+// 記録の編集：日付・カテゴリ・金額・メモ・タグを変更して保存する。下に削除ボタン
 function tmFinanceView(r){
-  tmTitle.textContent = '記録の詳細';
+  tmTitle.textContent = '記録を編集';
+  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const d = finDay(r);
-  const wd = '日月火水木金土'[d.getDay()];
-  const item = (label, value)=>h('div', {class:'fin-detail'}, h('span', {class:'k'}, label), h('span', {class:'v'}, value || '—'));
+  const date = h('input', {type:'date', value:`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`});
+  const catSelect = h('select');
+  const catInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しいカテゴリを入力'});
+  setupHybrid(catSelect, catInput, uniqSorted(financeOpts.categories || []));
+  setHybridValue(catSelect, catInput, r.category);
+  const amount = h('input', {type:'number', value:Number(r.amount) || 0, inputMode:'numeric'});
+  const memo = h('input', {type:'text', value:r.memo || '', placeholder:'例：スーパー'});
+  const chips = h('div', {class:'chips', id:'fe-tags-chips'});
+  const tagInput = h('input', {type:'text', id:'fe-tags-input', placeholder:'新しいタグを追加（カンマ区切り可）'});
+  const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
   const created = r.createdAt ? new Date(r.createdAt) : null;
+
   const deleteBtn = makeHoldButton('長押しでこの記録を削除', reset=>{
     tm.busy = true;
     postToGas({type:'finance', action:'delete', row:r.row, date:r.date, createdAt:r.createdAt || ''})
@@ -857,18 +865,51 @@ function tmFinanceView(r){
       .then(()=>{ tm.busy = false; toast('記録を削除しました'); closeTagManager(); })
       .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
   });
+
   tmBody.append(
-    item('日付', `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日（${wd}）`),
-    item('カテゴリ', r.category),
-    item('金額', `¥${(Number(r.amount) || 0).toLocaleString()}`),
-    item('メモ', r.memo),
-    item('タグ', splitTags(r.tags).join(', ')),
-    created && !isNaN(created) ? item('登録日時', created.toLocaleString('ja-JP', {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})) : '',
-    h('div', {class:'tm-section'},
+    field('日付', date),
+    field('カテゴリ', catSelect, catInput),
+    field('金額（円）', amount),
+    field('メモ', memo),
+    field('タグ（複数選択可）', chips, tagInput),
+    created && !isNaN(created)
+      ? h('p', {class:'tm-note'}, `登録日時：${created.toLocaleString('ja-JP', {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`)
+      : '',
+    h('div', {class:'tm-section tm-danger'},
       h('h3', {}, '削除'),
       h('p', {class:'tm-note'}, 'スプレッドシートからこの記録の行が削除されます。元に戻すことはできません。'),
       deleteBtn)
   );
+  tmFoot.append(save);
+
+  // タグ候補は家計簿全体のタグ。この記録に付いているタグを選択済みにしておく
+  const picker = createTagPicker('fe-tags-chips', 'fe-tags-input');
+  const current = splitTags(r.tags);
+  current.forEach(t=>picker.select(t));
+  picker.render(uniqSorted([...(financeOpts.tags || []), ...current]));
+
+  save.addEventListener('click', ()=>{
+    const values = {
+      date: date.value,
+      category: getHybridValue(catSelect, catInput),
+      amount: Number(amount.value) || 0,
+      memo: memo.value.trim(),
+      tags: picker.value()
+    };
+    if(!values.date){ toast('日付を入力してください'); return; }
+    if(!values.category){ toast('カテゴリを選択してください'); return; }
+    if(!values.amount){ toast('金額を入力してください'); return; }
+    save.disabled = true;
+    save.textContent = '保存中…';
+    tm.busy = true;
+    postToGas({type:'finance', action:'edit', row:r.row, date:r.date, createdAt:r.createdAt || '', values})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '保存に失敗しました');
+        return Promise.all([loadFinanceHistory(), loadFinanceOptions()]);
+      })
+      .then(()=>{ tm.busy = false; toast('保存しました'); closeTagManager(); })
+      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
+  });
 }
 // 過去の記録をタップすると、カテゴリ・メモ・タグを入力する（金額は毎回違うので入れない）
 function fillFinanceForm(r, row){
