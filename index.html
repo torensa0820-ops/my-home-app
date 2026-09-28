@@ -45,7 +45,7 @@
   .tab-panel.active{display:block;}
 
   .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
-  .card-info{min-width:0;flex:1;}
+  .card-info{min-width:0;flex:1;cursor:pointer;}
   .card-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .card-meta{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .stepper{display:flex;align-items:center;gap:10px;flex-shrink:0;}
@@ -160,7 +160,7 @@
       </button>
     </div>
     <h1 id="page-title">在庫管理</h1>
-    <p id="page-sub">タップして数量を更新</p>
+    <p id="page-sub">商品名をタップで編集・＋−で数量を更新</p>
   </header>
 
   <main>
@@ -307,7 +307,7 @@ function escapeHtml(s){
 
 // ---------- タブ切り替え ----------
 const TAB_INFO = {
-  stock:{title:'在庫管理', sub:'タップして数量を更新'},
+  stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
   finance:{title:'家計簿', sub:'支出を記録'},
   chore:{title:'家事ルーティン', sub:'今日やる家事はこれ'}
 };
@@ -342,7 +342,8 @@ function renderStockList(){
   stockCache.forEach(item=>{
     const card = document.createElement('div');
     card.className = 'card';
-    const metaParts = [item.location, item.tags].filter(Boolean).join(' ・ ');
+    const exp = toDateInputValue(item.expirationDate);
+    const metaParts = [exp && `期限 ${Number(exp.slice(5,7))}/${Number(exp.slice(8,10))}`, item.location, splitTags(item.tags).join(', ')].filter(Boolean).join(' ・ ');
     const info = `
       <div class="card-info">
         <div class="card-name">${escapeHtml(item.itemName)}</div>
@@ -360,6 +361,7 @@ function renderStockList(){
         <span class="count">${item.stock ?? 0}</span>
         <button data-action="plus" type="button">＋</button>
       </div>`;
+    card.querySelector('.card-info').addEventListener('click', ()=>openItemEditor(item));
     const countEl = card.querySelector('.count');
     card.querySelector('[data-action="minus"]').addEventListener('click', ()=>bumpStock(item,-1,countEl));
     card.querySelector('[data-action="plus"]').addEventListener('click', ()=>bumpStock(item,1,countEl));
@@ -478,6 +480,8 @@ function createTagPicker(chipsId, inputId){
         wrap.appendChild(chip);
       });
     },
+    // render の前に呼ぶと、そのタグを選択済みの状態で表示する
+    select(tag){ selected.add(tag); },
     // 選択中のタグと新規入力のタグを「,」区切りの文字列にする
     value(){
       return [...new Set([...selected, ...splitTags(input.value)])].join(',');
@@ -773,6 +777,80 @@ function tmAssignView(tag){
       .catch(()=>{ status.textContent = '読み込みに失敗しました'; });
   }
   loadMore();
+}
+
+// ---------- 在庫の商品編集 ----------
+// シートの日付（ISO文字列や「2026/10/5」など）を <input type="date"> 用の yyyy-mm-dd にする
+function toDateInputValue(v){
+  if(!v) return '';
+  const s = String(v);
+  if(s.includes('T')){
+    const d = new Date(s);
+    if(isNaN(d)) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+  const m = s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  return m ? `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}` : '';
+}
+function openItemEditor(item){
+  tm.sheet = 'stock';
+  tm.stack = [];
+  tmBackdrop.dataset.sheet = 'stock';
+  tmBackdrop.classList.add('show');
+  tmShow(tmItemView, item);
+}
+function tmItemView(item){
+  tmTitle.textContent = '商品を編集';
+  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
+  const name = h('input', {type:'text', value:item.itemName || ''});
+  const stock = h('input', {type:'number', value:Number(item.stock) || 0, inputMode:'numeric'});
+  const locSelect = h('select');
+  const locInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しい収納場所を入力'});
+  const locs = uniqSorted(stockCache.map(r=>r.location));
+  setupHybrid(locSelect, locInput, locs);
+  if(item.location) locSelect.value = item.location;
+  const chips = h('div', {class:'chips', id:'e-tags-chips'});
+  const tagInput = h('input', {type:'text', id:'e-tags-input', placeholder:'新しいタグを追加（カンマ区切り可）'});
+  const exp = h('input', {type:'date', value:toDateInputValue(item.expirationDate)});
+  const model = h('input', {type:'text', value:item.modelNumber || ''});
+  const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
+
+  tmBody.append(
+    field('商品名', name),
+    field('個数', stock),
+    field('収納場所', locSelect, locInput),
+    field('タグ（複数選択可）', chips, tagInput),
+    field('賞味期限', exp),
+    field('型番', model)
+  );
+  tmFoot.append(save);
+
+  // タグ候補は在庫全体のタグ。この商品に付いているタグを選択済みにしておく
+  const picker = createTagPicker('e-tags-chips', 'e-tags-input');
+  splitTags(item.tags).forEach(t=>picker.select(t));
+  picker.render(uniqSorted(stockCache.flatMap(r=>splitTags(r.tags))));
+
+  save.addEventListener('click', ()=>{
+    const itemName = name.value.trim();
+    if(!itemName){ toast('商品名を入力してください'); return; }
+    save.disabled = true;
+    save.textContent = '保存中…';
+    tm.busy = true;
+    postToGas({
+      type:'stock', action:'edit', id:item.id, itemName,
+      stock:Number(stock.value) || 0,
+      location:getHybridValue(locSelect, locInput),
+      tags:picker.value(),
+      expirationDate:exp.value,
+      modelNumber:model.value.trim()
+    })
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '保存に失敗しました');
+        return loadStock();
+      })
+      .then(()=>{ tm.busy = false; toast('保存しました'); closeTagManager(); })
+      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
+  });
 }
 
 // ---------- 家事 ----------

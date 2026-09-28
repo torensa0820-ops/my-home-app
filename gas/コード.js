@@ -80,6 +80,8 @@ function doPost(e) {
 
     if (data.type === "stock" && data.action === "delete") {
       deleteStock(ss, data);
+    } else if (data.type === "stock" && data.action === "edit") {
+      editStock(ss, data);
     } else if (data.type === "stock") {
       updateStock(ss, data);
     } else if (data.type === "finance") {
@@ -169,6 +171,33 @@ function deleteStock(ss, data) {
     }
   }
   throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
+}
+
+// ---- 在庫タブの品目を編集（idで特定し、送られた値で上書き。空欄は空欄にする）----
+function editStock(ss, data) {
+  const sheet = ss.getSheetByName(SHEET_STOCK);
+  const values = sheet.getDataRange().getValues();
+  const headers = values[0];
+  const col = name => headers.indexOf(name);
+  const itemName = String(data.itemName || "").trim();
+  if (!itemName) throw new Error("商品名が空です。");
+
+  let rowIndex = -1;
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][col("id")]) === String(data.id)) rowIndex = i;
+    else if (values[i][col("itemName")] === itemName) throw new Error(`「${itemName}」は既に登録されています。`);
+  }
+  if (rowIndex === -1) throw new Error("商品が見つかりませんでした。一覧を読み込み直してください。");
+
+  const row = values[rowIndex].slice();
+  row[col("itemName")] = itemName;
+  row[col("stock")] = Number(data.stock) || 0;
+  row[col("location")] = data.location || "";
+  row[col("tags")] = data.tags || "";
+  row[col("expirationDate")] = data.expirationDate || "";
+  row[col("modelNumber")] = data.modelNumber || "";
+  row[col("lastUpdated")] = new Date();
+  sheet.getRange(rowIndex + 1, 1, 1, row.length).setValues([row]);
 }
 
 // タグ文字列を配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
