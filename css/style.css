@@ -212,6 +212,17 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fin-date b{display:block;font-size:16px;color:var(--text);}
 .fin-main{flex:1;min-width:0;}
 .fin-cat{font-size:15px;font-weight:600;}
+.split-badge{display:inline-block;vertical-align:2px;margin-left:6px;padding:1px 6px;border:1px solid var(--finance-dim);border-radius:999px;font-size:10px;font-weight:700;color:var(--finance);}
+/* 1回の会計をカテゴリごとに分ける内訳 */
+.split-editor{margin:-4px 0 12px;}
+.split-row{display:grid;grid-template-columns:1fr 96px 40px;gap:8px;align-items:start;margin-bottom:8px;}
+.split-cat{min-width:0;}
+.split-row .lot-remove{height:44px;}
+.split-add{width:100%;border:1px dashed var(--border);border-radius:10px;background:none;color:var(--finance);font-size:13px;font-weight:700;padding:10px;}
+.split-add:active{background:var(--surface-2);}
+.split-preview{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:8px;}
+.split-preview .later{color:var(--muted);font-size:12px;}
+.split-preview.error{color:var(--danger);}
 .fin-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .fin-amount{flex-shrink:0;font-size:16px;font-weight:700;}
 .fin-row{cursor:pointer;}

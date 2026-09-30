@@ -78,7 +78,7 @@
           <h2 id="finance-compose-title">支出を記録する</h2>
           <button type="button" class="text-btn compose-close">閉じる</button>
         </div>
-        <p class="compose-hint">履歴をタップすると、カテゴリ・メモ・タグを入力できます</p>
+        <p class="compose-hint">履歴をタップすると、カテゴリ・支払い方法・メモ・タグを入力できます</p>
         <div class="compose-body">
           <form id="finance-form">
             <div class="field"><label>カテゴリ</label>
@@ -87,6 +87,11 @@
             </div>
             <div class="field"><label>日付</label><input type="date" id="f-date" required></div>
             <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
+            <div id="f-splits"></div>
+            <div class="field"><label>支払い方法</label>
+              <select id="f-payment-select" class="hybrid-select"></select>
+              <input type="text" id="f-payment-input" class="hybrid-input" placeholder="新しい支払い方法を入力">
+            </div>
             <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
             <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
               <div id="f-tags-chips" class="chips"></div>

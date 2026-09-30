@@ -3,20 +3,24 @@
 // =========================================================
 const SHEET_FINANCE = "家計簿";
 
-// ---- 入力候補（登録済みのカテゴリとタグ、タグごとの件数）----
+// ---- 入力候補（登録済みのカテゴリ・支払い方法・タグ、タグごとの件数）----
 function getFinanceOptions() {
   const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
   const headers = values[0];
   const idxCat = headers.indexOf("category");
+  const idxPay = headers.indexOf("payment"); // 列がまだなければ -1
   const idxTags = headers.indexOf("tags");
   const categories = new Set();
+  const payments = new Set();
   const tagCounts = {};
   values.slice(1).forEach(r => {
     const cat = String(r[idxCat]).trim();
     if (cat) categories.add(cat);
+    const pay = idxPay === -1 ? "" : String(r[idxPay]).trim();
+    if (pay) payments.add(pay);
     splitTags(r[idxTags]).forEach(t => tagCounts[t] = (tagCounts[t] || 0) + 1);
   });
-  return { categories: [...categories], tags: Object.keys(tagCounts), tagCounts: tagCounts };
+  return { categories: [...categories], payments: [...payments], tags: Object.keys(tagCounts), tagCounts: tagCounts };
 }
 
 // ---- 履歴 ----
@@ -44,11 +48,12 @@ function getFinanceRows(p) {
     });
   }
   // 支出した日（日本時間）の新しい順。同じ日は登録時刻の新しい順
+  // 1回の会計を分けた行（同じ groupId）は行番号の昇順（メインのカテゴリが先）、それ以外は行番号の新しい順
   const day = r => Utilities.formatDate(new Date(r.date), "Asia/Tokyo", "yyyy-MM-dd");
   rows.forEach(r => { r.day = day(r); });
   rows.sort((a, b) => b.day.localeCompare(a.day)
     || String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date))
-    || b.row - a.row);
+    || (a.groupId && a.groupId === b.groupId ? a.row - b.row : b.row - a.row));
   const monthTotals = {};
   rows.forEach(r => {
     const key = r.day.slice(0, 7);
@@ -57,19 +62,39 @@ function getFinanceRows(p) {
   return { rows: rows.slice(offset, offset + limit), total: rows.length, monthTotals: monthTotals };
 }
 
-// ---- 記録の日付 ----
+// ---- 後から増えた列 ----
 // date は支出した日（入力した日にち）、createdAt はアプリで登録した時刻
-// createdAt 列がなければ末尾に追加し、既存の記録には date の値（これまでは登録時刻が入っていた）を写す
-function ensureFinanceCreatedAt(sheet) {
+// payment は支払い方法、groupId は1回の会計をカテゴリごとに分けた行に共通の ID（分けていない記録は空）
+// 列がなければ末尾に追加する。createdAt は既存の記録に date の値（これまでは登録時刻が入っていた）を写す
+function ensureFinanceColumns(sheet) {
   const values = sheet.getDataRange().getValues();
   const headers = values[0];
-  if (headers.indexOf("createdAt") !== -1) return;
-  const col = headers.length + 1;
   const idxDate = headers.indexOf("date");
-  sheet.getRange(1, col).setValue("createdAt");
-  if (values.length > 1) {
-    sheet.getRange(2, col, values.length - 1, 1).setValues(values.slice(1).map(r => [r[idxDate]]));
-  }
+  const extra = [
+    { name: "createdAt", fill: r => r[idxDate] },
+    { name: "payment" },
+    { name: "groupId" },
+  ];
+  let col = headers.length;
+  extra.forEach(c => {
+    if (headers.indexOf(c.name) !== -1) return;
+    col++;
+    sheet.getRange(1, col).setValue(c.name);
+    if (c.fill && values.length > 1) {
+      sheet.getRange(2, col, values.length - 1, 1).setValues(values.slice(1).map(r => [c.fill(r)]));
+    }
+  });
+}
+
+// 内訳 [{category, amount}] を確かめて、カテゴリの前後の空白を除いたものを返す
+function financeItems(items) {
+  return items.map(it => {
+    const category = String(it.category || "").trim();
+    const amount = Number(it.amount);
+    if (!category) throw new Error("カテゴリが空です。");
+    if (!(amount > 0)) throw new Error("金額が不正です: " + category);
+    return { category: category, amount: amount };
+  });
 }
 
 // "yyyy-MM-dd" を日本時間のその日の0時にする
@@ -79,28 +104,29 @@ function financeDate(str) {
 }
 
 // ---- 家計簿タブへの行追加 ----
+// data.items = [{category, amount}, ...] が2件以上なら、1回の会計をカテゴリごとに分けた行として
+// 同じ groupId・同じ createdAt で追加する（items がなければ data.category・data.amount の1件）
+// date・memo・tags・payment は全行共通
 function addFinance(ss, data) {
   const sheet = ss.getSheetByName(SHEET_FINANCE);
-  ensureFinanceCreatedAt(sheet);
-  const headers = sheet.getDataRange().getValues()[0];
+  ensureFinanceColumns(sheet);
+  const items = financeItems(Array.isArray(data.items) && data.items.length
+    ? data.items : [{ category: data.category, amount: data.amount }]);
+  const groupId = items.length > 1 ? Utilities.getUuid() : "";
+  const createdAt = new Date();
+  const date = financeDate(data.date);
+  appendFinanceRows(sheet, items.map(it => ({
+    date: date, category: it.category, amount: it.amount, memo: data.memo || "", tags: data.tags || "",
+    payment: String(data.payment || "").trim(), groupId: groupId, createdAt: createdAt,
+  })));
+}
 
-  const col = {
-    date: headers.indexOf("date"),
-    category: headers.indexOf("category"),
-    amount: headers.indexOf("amount"),
-    memo: headers.indexOf("memo"),
-    tags: headers.indexOf("tags"),
-    createdAt: headers.indexOf("createdAt"),
-  };
-
-  const newRow = new Array(headers.length).fill("");
-  newRow[col.date] = financeDate(data.date);
-  newRow[col.category] = data.category || "";
-  newRow[col.amount] = Number(data.amount) || 0;
-  newRow[col.memo] = data.memo || "";
-  newRow[col.tags] = data.tags || "";
-  newRow[col.createdAt] = new Date();
-  sheet.appendRow(newRow);
+// 「見出し名 → 値」のオブジェクトを、シートの末尾にまとめて追加する
+function appendFinanceRows(sheet, objs) {
+  if (!objs.length) return;
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const rows = objs.map(o => headers.map(h => o[h] === undefined ? "" : o[h]));
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
 }
 
 // ---- 家計簿の記録を特定 ----
@@ -116,7 +142,7 @@ function findFinanceRow(sheet, data) {
     || (idxCreated !== -1 && iso(r[idxCreated]) !== String(data.createdAt || ""))) {
     throw new Error("家計簿のデータが変更されています。一覧を読み込み直してください。");
   }
-  return { headers: headers, row: r.slice() };
+  return { headers: headers, row: r.slice(), values: values };
 }
 
 // ---- 家計簿の記録を削除 ----
@@ -126,21 +152,46 @@ function deleteFinance(ss, data) {
   sheet.deleteRow(Number(data.row));
 }
 
-// ---- 家計簿の記録を編集（日付・カテゴリ・金額・メモ・タグを上書き。createdAt は変えない）----
+// ---- 家計簿の記録を編集（日付・カテゴリ・金額・メモ・タグ・支払い方法を上書き。createdAt は変えない）----
 // data.values に新しい値を入れる
+// values.splits = [{category, amount}] があれば、この記録の金額を「values.amount − splits の合計」にし、
+// splits を同じ groupId（なければ新しく作る）・同じ createdAt の行として追加する
+// groupId がある記録の日付と支払い方法は、同じ groupId のほかの行にも反映する（カテゴリ・金額・メモ・タグは行ごと）
 function editFinance(ss, data) {
   const sheet = ss.getSheetByName(SHEET_FINANCE);
+  ensureFinanceColumns(sheet);
   const found = findFinanceRow(sheet, data);
   const col = name => found.headers.indexOf(name);
   const v = data.values || {};
   const amount = Number(v.amount);
   if (!String(v.category || "").trim()) throw new Error("カテゴリが空です。");
   if (!amount) throw new Error("金額が不正です。");
+  const splits = financeItems(Array.isArray(v.splits) ? v.splits : []);
+  const mainAmount = amount - splits.reduce((sum, it) => sum + it.amount, 0);
+  if (splits.length && mainAmount <= 0) throw new Error("内訳の合計が合計の金額以上です。");
   const row = found.row;
-  row[col("date")] = financeDate(v.date);
+  const oldGroupId = String(row[col("groupId")] || "");
+  const groupId = oldGroupId || (splits.length ? Utilities.getUuid() : "");
+  const date = financeDate(v.date);
+  const payment = String(v.payment || "").trim();
+  row[col("date")] = date;
   row[col("category")] = String(v.category).trim();
-  row[col("amount")] = amount;
+  row[col("amount")] = mainAmount;
   row[col("memo")] = v.memo || "";
   row[col("tags")] = v.tags || "";
+  row[col("payment")] = payment;
+  row[col("groupId")] = groupId;
   sheet.getRange(Number(data.row), 1, 1, row.length).setValues([row]);
+
+  if (oldGroupId) {
+    found.values.forEach((r, i) => {
+      if (i === 0 || i + 1 === Number(data.row) || String(r[col("groupId")]) !== oldGroupId) return;
+      sheet.getRange(i + 1, col("date") + 1).setValue(date);
+      sheet.getRange(i + 1, col("payment") + 1).setValue(payment);
+    });
+  }
+  appendFinanceRows(sheet, splits.map(it => ({
+    date: date, category: it.category, amount: it.amount, memo: v.memo || "", tags: v.tags || "",
+    payment: payment, groupId: groupId, createdAt: row[col("createdAt")],
+  })));
 }
