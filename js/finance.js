@@ -8,19 +8,20 @@ financeFilter.render([]);
 const financeTagPicker = createTagPicker('f-tags-chips', 'f-tags-input');
 let financeOpts = {categories:[], tags:[], tagCounts:{}};
 // カテゴリ・タグの候補は家計簿シートに登録済みの値から作る
-function loadFinanceOptions(){
-  return fetch(`${GAS_URL}?action=getFinanceOptions&t=${Date.now()}`)
-    .then(r=>r.json())
+// preloaded：起動時にまとめて取得したデータ（あれば通信しない）
+function loadFinanceOptions(preloaded){
+  return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getFinanceOptions'))
     .then(opts=>{
       financeOpts = opts;
       setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), uniqSorted(opts.categories || []));
       financeTagPicker.render(uniqSorted(opts.tags || []));
       financeFilter.render(uniqSorted(opts.tags || []));
     })
-    .catch(()=>toast('家計簿の候補の読み込みに失敗しました'));
+    .catch(err=>toast(`家計簿の候補の読み込みに失敗しました（${errMsg(err)}）`));
 }
 setupHybrid(document.getElementById('f-category-select'), document.getElementById('f-category-input'), []);
 // 日付は今日を初期値にする（記録後も今日に戻す）
+document.getElementById('f-date').value = todayStr();
 
 document.getElementById('finance-form').addEventListener('submit', e=>{
   e.preventDefault();
@@ -35,24 +36,25 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
   postToGas({type:'finance', date, category, amount, memo, tags})
     .then(res=>{
       if(res.status==='success'){ toast('記録しました'); e.target.reset(); document.getElementById('f-date').value = todayStr(); financeTagPicker.clear(); loadFinanceOptions(); loadFinanceHistory(); }
-      else toast('記録に失敗しました');
+      else toast(res.message || '記録に失敗しました');
     })
-    .catch(()=>toast('通信エラー'));
+    .catch(err=>toast(errMsg(err)));
 });
 
 // 家計簿の履歴：新しい順に30件ずつ読み込み、月ごとの見出しに合計を出す
 const FIN_PAGE = 30;
 const fin = {offset:0, total:0, lastMonth:null, monthTotals:{}, seq:0};
-function loadFinanceHistory(append){
+// preloaded：起動時にまとめて取得した最初の30件（あれば通信しない）
+function loadFinanceHistory(append, preloaded){
   const wrap = document.getElementById('finance-list');
   const seq = append ? fin.seq : ++fin.seq; // 読み込み直しの途中で古い応答が混ざらないようにする
   if(!append){ fin.offset = 0; fin.lastMonth = null; }
   const status = h('p', {class:'empty-msg'}, '読み込み中…');
   wrap.querySelector('.more-btn')?.remove();
+  wrap.querySelector('.load-error')?.remove();
   if(!append) wrap.innerHTML = '';
   wrap.append(status);
-  return fetch(`${GAS_URL}?action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}${financeFilter.query()}&t=${Date.now()}`)
-    .then(r=>r.json())
+  return (preloaded ? Promise.resolve(preloaded) : getFromGas(`action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}${financeFilter.query()}`))
     .then(data=>{
       if(seq !== fin.seq) return;
       status.remove();
@@ -86,7 +88,7 @@ function loadFinanceHistory(append){
           `さらに${FIN_PAGE}件読み込む（残り${fin.total - fin.offset}件）`));
       }
     })
-    .catch(()=>{ if(seq === fin.seq) status.textContent = '読み込みに失敗しました'; });
+    .catch(err=>{ if(seq === fin.seq) status.replaceWith(loadErrorView(err, ()=>loadFinanceHistory(append))); });
 }
 // 記録の支出日。GASが日本時間で計算した day（yyyy-MM-dd）を優先する
 function finDay(r){

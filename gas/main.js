@@ -7,6 +7,15 @@
 
 function doGet(e) {
   const p = e.parameter;
+  // 起動時に必要なデータをまとめて返す（リクエストの数を減らし、GAS が同時に動く数を抑える）
+  if (p.action === "getAll") {
+    return jsonOutput({
+      stock: getStockRows(),
+      tasks: getChoreRows(),
+      financeOptions: getFinanceOptions(),
+      finance: getFinanceRows({ offset: 0, limit: 30 }),
+    });
+  }
   if (p.action === "getStock") return jsonOutput(getStockRows());
   if (p.action === "getTasks") return jsonOutput(getChoreRows());
   if (p.action === "getFinanceOptions") return jsonOutput(getFinanceOptions());

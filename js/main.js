@@ -33,7 +33,16 @@ document.getElementById('reload-btn').addEventListener('click', e=>{
 });
 
 // ---------- 初期化 ----------
-loadStock();
-loadFinanceOptions();
-loadFinanceHistory();
-loadChores();
+// 起動時のデータは1回のリクエストでまとめて取得する（再試行しても失敗したら、各一覧に理由と再読み込みボタンを出す）
+getFromGas('action=getAll')
+  .then(all=>{
+    loadStock(all.stock);
+    loadFinanceOptions(all.financeOptions);
+    loadFinanceHistory(false, all.finance);
+    loadChores(all.tasks);
+  })
+  .catch(err=>{
+    document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>reloadList('stock-list', loadStock)));
+    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); }));
+    document.getElementById('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores)));
+  });

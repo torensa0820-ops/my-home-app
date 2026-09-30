@@ -15,12 +15,62 @@ function toast(msg){
   toast._t = setTimeout(()=>el.classList.remove('show'), 1800);
 }
 
+// ---------- GASとの通信 ----------
+// GAS は混み具合によって応答に数十秒かかることがあるため、時間切れを設け、取得は再試行する
+const GET_TIMEOUT_MS = 20000;  // 取得：これ以上応答がなければ打ち切って再試行する
+const GET_RETRIES = 2;         // 取得：失敗したときの再試行の回数
+const POST_TIMEOUT_MS = 60000; // 書き込み：再試行しないので長めに待つ
+
+// fetch に時間切れを付けて、応答を JSON として読む。失敗したら理由の分かるエラーにする
+async function fetchJson(url, options, timeoutMs){
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), timeoutMs);
+  let res, text;
+  try {
+    res = await fetch(url, {...options, signal:ctrl.signal});
+    text = await res.text();
+  } catch(err) {
+    throw new Error(err.name === 'AbortError' ? `時間切れ（${timeoutMs / 1000}秒以上応答がありません）` : '通信エラー');
+  } finally {
+    clearTimeout(timer);
+  }
+  try { return JSON.parse(text); }
+  catch(_) {
+    // GAS がエラーのページ（HTML）を返したときは、その内容の一部を出す
+    const detail = text.replace(/<(style|script)[\s\S]*?<\/\1>/g, ' ').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+    throw new Error(`GASのエラー（${res.status}）${detail ? '：' + detail : ''}`);
+  }
+}
+// GASからデータを取得する。失敗したら少し待って再試行する（取得は何度送っても結果が変わらないので安全）
+async function getFromGas(query){
+  for(let attempt = 0; ; attempt++){
+    try {
+      return await fetchJson(`${GAS_URL}?${query}&t=${Date.now()}`, {}, GET_TIMEOUT_MS);
+    } catch(err) {
+      if(attempt >= GET_RETRIES) throw err;
+      await new Promise(r=>setTimeout(r, 1500 * (attempt + 1)));
+    }
+  }
+}
+// GASに書き込む。時間切れでも GAS 側では処理が済んでいることがあるため、二重に書き込まないよう再試行はしない
 function postToGas(payload){
-  return fetch(GAS_URL, {
+  return fetchJson(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(payload)
-  }).then(r => r.json());
+  }, POST_TIMEOUT_MS);
+}
+// 一覧を「読み込み中…」にしてから読み込み直す（「もう一度読み込む」ボタン用）
+function reloadList(listId, load){
+  document.getElementById(listId).replaceChildren(h('p', {class:'empty-msg'}, '読み込み中…'));
+  load();
+}
+// 一覧の読み込みに失敗したときの表示。理由と「もう一度読み込む」ボタンを出す
+function loadErrorView(err, retry){
+  return h('div', {class:'load-error'},
+    h('p', {}, '読み込みに失敗しました'),
+    h('p', {class:'reason'}, errMsg(err)),
+    h('button', {type:'button', class:'cancel-btn', onclick:retry}, 'もう一度読み込む'));
 }
 
 function setupHybrid(selectEl, inputEl, presetValues){
@@ -75,7 +125,6 @@ function uniqSorted(values){
 }
 
 function todayStr(){ const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-document.getElementById('f-date').value = todayStr();
 
 // 要素を作る小さなヘルパー。文字列の子要素はテキストとして入るのでエスケープ不要
 function h(tag, props = {}, ...children){

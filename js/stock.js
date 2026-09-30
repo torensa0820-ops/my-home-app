@@ -79,7 +79,8 @@ function makeStepper(lot, onChange){
     set(prev + delta);
     postToGas({type:'stock', action:'bump', id:lot.id, value:delta})
       .then(res=>{ if(res.status !== 'success'){ set(prev); toast(res.message || '更新に失敗しました'); } })
-      .catch(()=>{ set(prev); toast('通信エラー'); });
+      // 時間切れでも GAS 側では更新済みのことがあるため、一覧を読み込み直して実際の個数に合わせる
+      .catch(err=>{ set(prev); toast(errMsg(err)); loadStock(); });
   };
   return h('div', {class:'stepper'},
     h('button', {type:'button', onclick:()=>bump(-1)}, '−'), count, h('button', {type:'button', onclick:()=>bump(1)}, '＋'));
@@ -154,9 +155,9 @@ function executeDelete(){
         toast(res.message || '削除に失敗しました');
       }
     })
-    .catch(()=>{
+    .catch(err=>{
       cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
-      toast('通信エラー');
+      toast(errMsg(err));
     });
 }
 
@@ -166,9 +167,9 @@ stockFilter.render([]);
 
 const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 
-function loadStock(){
-  return fetch(`${GAS_URL}?action=getStock&t=${Date.now()}`)
-    .then(r=>r.json())
+// preloaded：起動時にまとめて取得したデータ（あれば通信しない）
+function loadStock(preloaded){
+  return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getStock'))
     .then(rows=>{
       stockCache = rows;
       renderStockList();
@@ -178,7 +179,7 @@ function loadStock(){
       // 絞り込みの候補は「登録中の商品」に出る商品のタグだけ（選んでも0件になるタグを出さない）
       stockFilter.render(uniqSorted(listedStock().flatMap(g=>splitTags(g.tags))));
     })
-    .catch(()=>{ document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
+    .catch(err=>{ document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>reloadList('stock-list', loadStock))); });
 }
 document.getElementById('stock-form').addEventListener('submit', e=>{
   e.preventDefault();
@@ -192,8 +193,8 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
   postToGas({type:'stock', target:name, value, location, tags, expirationDate, modelNumber})
     .then(res=>{
       if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
-      else toast('登録に失敗しました');
-    }).catch(()=>toast('通信エラー'));
+      else toast(res.message || '登録に失敗しました');
+    }).catch(err=>toast(errMsg(err)));
 });
 // 一覧の商品をタップすると、商品名・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
 function fillStockForm(g, card){

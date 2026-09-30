@@ -188,11 +188,11 @@ function completeChore(t, card){
     })
     .catch(err=>{ card.style.opacity = '1'; toast(errMsg(err)); });
 }
-function loadChores(){
-  return fetch(`${GAS_URL}?action=getTasks&t=${Date.now()}`)
-    .then(r=>r.json())
+// preloaded：起動時にまとめて取得したデータ（あれば通信しない）
+function loadChores(preloaded){
+  return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getTasks'))
     .then(rows=>{ choreCache = rows; renderChoreList(); })
-    .catch(()=>{ choreEl('chore-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
+    .catch(err=>{ choreEl('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores))); });
 }
 choreEl('chore-form').addEventListener('submit', e=>{
   e.preventDefault();

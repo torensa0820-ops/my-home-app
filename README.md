@@ -100,6 +100,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
 
 | action | 返すもの |
 | --- | --- |
+| `getAll` | 起動時に使う。`stock`・`tasks`・`financeOptions`・`finance`（最初の30件）をまとめて返す |
 | `getStock` | 在庫の全行 |
 | `getTasks` | 家事の全行 |
 | `getFinanceOptions` | 家計簿のカテゴリ・タグの候補と、タグごとの件数 |
@@ -161,5 +162,9 @@ clasp deploy -i AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB
 
 - **ステータスバーの設定**：`apple-mobile-web-app-status-bar-style` は `black` にしている。`black-translucent` にすると、iOS 26 のホーム画面アプリで表示領域が画面の下端まで届かず、タブバーの下に空白ができる
 - **タブバー**：背景は画面の下端（ホームバーの下）まで伸ばし、文字は `env(safe-area-inset-bottom)` の分だけ上に置く
+- **通信**：GAS の応答はふだん1〜3秒だが、混み具合によって数十秒かかることがある。そのため `js/common.js` で次のようにしている
+  - 取得（`getFromGas`）：20秒で打ち切り、最大2回まで再試行する
+  - 書き込み（`postToGas`）：60秒まで待つ。時間切れでも GAS 側では処理が済んでいることがあり、再試行すると二重に書き込むおそれがあるので、自動では再試行しない
+  - 失敗したときは、一覧に理由（時間切れ・通信エラー・GAS のエラーの内容）と「もう一度読み込む」ボタンを出す
 - **日付**：GAS は `Asia/Tokyo` で動く。家計簿の日付と家事の予定日時は、日本時間で計算する
 - **動作確認**：手元では Edge のヘッドレスモードで `index.html` を開いてスクリーンショットを撮れる（`msedge --headless=new --screenshot=... --window-size=520,900 file:///.../index.html`）。ヘッドレスの Edge は幅が約500px より狭くならない

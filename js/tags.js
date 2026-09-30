@@ -268,8 +268,7 @@ function tmAssignView(tag){
     more.remove();
     status.textContent = '読み込み中…';
     tmBody.append(status);
-    fetch(`${GAS_URL}?action=getFinance&offset=${offset}&limit=${PAGE}&t=${Date.now()}`)
-      .then(r=>r.json())
+    getFromGas(`action=getFinance&offset=${offset}&limit=${PAGE}`)
       .then(data=>{
         status.remove();
         data.rows.forEach(r=>{
@@ -288,7 +287,7 @@ function tmAssignView(tag){
           tmBody.append(more);
         }
       })
-      .catch(()=>{ status.textContent = '読み込みに失敗しました'; });
+      .catch(err=>{ status.remove(); more.textContent = `読み込みに失敗しました（${errMsg(err)}）。タップで再試行`; tmBody.append(more); });
   }
   loadMore();
 }
