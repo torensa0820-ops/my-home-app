@@ -25,7 +25,8 @@ function getFinanceOptions() {
 
 // ---- 履歴 ----
 // 記録を新しい順に offset 件目から limit 件返す（履歴表示・タグ一括付与の対象選択用）
-// tags・mode でタグの絞り込み。monthTotals は（絞り込み後の）全記録の月別合計（キーは日本時間の "yyyy-MM"）
+// tags・mode でタグ、categories（JSON の配列）でカテゴリの絞り込み（両方あれば両方を満たす記録）
+// monthTotals は（絞り込み後の）全記録の月別合計（キーは日本時間の "yyyy-MM"）
 function getFinanceRows(p) {
   const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
   const headers = values[0];
@@ -46,6 +47,11 @@ function getFinanceRows(p) {
       const t = splitTags(r.tags);
       return all ? filterTags.every(x => t.includes(x)) : filterTags.some(x => t.includes(x));
     });
+  }
+  // カテゴリで絞り込む（categories は JSON の配列。いずれかのカテゴリの記録）
+  const filterCats = p.categories ? JSON.parse(p.categories).map(c => String(c).trim()) : [];
+  if (filterCats.length) {
+    rows = rows.filter(r => filterCats.includes(String(r.category).trim()));
   }
   // 支出した日（日本時間）の新しい順。同じ日は登録時刻の新しい順
   // 1回の会計を分けた行（同じ groupId）は行番号の昇順（メインのカテゴリが先）、それ以外は行番号の新しい順

@@ -65,40 +65,50 @@ function createTagPicker(chipsId, inputId){
     }
   };
 }
-// タグの絞り込み
-// 一覧の上には「絞り込み」ボタンと選択中のタグだけを出し、タグの一覧は下から出るパネルに折り返して並べる
+// タグ（と、opts.categories なら カテゴリ）の絞り込み
+// 一覧の上には「絞り込み」ボタンと選択中のカテゴリ・タグだけを出し、候補は下から出るパネルに折り返して並べる
 // パネルは一覧に重ねて表示するので、選ぶとすぐ上の一覧に結果が反映される
-function createFilterBar(barId, sheet, onChange){
+// カテゴリは選んだもののいずれか、タグとの組み合わせは「カテゴリの条件かつタグの条件」
+function createFilterBar(barId, sheet, onChange, opts = {}){
   const bar = document.getElementById(barId);
   const section = bar.closest('.tab-panel');
   const status = h('div', {class:'filter-status'});
   bar.after(status);
   const selected = new Set();
+  const selectedCats = new Set();
   let mode = 'any';
   let tags = [];
+  let categories = [];
+  const clearAll = ()=>{ selected.clear(); selectedCats.clear(); changed(); };
 
   // ---- パネル ----
   const search = h('input', {type:'search', class:'filter-search', placeholder:'タグを検索', oninput:()=>drawPanel()});
   const modeSeg = h('div', {class:'seg'});
   const cloud = h('div', {class:'chips filter-cloud'});
+  const catCloud = h('div', {class:'chips filter-cloud'});
   const panel = h('div', {class:'compose', role:'dialog'},
     h('div', {class:'compose-grip'}, h('span')),
     h('div', {class:'compose-head'},
-      h('h2', {}, 'タグで絞り込む'),
+      h('h2', {}, opts.categories ? '絞り込む' : 'タグで絞り込む'),
       h('button', {type:'button', class:'text-btn', onclick:closeCompose}, '閉じる')),
-    h('p', {class:'compose-hint'}, '選んだタグの付いたデータだけを一覧に表示します'),
+    h('p', {class:'compose-hint'}, opts.categories ? '選んだカテゴリ・タグのデータだけを一覧に表示します' : '選んだタグの付いたデータだけを一覧に表示します'),
     h('div', {class:'compose-body'},
+      opts.categories ? [h('div', {class:'filter-label'}, 'カテゴリ（いずれか）'), catCloud, h('div', {class:'filter-label'}, 'タグ')] : '',
       h('div', {class:'filter-tools'}, search, modeSeg),
       cloud,
       h('div', {class:'filter-actions'},
-        h('button', {type:'button', class:'cancel-btn', onclick:()=>{ selected.clear(); changed(); }}, '選択をすべて解除'),
+        h('button', {type:'button', class:'cancel-btn', onclick:clearAll}, '選択をすべて解除'),
         h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeCompose(); openTagManager(sheet); }}, 'タグを管理'))));
   panel.dataset.kind = 'filter';
   section.append(panel);
   enableComposeDrag(panel);
 
   const changed = ()=>{ draw(); onChange(); };
+  const toggle = (set, v)=>{ if(set.has(v)) set.delete(v); else set.add(v); changed(); };
   function drawPanel(){
+    catCloud.innerHTML = '';
+    if(!categories.length) catCloud.append(h('p', {class:'tm-note'}, 'カテゴリはまだありません'));
+    categories.forEach(c=>catCloud.append(h('button', {type:'button', class:'chip cat' + (selectedCats.has(c) ? ' on' : ''), onclick:()=>toggle(selectedCats, c)}, c)));
     modeSeg.innerHTML = '';
     [['any', 'いずれかを含む'], ['all', 'すべてを含む']].forEach(([m, label])=>modeSeg.append(
       h('button', {type:'button', class: mode === m ? 'on' : '', onclick:()=>{ if(mode !== m){ mode = m; changed(); } }}, label)));
@@ -106,25 +116,24 @@ function createFilterBar(barId, sheet, onChange){
     const q = search.value.trim().toLowerCase();
     const shown = tags.filter(t=>!q || t.toLowerCase().includes(q));
     if(!shown.length) cloud.append(h('p', {class:'tm-note'}, tags.length ? '該当するタグがありません' : 'タグはまだありません'));
-    shown.forEach(t=>cloud.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>{
-      if(selected.has(t)) selected.delete(t); else selected.add(t);
-      changed();
-    }}, t)));
+    shown.forEach(t=>cloud.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>toggle(selected, t)}, t)));
   }
   // ---- 一覧の上のバー ----
   function drawBar(){
     bar.innerHTML = '';
-    const open = h('button', {type:'button', class:'filter-open' + (selected.size ? ' on' : ''), onclick:()=>openCompose('filter')},
-      selected.size ? `絞り込み（${selected.size}）` : '絞り込み');
-    // 選択中のタグは×付きで並べ、タップで外せるようにする
+    const count = selectedCats.size + selected.size;
+    const open = h('button', {type:'button', class:'filter-open' + (count ? ' on' : ''), onclick:()=>openCompose('filter')},
+      count ? `絞り込み（${count}）` : '絞り込み');
+    // 選択中のカテゴリ・タグは×付きで並べ、タップで外せるようにする
     const chips = h('div', {class:'filter-chips'});
-    [...selected].forEach(t=>chips.append(h('button', {type:'button', class:'chip on', onclick:()=>{ selected.delete(t); changed(); }}, `${t} ×`)));
+    [...selectedCats].forEach(c=>chips.append(h('button', {type:'button', class:'chip cat on', onclick:()=>toggle(selectedCats, c)}, `${c} ×`)));
+    [...selected].forEach(t=>chips.append(h('button', {type:'button', class:'chip on', onclick:()=>toggle(selected, t)}, `${t} ×`)));
     bar.append(open, chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
     status.innerHTML = '';
-    if(selected.size){
+    if(count){
       status.append(h('span', {class:'count'}),
-        selected.size > 1 ? h('span', {}, mode === 'any' ? '・いずれかを含む' : '・すべてを含む') : '',
-        h('button', {type:'button', class:'clear', onclick:()=>{ selected.clear(); changed(); }}, '絞り込みを解除'));
+        selected.size > 1 ? h('span', {}, mode === 'any' ? '・タグはいずれかを含む' : '・タグはすべてを含む') : '',
+        h('button', {type:'button', class:'clear', onclick:clearAll}, '絞り込みを解除'));
     }
   }
   function draw(){ drawBar(); drawPanel(); }
@@ -138,13 +147,25 @@ function createFilterBar(barId, sheet, onChange){
       draw();
       if(selected.size !== before) onChange();
     },
-    active(){ return selected.size > 0; },
+    // カテゴリ一覧を描き直す（opts.categories のときだけ使う）。無くなったカテゴリは選択から外す
+    renderCategories(list){
+      categories = list;
+      const before = selectedCats.size;
+      [...selectedCats].forEach(c=>{ if(!categories.includes(c)) selectedCats.delete(c); });
+      draw();
+      if(selectedCats.size !== before) onChange();
+    },
+    active(){ return selected.size > 0 || selectedCats.size > 0; },
     matches(tagStr){
       if(!selected.size) return true;
       const t = splitTags(tagStr);
       return mode === 'all' ? [...selected].every(x=>t.includes(x)) : [...selected].some(x=>t.includes(x));
     },
-    query(){ return selected.size ? `&tags=${encodeURIComponent([...selected].join(','))}&mode=${mode}` : ''; },
+    // カテゴリ名には「,」などが入りうるので、カテゴリは JSON の配列で送る
+    query(){
+      return (selected.size ? `&tags=${encodeURIComponent([...selected].join(','))}&mode=${mode}` : '')
+        + (selectedCats.size ? `&categories=${encodeURIComponent(JSON.stringify([...selectedCats]))}` : '');
+    },
     // 絞り込み結果の件数を表示する
     setCount(text){ const el = status.querySelector('.count'); if(el) el.textContent = text; }
   };

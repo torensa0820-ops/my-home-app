@@ -1,6 +1,6 @@
 // 家計簿：記録、履歴（30件ずつ・月別合計）、記録の編集・削除
 
-const financeFilter = createFilterBar('finance-filter', 'finance', ()=>loadFinanceHistory());
+const financeFilter = createFilterBar('finance-filter', 'finance', ()=>loadFinanceHistory(), {categories:true});
 
 financeFilter.render([]);
 
@@ -21,6 +21,7 @@ function loadFinanceOptions(preloaded){
       setupHybrid(fPaySelect, fPayInput, uniqSorted(opts.payments || []));
       financeTagPicker.render(uniqSorted(opts.tags || []));
       financeFilter.render(uniqSorted(opts.tags || []));
+      financeFilter.renderCategories(uniqSorted(opts.categories || []));
       financeSplits.update();
     })
     .catch(err=>toast(`家計簿の候補の読み込みに失敗しました（${errMsg(err)}）`));
