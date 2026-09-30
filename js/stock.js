@@ -219,7 +219,7 @@ function tmItemView(g){
   setupHybrid(locSelect, locInput, uniqSorted(stockCache.map(r=>r.location)));
   if(g.location) locSelect.value = g.location;
   const chips = h('div', {class:'chips', id:'e-tags-chips'});
-  const tagInput = h('input', {type:'text', id:'e-tags-input', placeholder:'新しいタグを追加（カンマ区切り可）'});
+  const tagInput = h('input', {type:'text', id:'e-tags-input', placeholder:'新しいタグを入力して改行で追加'});
   const model = h('input', {type:'text', value:g.modelNumber || ''});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
 

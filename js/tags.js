@@ -5,42 +5,63 @@ function createTagPicker(chipsId, inputId){
   const wrap = document.getElementById(chipsId);
   const input = document.getElementById(inputId);
   const selected = new Set();
+  let known = [];         // 登録済みのタグ（render で渡された候補）
+  const added = new Set(); // 入力欄から追加した、まだ保存していないタグ
+  function draw(){
+    wrap.innerHTML = '';
+    [...new Set([...known, ...added])].forEach(tag=>{
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip' + (selected.has(tag) ? ' on' : '');
+      chip.textContent = tag;
+      chip.addEventListener('click', ()=>{
+        if(selected.has(tag)) selected.delete(tag); else selected.add(tag);
+        chip.classList.toggle('on', selected.has(tag));
+      });
+      wrap.appendChild(chip);
+    });
+  }
+  // 入力欄の文字をタグのチップにして選択済みにする
+  function addFromInput(){
+    const tags = splitTags(input.value);
+    if(!tags.length) return;
+    tags.forEach(t=>{ if(!known.includes(t)) added.add(t); selected.add(t); });
+    input.value = '';
+    draw();
+  }
+  // 改行（Enter）で追加する。日本語入力の変換確定の Enter では追加しない。フォームも送信しない
+  input.addEventListener('keydown', e=>{
+    if(e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    addFromInput();
+  });
   return {
     render(tags){
-      // 名称変更・削除で無くなったタグは選択状態からも外す
-      [...selected].forEach(t=>{ if(!tags.includes(t)) selected.delete(t); });
-      wrap.innerHTML = '';
-      tags.forEach(tag=>{
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className = 'chip' + (selected.has(tag) ? ' on' : '');
-        chip.textContent = tag;
-        chip.addEventListener('click', ()=>{
-          if(selected.has(tag)) selected.delete(tag); else selected.add(tag);
-          chip.classList.toggle('on', selected.has(tag));
-        });
-        wrap.appendChild(chip);
-      });
+      // 名称変更・削除で無くなったタグは選択状態からも外す（入力欄から追加したタグは残す）
+      [...selected].forEach(t=>{ if(!tags.includes(t) && !added.has(t)) selected.delete(t); });
+      known = tags;
+      draw();
     },
     // render の前に呼ぶと、そのタグを選択済みの状態で表示する
     select(tag){ selected.add(tag); },
     // 選択中のタグを入れ替える（一覧のタップでフォームに入力するとき用）
     set(tags){
-      // 候補のチップにないタグは、選択状態が見えなくならないよう新規入力欄に入れる
-      const shown = new Set([...wrap.querySelectorAll('.chip')].map(c=>c.textContent));
+      // 候補のチップにないタグは、選択状態が見えるようチップとして追加する
       selected.clear();
-      tags.filter(t=>shown.has(t)).forEach(t=>selected.add(t));
-      input.value = tags.filter(t=>!shown.has(t)).join(',');
-      wrap.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on', selected.has(c.textContent)));
+      added.clear();
+      tags.forEach(t=>{ if(!known.includes(t)) added.add(t); selected.add(t); });
+      input.value = '';
+      draw();
     },
-    // 選択中のタグと新規入力のタグを「,」区切りの文字列にする
+    // 選択中のタグと、入力欄に残っているタグを「,」区切りの文字列にする
     value(){
       return [...new Set([...selected, ...splitTags(input.value)])].join(',');
     },
     clear(){
       selected.clear();
+      added.clear();
       input.value = '';
-      wrap.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'));
+      draw();
     }
   };
 }

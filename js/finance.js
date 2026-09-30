@@ -109,7 +109,7 @@ function tmFinanceView(r){
   const amount = h('input', {type:'number', value:Number(r.amount) || 0, inputMode:'numeric'});
   const memo = h('input', {type:'text', value:r.memo || '', placeholder:'例：スーパー'});
   const chips = h('div', {class:'chips', id:'fe-tags-chips'});
-  const tagInput = h('input', {type:'text', id:'fe-tags-input', placeholder:'新しいタグを追加（カンマ区切り可）'});
+  const tagInput = h('input', {type:'text', id:'fe-tags-input', placeholder:'新しいタグを入力して改行で追加'});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
   const created = r.createdAt ? new Date(r.createdAt) : null;
 
