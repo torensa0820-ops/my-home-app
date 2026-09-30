@@ -168,6 +168,7 @@ function renderFinanceHistory(){
     const key = finMonthKey(finDay(r));
     fin.monthTotals[key] = (fin.monthTotals[key] || 0) + (Number(r.amount) || 0);
   });
+  renderFinanceChart(); // グラフも同じ絞り込みで描き直す（グラフを表示しているときだけ）
   fin.rendered = 0;
   fin.lastMonth = null;
   wrap.innerHTML = '';

@@ -66,10 +66,14 @@
     <!-- ===== 家計簿タブ ===== -->
     <section id="finance-panel" class="tab-panel">
       <div class="list-head">
-        <div class="section-title">記録の履歴</div>
+        <div class="seg view-seg" id="finance-view" role="tablist">
+          <button type="button" data-view="list" class="on">履歴</button>
+          <button type="button" data-view="chart">グラフ</button>
+        </div>
       </div>
       <div class="filter-bar" id="finance-filter"></div>
       <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
+      <div id="finance-chart" hidden></div>
 
       <button type="button" class="fab" data-compose="finance">＋ 記録</button>
       <div class="compose" data-kind="form" id="finance-compose" role="dialog" aria-labelledby="finance-compose-title">
@@ -164,6 +168,7 @@
 <script src="js/tags.js"></script>
 <script src="js/stock.js"></script>
 <script src="js/finance.js"></script>
+<script src="js/finance-chart.js"></script>
 <script src="js/chore.js"></script>
 <script src="js/main.js"></script>
 </body>
