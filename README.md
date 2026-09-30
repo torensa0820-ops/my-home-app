@@ -46,6 +46,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
   chore-rule.js       家事の周期の計算。GAS と画面（index.html から読み込む）の両方で使う
   notify.js           Discord への送信、賞味期限の通知
 ```
+
 `js/` のファイルは ES モジュールではなく通常の `<script>` で読み込むため、ファイルをまたいで関数や変数をそのまま使える。GAS も同じく、すべてのファイルが1つのプログラムとして動く。
 
 ## スプレッドシートの構成
@@ -149,6 +150,7 @@ cd gas
 clasp push
 clasp deploy -i AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB-zGssbL1 -d "変更内容"
 ```
+
 `clasp push` は GAS 側を手元の `gas/` と同じ状態にする（手元にないファイルは GAS から消える）。
 
 ### 画面を変更したとき
