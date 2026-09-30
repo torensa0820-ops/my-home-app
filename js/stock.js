@@ -17,6 +17,10 @@ function groupStock(){
     return {name, lots, location:pick('location'), tags:pick('tags'), modelNumber:pick('modelNumber')};
   });
 }
+// 「登録中の商品」に出す商品。型番を入れた商品は取扱説明書を探すための登録で、個数を増減しないので出さない
+function listedStock(){
+  return groupStock().filter(g=>!g.modelNumber);
+}
 // 期限の表示（「期限 10/5」）と、3日以内・期限切れの判定
 function expInfo(lot){
   const exp = toDateInputValue(lot.expirationDate);
@@ -27,9 +31,10 @@ function expInfo(lot){
 }
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
-  if(!stockCache.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
+  const listed = listedStock();
+  if(!listed.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   wrap.innerHTML = '';
-  const groups = groupStock().filter(g=>stockFilter.matches(g.tags));
+  const groups = listed.filter(g=>stockFilter.matches(g.tags));
   if(stockFilter.active()) stockFilter.setCount(`${groups.length}件`);
   if(!groups.length){ wrap.innerHTML = '<p class="empty-msg">該当する商品がありません</p>'; return; }
   groups.forEach(g=>{
@@ -170,7 +175,8 @@ function loadStock(){
       // 収納場所・タグの候補はスプレッドシートに登録済みの値から作る
       setupHybrid(document.getElementById('s-location-select'), document.getElementById('s-location-input'), uniqSorted(rows.map(r=>r.location)));
       stockTagPicker.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
-      stockFilter.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
+      // 絞り込みの候補は「登録中の商品」に出る商品のタグだけ（選んでも0件になるタグを出さない）
+      stockFilter.render(uniqSorted(listedStock().flatMap(g=>splitTags(g.tags))));
     })
     .catch(()=>{ document.getElementById('stock-list').innerHTML = '<p class="empty-msg">読み込みに失敗しました</p>'; });
 }
