@@ -24,14 +24,14 @@ function getFinanceOptions() {
 }
 
 // ---- 履歴 ----
-// 記録を新しい順に offset 件目から limit 件返す（履歴表示・タグ一括付与の対象選択用）
+// 記録を新しい順に offset 件目から limit 件返す（limit="all" なら全件。履歴表示は全件を取得してアプリ側で絞り込む。タグ一括付与の対象選択は30件ずつ）
 // tags・mode でタグ、categories（JSON の配列）でカテゴリの絞り込み（両方あれば両方を満たす記録）
 // monthTotals は（絞り込み後の）全記録の月別合計（キーは日本時間の "yyyy-MM"）
 function getFinanceRows(p) {
   const values = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_FINANCE).getDataRange().getValues();
   const headers = values[0];
   const offset = Number(p.offset) || 0;
-  const limit = Number(p.limit) || 30;
+  const limit = p.limit === "all" ? Infinity : Number(p.limit) || 30; // "all" なら全件
   let rows = values.slice(1)
     .map((r, i) => {
       const obj = { row: i + 2 }; // シート上の行番号

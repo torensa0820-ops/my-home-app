@@ -38,7 +38,7 @@ getFromGas('action=getAll')
   .then(all=>{
     loadStock(all.stock);
     loadFinanceOptions(all.financeOptions);
-    loadFinanceHistory(false, all.finance);
+    loadFinanceHistory(all.finance);
     loadChores(all.tasks);
   })
   .catch(err=>{

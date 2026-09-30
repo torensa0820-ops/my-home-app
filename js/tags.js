@@ -156,15 +156,12 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
       if(selectedCats.size !== before) onChange();
     },
     active(){ return selected.size > 0 || selectedCats.size > 0; },
-    matches(tagStr){
+    // 絞り込みの条件に合うか（カテゴリを選んでいなければ category は見ない）
+    matches(tagStr, category){
+      if(selectedCats.size && !selectedCats.has(String(category ?? '').trim())) return false;
       if(!selected.size) return true;
       const t = splitTags(tagStr);
       return mode === 'all' ? [...selected].every(x=>t.includes(x)) : [...selected].some(x=>t.includes(x));
-    },
-    // カテゴリ名には「,」などが入りうるので、カテゴリは JSON の配列で送る
-    query(){
-      return (selected.size ? `&tags=${encodeURIComponent([...selected].join(','))}&mode=${mode}` : '')
-        + (selectedCats.size ? `&categories=${encodeURIComponent(JSON.stringify([...selectedCats]))}` : '');
     },
     // 絞り込み結果の件数を表示する
     setCount(text){ const el = status.querySelector('.count'); if(el) el.textContent = text; }

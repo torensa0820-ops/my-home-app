@@ -13,7 +13,7 @@ function doGet(e) {
       stock: getStockRows(),
       tasks: getChoreRows(),
       financeOptions: getFinanceOptions(),
-      finance: getFinanceRows({ offset: 0, limit: 30 }),
+      finance: getFinanceRows({ offset: 0, limit: "all" }),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());

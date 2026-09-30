@@ -1,6 +1,6 @@
 // 家計簿：記録、履歴（30件ずつ・月別合計）、記録の編集・削除
 
-const financeFilter = createFilterBar('finance-filter', 'finance', ()=>loadFinanceHistory(), {categories:true});
+const financeFilter = createFilterBar('finance-filter', 'finance', ()=>renderFinanceHistory(), {categories:true});
 
 financeFilter.render([]);
 
@@ -136,55 +136,75 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
     .catch(err=>toast(errMsg(err)));
 });
 
-// 家計簿の履歴：新しい順に30件ずつ読み込み、月ごとの見出しに合計を出す
+// 家計簿の履歴：全記録を一度に取得して手元に持ち、絞り込み・月別合計・30件ずつの表示はアプリ側で行う
+// （絞り込みを変えても通信しないので、すぐに反映される）
 const FIN_PAGE = 30;
-const fin = {offset:0, total:0, lastMonth:null, monthTotals:{}, seq:0};
-// preloaded：起動時にまとめて取得した最初の30件（あれば通信しない）
-function loadFinanceHistory(append, preloaded){
-  const wrap = document.getElementById('finance-list');
-  const seq = append ? fin.seq : ++fin.seq; // 読み込み直しの途中で古い応答が混ざらないようにする
-  if(!append){ fin.offset = 0; fin.lastMonth = null; }
-  const status = h('p', {class:'empty-msg'}, '読み込み中…');
-  wrap.querySelector('.more-btn')?.remove();
-  wrap.querySelector('.load-error')?.remove();
-  if(!append) wrap.innerHTML = '';
-  wrap.append(status);
-  return (preloaded ? Promise.resolve(preloaded) : getFromGas(`action=getFinance&offset=${fin.offset}&limit=${FIN_PAGE}${financeFilter.query()}`))
+const fin = {all:[], loaded:false, shown:[], rendered:0, lastMonth:null, monthTotals:{}, seq:0};
+// 全記録を読み込み直す。preloaded：起動時にまとめて取得したデータ（あれば通信しない）
+function loadFinanceHistory(preloaded){
+  const seq = ++fin.seq; // 読み込み直しの途中で古い応答が混ざらないようにする
+  if(!fin.loaded) document.getElementById('finance-list').replaceChildren(h('p', {class:'empty-msg'}, '読み込み中…'));
+  return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getFinance&limit=all'))
     .then(data=>{
       if(seq !== fin.seq) return;
-      status.remove();
-      fin.total = data.total;
-      if(financeFilter.active()) financeFilter.setCount(`${data.total}件`);
-      fin.monthTotals = data.monthTotals || {};
-      if(!data.total){ wrap.append(h('p', {class:'empty-msg'}, financeFilter.active() ? '該当する記録がありません' : 'まだ記録がありません')); return; }
-      data.rows.forEach(r=>{
-        const d = finDay(r);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`;
-        if(key !== fin.lastMonth){
-          const sum = fin.monthTotals[key];
-          wrap.append(h('div', {class:'fin-month'},
-            h('span', {}, `${d.getFullYear()}年${d.getMonth() + 1}月`),
-            sum != null ? h('span', {class:'sum'}, `合計 ¥${Number(sum).toLocaleString()}`) : ''));
-          fin.lastMonth = key;
-        }
-        const tags = splitTags(r.tags);
-        const row = h('div', {class:'fin-row'},
-          h('div', {class:'fin-date'}, h('b', {}, String(d.getDate())), '日'),
-          h('div', {class:'fin-main'},
-            h('div', {class:'fin-cat'}, r.category || '—', r.groupId ? h('span', {class:'split-badge'}, '分割') : ''),
-            h('div', {class:'fin-sub'}, [r.payment, r.memo, tags.join(', ')].filter(Boolean).join(' ・ ') || 'メモなし')),
-          h('div', {class:'fin-amount'}, `¥${(Number(r.amount) || 0).toLocaleString()}`));
-        row.addEventListener('click', ()=>isComposing() ? fillFinanceForm(r, row) : openFinanceDetail(r));
-        wrap.append(row);
-      });
-      fin.offset += data.rows.length;
-      if(fin.offset < fin.total){
-        wrap.append(h('button', {type:'button', class:'cancel-btn more-btn', onclick:()=>loadFinanceHistory(true)},
-          `さらに${FIN_PAGE}件読み込む（残り${fin.total - fin.offset}件）`));
-      }
+      fin.all = data.rows;
+      fin.loaded = true;
+      renderFinanceHistory();
     })
-    .catch(err=>{ if(seq === fin.seq) status.replaceWith(loadErrorView(err, ()=>loadFinanceHistory(append))); });
+    .catch(err=>{
+      if(seq !== fin.seq) return;
+      // 読み込み済みの一覧があれば残し、トーストで知らせる
+      if(fin.loaded) toast(`家計簿の読み込みに失敗しました（${errMsg(err)}）`);
+      else document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>loadFinanceHistory()));
+    });
 }
+// 手元の全記録を絞り込んで、最初の30件を表示する。月別合計は絞り込んだ記録で計算する
+function renderFinanceHistory(){
+  if(!fin.loaded) return;
+  const wrap = document.getElementById('finance-list');
+  fin.shown = fin.all.filter(r=>financeFilter.matches(r.tags, r.category));
+  fin.monthTotals = {};
+  fin.shown.forEach(r=>{
+    const key = finMonthKey(finDay(r));
+    fin.monthTotals[key] = (fin.monthTotals[key] || 0) + (Number(r.amount) || 0);
+  });
+  fin.rendered = 0;
+  fin.lastMonth = null;
+  wrap.innerHTML = '';
+  if(financeFilter.active()) financeFilter.setCount(`${fin.shown.length}件`);
+  if(!fin.shown.length){ wrap.append(h('p', {class:'empty-msg'}, financeFilter.active() ? '該当する記録がありません' : 'まだ記録がありません')); return; }
+  renderFinancePage();
+}
+// 絞り込んだ記録の続きを30件表示する
+function renderFinancePage(){
+  const wrap = document.getElementById('finance-list');
+  wrap.querySelector('.more-btn')?.remove();
+  fin.shown.slice(fin.rendered, fin.rendered + FIN_PAGE).forEach(r=>{
+    const d = finDay(r);
+    const key = finMonthKey(d);
+    if(key !== fin.lastMonth){
+      wrap.append(h('div', {class:'fin-month'},
+        h('span', {}, `${d.getFullYear()}年${d.getMonth() + 1}月`),
+        h('span', {class:'sum'}, `合計 ¥${fin.monthTotals[key].toLocaleString()}`)));
+      fin.lastMonth = key;
+    }
+    const tags = splitTags(r.tags);
+    const row = h('div', {class:'fin-row'},
+      h('div', {class:'fin-date'}, h('b', {}, String(d.getDate())), '日'),
+      h('div', {class:'fin-main'},
+        h('div', {class:'fin-cat'}, r.category || '—', r.groupId ? h('span', {class:'split-badge'}, '分割') : ''),
+        h('div', {class:'fin-sub'}, [r.payment, r.memo, tags.join(', ')].filter(Boolean).join(' ・ ') || 'メモなし')),
+      h('div', {class:'fin-amount'}, `¥${(Number(r.amount) || 0).toLocaleString()}`));
+    row.addEventListener('click', ()=>isComposing() ? fillFinanceForm(r, row) : openFinanceDetail(r));
+    wrap.append(row);
+  });
+  fin.rendered = Math.min(fin.rendered + FIN_PAGE, fin.shown.length);
+  if(fin.rendered < fin.shown.length){
+    wrap.append(h('button', {type:'button', class:'cancel-btn more-btn', onclick:renderFinancePage},
+      `さらに${FIN_PAGE}件表示する（残り${fin.shown.length - fin.rendered}件）`));
+  }
+}
+function finMonthKey(d){ return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}`; }
 // 記録の支出日。GASが日本時間で計算した day（yyyy-MM-dd）を優先する
 function finDay(r){
   return r.day ? new Date(r.day + 'T00:00:00') : new Date(r.date);
