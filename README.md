@@ -175,7 +175,7 @@ clasp deploy -i AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB
   - フォントは Google Fonts の「M PLUS Rounded 1c」。読み込めないときは端末のフォント（ヒラギノ角ゴなど）になる
   - 家計簿のグラフの色は `js/finance-chart.js` の `FC_COLORS`・`FC_OTHER`。面の色（`--surface`）に対して、色覚の違いがあっても隣どうしが見分けられることを確かめてある。面の色を変えたら確かめ直す
 - **ステータスバーの設定**：`apple-mobile-web-app-status-bar-style` は `black` にしている。`black-translucent` にすると、iOS 26 のホーム画面アプリで表示領域が画面の下端まで届かず、画面の下に空白ができる
-- **タブバー**：画面の下に浮いた丸型のバー。下端から `max(12px, env(safe-area-inset-bottom) - 4px)` 離して置くので、ホームバーとは重ならない。バーの周りと下には一覧（背景は `--bg`）がそのまま見える。登録パネル・登録ボタン（FAB）・トースト・一覧の下の余白は、`--tabbar-h`（バーの高さ 66px と下の余白の合計）を基準に置いている
+- **タブバー**：画面の下に浮いた丸型のバー。背景がカードの面と近いので、縁に1pxの線（`--border`）を付けて区別している。下端から `max(12px, env(safe-area-inset-bottom) - 4px)` 離して置くので、ホームバーとは重ならない。バーの周りと下には一覧（背景は `--bg`）がそのまま見える。登録パネル・登録ボタン（FAB）・トースト・一覧の下の余白は、`--tabbar-h`（バーの高さ 66px と下の余白の合計）を基準に置いている
 - **通信**：GAS の応答はふだん1〜3秒だが、混み具合によって数十秒かかることがある。そのため `js/common.js` で次のようにしている
   - 取得（`getFromGas`）：20秒で打ち切り、最大2回まで再試行する
   - 書き込み（`postToGas`）：60秒まで待つ。時間切れでも GAS 側では処理が済んでいることがあり、再試行すると二重に書き込むおそれがあるので、自動では再試行しない

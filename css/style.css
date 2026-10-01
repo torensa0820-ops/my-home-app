@@ -148,9 +148,10 @@ details[open] summary:before{content:"▾ ";}
 #chore-panel .submit-btn{background:var(--chore);}
 .submit-btn:active{opacity:.8;}
 
-/* タブバー：画面の下に浮いた丸型のバー。高さは 54px＋上下の padding 6px で 66px */
+/* タブバー：画面の下に浮いた丸型のバー。高さは 54px＋上下の padding 6px で 66px
+   背景がカードの面と近いので、縁に1pxの線（影で描くので高さは変わらない）を付けて区別する */
 :root{--tabbar-gap:max(12px, calc(var(--safe-bottom) - 4px));}
-nav.tabbar{position:fixed;left:16px;right:16px;bottom:var(--tabbar-gap);z-index:6;display:flex;gap:4px;max-width:488px;margin:0 auto;padding:6px;border-radius:999px;background:var(--tabbar-bg);box-shadow:0 8px 24px rgba(0,0,0,.3);}
+nav.tabbar{position:fixed;left:16px;right:16px;bottom:var(--tabbar-gap);z-index:6;display:flex;gap:4px;max-width:488px;margin:0 auto;padding:6px;border-radius:999px;background:var(--tabbar-bg);box-shadow:0 0 0 1px var(--border),0 8px 24px rgba(0,0,0,.3);}
 nav.tabbar button{flex:1;height:54px;border:none;border-radius:999px;background:none;color:var(--muted);font-size:10px;font-weight:700;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
 nav.tabbar button svg{width:24px;height:24px;}
 nav.tabbar button[data-tab="stock"].active{background:var(--stock-dim);color:var(--stock);}
