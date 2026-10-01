@@ -169,8 +169,13 @@ clasp deploy -i AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB
 
 ## 開発時の注意
 
-- **ステータスバーの設定**：`apple-mobile-web-app-status-bar-style` は `black` にしている。`black-translucent` にすると、iOS 26 のホーム画面アプリで表示領域が画面の下端まで届かず、タブバーの下に空白ができる
-- **タブバー**：背景は画面の下端（ホームバーの下）まで伸ばし、文字は `env(safe-area-inset-bottom)` の分だけ上に置く
+- **見た目（テーマ「スレート」）**：暗めのグレー背景・くすんだアクセント色・丸ゴシックのダークテーマ
+  - 色は `css/style.css` の `:root` の変数で決める。在庫・家計簿・家事のアクセント色（`--stock`・`--finance`・`--chore`）と、その暗い版（`-dim`。選択中のタブなどの背景）がある。アクセント色の上に載る文字は `--on-accent`
+  - 文字と背景のコントラストは本文で 4.5:1 以上にしている（`--muted` の文字は `--surface-2` の上でも 4.5:1 以上）。色を変えたときは確かめ直す
+  - フォントは Google Fonts の「M PLUS Rounded 1c」。読み込めないときは端末のフォント（ヒラギノ角ゴなど）になる
+  - 家計簿のグラフの色は `js/finance-chart.js` の `FC_COLORS`・`FC_OTHER`。面の色（`--surface`）に対して、色覚の違いがあっても隣どうしが見分けられることを確かめてある。面の色を変えたら確かめ直す
+- **ステータスバーの設定**：`apple-mobile-web-app-status-bar-style` は `black` にしている。`black-translucent` にすると、iOS 26 のホーム画面アプリで表示領域が画面の下端まで届かず、画面の下に空白ができる
+- **タブバー**：画面の下に浮いた丸型のバー。下端から `max(12px, env(safe-area-inset-bottom) - 4px)` 離して置くので、ホームバーとは重ならない。バーの周りと下には一覧（背景は `--bg`）がそのまま見える。登録パネル・登録ボタン（FAB）・トースト・一覧の下の余白は、`--tabbar-h`（バーの高さ 66px と下の余白の合計）を基準に置いている
 - **通信**：GAS の応答はふだん1〜3秒だが、混み具合によって数十秒かかることがある。そのため `js/common.js` で次のようにしている
   - 取得（`getFromGas`）：20秒で打ち切り、最大2回まで再試行する
   - 書き込み（`postToGas`）：60秒まで待つ。時間切れでも GAS 側では処理が済んでいることがあり、再試行すると二重に書き込むおそれがあるので、自動では再試行しない

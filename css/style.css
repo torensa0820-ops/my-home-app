@@ -1,26 +1,30 @@
 :root{
-  --bg:#0F1417;
-  --surface:#181F23;
-  --surface-2:#1F282D;
-  --border:#2A343A;
-  --text:#F2F5F4;
-  --muted:#8FA0A6;
-  --stock:#3DDC97;
-  --stock-dim:#245C43;
-  --finance:#4FA3E3;
-  --finance-dim:#1F4A6B;
-  --chore:#F2B84B;
-  --chore-dim:#7A5A1E;
-  --danger:#F0616D;
-  --danger-dim:#5C262B;
+  --bg:#2A2E34;
+  --surface:#343941;
+  --surface-2:#3E444D;
+  --border:#474E58;
+  --text:#E6E8EB;
+  --muted:#AAB1BB; /* 指定の #A7AEB8 では --surface-2 の上で 4.39:1 になるため少し明るくした */
+  --stock:#9DCBA4;
+  --stock-dim:#3C5244;
+  --finance:#9DBBDF;
+  --finance-dim:#3A4A5E; /* 指定の #3C4C61 では --finance の文字が 4.42:1 になるため少し暗くした */
+  --chore:#E2BC7A;
+  --chore-dim:#57492F;
+  --danger:#EE9F94;
+  --danger-dim:#5A3A37;
+  --on-accent:#22262B; /* アクセント色の上に載る文字 */
+  --tabbar-bg:#30353C;
+  color-scheme:dark; /* 日付欄のアイコンやチェックボックスを暗い背景向けにする */
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
-body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"M PLUS Rounded 1c",-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}
+button,input,select,textarea{font-family:inherit;}
 #app{display:flex;flex-direction:column;height:100%;}
-header{padding:calc(12px + var(--safe-top)) 20px 16px;flex-shrink:0;border-bottom:1px solid var(--border);}
+header{padding:calc(12px + var(--safe-top)) 20px 16px;flex-shrink:0;}
 .app-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
 .brand{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.04em;}
 .brand img{width:22px;height:22px;border-radius:6px;}
@@ -28,13 +32,13 @@ header{padding:calc(12px + var(--safe-top)) 20px 16px;flex-shrink:0;border-botto
 .icon-btn:active{background:var(--surface-2);}
 .icon-btn.spinning svg{animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg);}}
-header h1{margin:0;font-size:20px;font-weight:700;}
+header h1{margin:0;font-size:24px;font-weight:800;}
 header p{margin:4px 0 0;font-size:13px;color:var(--muted);}
-main{flex:1;overflow-y:auto;padding:16px 16px calc(96px + var(--safe-bottom));-webkit-overflow-scrolling:touch;}
+main{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
 .tab-panel{display:none;}
 .tab-panel.active{display:block;}
 
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.card{background:var(--surface);border-radius:18px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .card-info{min-width:0;flex:1;cursor:pointer;}
 .card-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-meta{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -63,11 +67,10 @@ main{flex:1;overflow-y:auto;padding:16px 16px calc(96px + var(--safe-bottom));-w
 .load-error .cancel-btn{width:auto;margin-top:14px;padding:10px 20px;}
 
 /* 完了ボタンは長押しで実行。押している間は左から暗くなって進み具合を示す */
-.done-btn{position:relative;overflow:hidden;flex-shrink:0;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;background:var(--chore);color:#26200E;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
+.done-btn{position:relative;overflow:hidden;flex-shrink:0;min-height:44px;border:none;border-radius:12px;padding:10px 16px;font-size:13px;font-weight:800;background:var(--chore);color:var(--on-accent);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
 .done-btn .fill{position:absolute;inset:0;background:rgba(0,0,0,.35);transform:scaleX(0);transform-origin:left;transition:transform .15s ease-out;}
 .done-btn.holding .fill{transform:scaleX(1);transition:transform .7s linear;}
 .done-btn span{position:relative;}
-#tm-backdrop[data-sheet="chore"] .chip.on{border-color:var(--chore);background:var(--chore-dim);color:var(--text);}
 /* 家事の登録フォーム */
 [hidden]{display:none !important;}
 .inline-unit{display:flex;align-items:center;gap:10px;}
@@ -77,7 +80,7 @@ main{flex:1;overflow-y:auto;padding:16px 16px calc(96px + var(--safe-bottom));-w
 .pair select{flex:1;min-width:0;}
 label.check{display:flex !important;align-items:center;gap:8px;font-size:14px !important;color:var(--text) !important;margin-bottom:8px !important;}
 label.check input{width:18px;height:18px;accent-color:var(--chore);}
-#chore-panel .chip.on{border-color:var(--chore);background:var(--chore-dim);color:var(--text);}
+#chore-panel .chip.on,#tm-backdrop[data-sheet="chore"] .chip.on{background:var(--chore);}
 .chore-preview{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:8px;}
 .chore-preview b{color:var(--chore);}
 .chore-preview .later{color:var(--muted);font-size:12px;}
@@ -94,9 +97,9 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),
 .form-note{margin:6px 0 0;font-size:12px;color:var(--muted);line-height:1.6;}
 .chips{display:flex;flex-wrap:wrap;gap:8px;}
 .chips:not(:empty){margin-bottom:10px;}
-.chip{border:1px solid var(--border);background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
-.chip.on{border-color:var(--stock);background:var(--stock-dim);color:var(--text);}
-#finance-panel .chip.on,#tm-backdrop[data-sheet="finance"] .chip.on{border-color:var(--finance);background:var(--finance-dim);}
+.chip{border:none;background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
+.chip.on{background:var(--stock);color:var(--on-accent);}
+#finance-panel .chip.on,#tm-backdrop[data-sheet="finance"] .chip.on{background:var(--finance);}
 .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
 .label-row label{margin:0 !important;}
 .text-btn{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:4px 2px;}
@@ -139,40 +142,43 @@ summary:before{content:"▸ ";}
 details[open] summary:before{content:"▾ ";}
 .row2{display:flex;gap:10px;}
 .row2 .field{flex:1;}
-.submit-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:16px;font-weight:700;margin-top:4px;color:#0B1210;}
+.submit-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:16px;font-weight:700;margin-top:4px;color:var(--on-accent);}
 #stock-panel .submit-btn{background:var(--stock);}
 #finance-panel .submit-btn{background:var(--finance);}
 #chore-panel .submit-btn{background:var(--chore);}
 .submit-btn:active{opacity:.8;}
 
-nav.tabbar{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(24,31,35,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding:0 8px var(--safe-bottom);}
-nav.tabbar button{position:relative;flex:1;height:49px;background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;padding:0;display:flex;align-items:center;justify-content:center;}
-nav.tabbar button .dot{position:absolute;top:0;left:50%;transform:translateX(-50%);width:28px;height:3px;border-radius:0 0 3px 3px;background:transparent;}
-nav.tabbar button.active{color:var(--text);}
-nav.tabbar button[data-tab="stock"].active .dot{background:var(--stock);}
-nav.tabbar button[data-tab="finance"].active .dot{background:var(--finance);}
-nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
+/* タブバー：画面の下に浮いた丸型のバー。高さは 54px＋上下の padding 6px で 66px */
+:root{--tabbar-gap:max(12px, calc(var(--safe-bottom) - 4px));}
+nav.tabbar{position:fixed;left:16px;right:16px;bottom:var(--tabbar-gap);z-index:6;display:flex;gap:4px;max-width:488px;margin:0 auto;padding:6px;border-radius:999px;background:var(--tabbar-bg);box-shadow:0 8px 24px rgba(0,0,0,.3);}
+nav.tabbar button{flex:1;height:54px;border:none;border-radius:999px;background:none;color:var(--muted);font-size:10px;font-weight:700;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+nav.tabbar button svg{width:24px;height:24px;}
+nav.tabbar button[data-tab="stock"].active{background:var(--stock-dim);color:var(--stock);}
+nav.tabbar button[data-tab="finance"].active{background:var(--finance-dim);color:var(--finance);}
+nav.tabbar button[data-tab="chore"].active{background:var(--chore-dim);color:var(--chore);}
 
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
 /* タグの絞り込み：一覧の上は「絞り込み」ボタン・選択中のタグ・「管理」ボタンの1行 */
 .filter-bar{display:flex;align-items:center;gap:8px;margin:0 0 12px;}
 .filter-bar:empty{display:none;}
-.filter-open,.filter-manage{flex-shrink:0;border:1px solid var(--border);background:none;color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;}
+.filter-open,.filter-manage{flex-shrink:0;border:none;background:var(--surface);color:var(--muted);border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;}
 .filter-chips{flex:1;min-width:0;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:2px 0;}
 .filter-chips::-webkit-scrollbar{display:none;}
 .filter-chips .chip{flex-shrink:0;padding:5px 10px;font-size:12px;}
 .filter-status{display:flex;align-items:center;gap:4px;margin:-4px 0 12px;font-size:12px;color:var(--muted);}
 .filter-status:empty{display:none;}
 .filter-status .clear{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;padding:4px 0;}
-#stock-panel .filter-manage,#stock-panel .filter-open.on{color:var(--stock);border-color:var(--stock);}
-#finance-panel .filter-manage,#finance-panel .filter-open.on{color:var(--finance);border-color:var(--finance);}
-#stock-panel .filter-manage,#finance-panel .filter-manage{border-color:var(--border);}
+#stock-panel .filter-manage,#stock-panel .filter-open.on{color:var(--stock);}
+#finance-panel .filter-manage,#finance-panel .filter-open.on{color:var(--finance);}
 /* 絞り込みパネル：タグを折り返して並べる */
 .filter-tools{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
 .filter-search{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:16px;appearance:none;}
-.seg{display:flex;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:3px;}
-.seg button{flex:1;border:none;background:none;color:var(--muted);border-radius:7px;padding:8px 0;font-size:13px;font-weight:700;}
-.seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.4);}
+.seg{display:flex;background:var(--surface);border-radius:999px;padding:3px;}
+.seg button{flex:1;border:none;background:none;color:var(--muted);border-radius:999px;padding:8px 0;font-size:13px;font-weight:700;}
+.seg button.on{background:var(--finance-dim);color:var(--finance);}
+/* 絞り込みパネルの中（面が --surface）では一段明るくし、在庫タブでは選択中を在庫の色にする */
+.compose .seg{background:var(--surface-2);}
+#stock-panel .seg button.on{background:var(--stock-dim);color:var(--stock);}
 .filter-cloud{margin-bottom:16px;}
 .filter-label{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 8px;}
 /* カテゴリのチップはタグと区別できるよう角を小さくする */
@@ -181,8 +187,9 @@ nav.tabbar button[data-tab="chore"].active .dot{background:var(--chore);}
 .filter-actions .cancel-btn{margin-top:0;}
 
 /* 登録パネル：一覧を見ながら入力できるよう、タブバーの上に半分ほどの高さで重ねる */
-:root{--tabbar-h:calc(49px + var(--safe-bottom));--compose-pad:0px;}
-.compose{position:fixed;left:0;right:0;bottom:var(--tabbar-h);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:18px 18px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.45);display:none;flex-direction:column;z-index:5;}
+/* --tabbar-h はタブバーの高さ（66px）とその下の余白の合計。登録パネルはタブバーの少し上に浮かべる */
+:root{--tabbar-h:calc(66px + var(--tabbar-gap));--compose-pad:0px;}
+.compose{position:fixed;left:8px;right:8px;bottom:calc(var(--tabbar-h) + 8px);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 -6px 20px rgba(0,0,0,.25);display:none;flex-direction:column;z-index:5;}
 body[data-compose="form"] .tab-panel.active .compose[data-kind="form"],
 body[data-compose="filter"] .tab-panel.active .compose[data-kind="filter"]{display:flex;}
 .compose-grip{flex-shrink:0;height:24px;display:flex;align-items:center;justify-content:center;}
@@ -195,8 +202,8 @@ body[data-compose="filter"] .tab-panel.active .compose[data-kind="filter"]{displ
 .compose-hint{flex-shrink:0;margin:0;padding:4px 16px 10px;font-size:12px;color:var(--muted);}
 .compose-body{flex:1;overflow-y:auto;border-top:1px solid var(--border);-webkit-overflow-scrolling:touch;padding:12px 16px 16px;}
 .compose form{background:none;border:none;border-radius:0;padding:0;}
-main{padding-bottom:calc(96px + var(--safe-bottom) + var(--compose-pad));}
-.fab{position:fixed;right:16px;bottom:calc(var(--tabbar-h) + 16px);z-index:4;border:none;border-radius:999px;padding:13px 20px;font-size:15px;font-weight:700;color:#0B1210;box-shadow:0 6px 18px rgba(0,0,0,.45);}
+main{padding-bottom:calc(var(--tabbar-h) + 92px + var(--compose-pad));}
+.fab{position:fixed;right:16px;bottom:calc(var(--tabbar-h) + 16px);z-index:4;width:60px;height:60px;border:none;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;line-height:1;color:var(--on-accent);box-shadow:0 10px 24px rgba(0,0,0,.35);}
 .tab-panel:not(.active) .fab, body[data-compose] .fab{display:none;}
 #stock-panel .fab{background:var(--stock);}
 #finance-panel .fab{background:var(--finance);}
@@ -210,12 +217,12 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fin-month{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;color:var(--muted);margin:18px 2px 8px;}
 .fin-month:first-child{margin-top:0;}
 .fin-month .sum{font-size:13px;color:var(--text);}
-.fin-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-bottom:8px;}
+.fin-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:11px 14px;margin-bottom:8px;}
 .fin-date{flex-shrink:0;width:38px;font-size:12px;color:var(--muted);text-align:center;line-height:1.3;}
 .fin-date b{display:block;font-size:16px;color:var(--text);}
 .fin-main{flex:1;min-width:0;}
 .fin-cat{font-size:15px;font-weight:600;}
-.split-badge{display:inline-block;vertical-align:2px;margin-left:6px;padding:1px 6px;border:1px solid var(--finance-dim);border-radius:999px;font-size:10px;font-weight:700;color:var(--finance);}
+.split-badge{display:inline-block;vertical-align:2px;margin-left:6px;padding:1px 6px;background:var(--finance-dim);border-radius:999px;font-size:10px;font-weight:700;color:var(--finance);}
 /* 1回の会計をカテゴリごとに分ける内訳 */
 .split-editor{margin:-4px 0 12px;}
 .split-row{display:grid;grid-template-columns:1fr 96px 40px;gap:8px;align-items:start;margin-bottom:8px;}
@@ -231,8 +238,8 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fin-row{cursor:pointer;}
 .tm-danger{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);}
 .list-head .section-title{margin:0;}
-.edit-toggle{background:none;border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:5px 14px;font-size:12px;font-weight:600;}
-.edit-toggle.on{border-color:var(--danger);color:var(--danger);}
+.edit-toggle{background:var(--surface);border:none;color:var(--muted);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;}
+.edit-toggle.on{color:var(--danger);}
 .delete-btn{flex-shrink:0;border:1px solid var(--danger);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;background:none;color:var(--danger);}
 .delete-btn:active{background:var(--danger-dim);}
 
@@ -246,18 +253,19 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .hold-btn{position:relative;overflow:hidden;width:100%;margin-top:18px;border:none;border-radius:10px;padding:14px;font-size:15px;font-weight:700;background:var(--danger-dim);color:var(--text);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;}
 .hold-btn .fill{position:absolute;inset:0;background:var(--danger);transform:scaleX(0);transform-origin:left;transition:transform .2s ease-out;}
 .hold-btn.holding .fill{transform:scaleX(1);transition:transform 1.5s linear;}
-.hold-btn span{position:relative;}
+.hold-btn span{position:relative;transition:color .2s;}
+.hold-btn.holding span{color:var(--on-accent);}
 .hold-btn:disabled{opacity:.6;}
 .cancel-btn{width:100%;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:13px;font-size:15px;font-weight:600;background:none;color:var(--text);}
 
-#toast{position:fixed;z-index:20;left:50%;bottom:calc(90px + var(--safe-bottom) + var(--compose-pad));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
+#toast{position:fixed;z-index:20;left:50%;bottom:calc(var(--tabbar-h) + 28px + var(--compose-pad));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 /* 家計簿：履歴とグラフの切り替え */
 .view-seg{flex:1;max-width:220px;}
 /* 家計簿のグラフ */
 .fc-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-.fc-stat{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px 14px;min-width:0;}
+.fc-stat{background:var(--surface);border-radius:18px;padding:12px 14px;min-width:0;}
 .fc-stat-main{grid-column:1 / -1;}
 .fc-stat-label{font-size:12px;color:var(--muted);}
 .fc-stat-value{font-size:20px;font-weight:700;margin-top:4px;}
@@ -265,7 +273,7 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fc-stat-sub{font-size:12px;color:var(--muted);margin-top:2px;}
 .fc-stat-sub.up{color:var(--danger);}
 .fc-stat-sub.down{color:var(--stock);}
-.fc-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.fc-card{background:var(--surface);border-radius:18px;padding:14px 16px;margin-bottom:10px;}
 .fc-title{font-size:14px;font-weight:700;}
 .fc-hint{font-size:12px;color:var(--muted);margin-top:2px;}
 .fc-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 4px;font-size:12px;color:var(--muted);}
@@ -274,16 +282,16 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fc-plot{position:relative;}
 .fc-svg{display:block;overflow:visible;}
 .fc-grid{stroke:var(--border);stroke-width:1;}
-.fc-base{stroke:#3A464C;stroke-width:1;}
+.fc-base{stroke:#5B636E;stroke-width:1;}
 .fc-tick{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;}
 .fc-month{fill:var(--muted);font-size:11px;}
 .fc-month.on{fill:var(--text);font-weight:700;}
 .fc-val{fill:var(--text);font-size:11px;font-weight:700;}
 .fc-col{cursor:pointer;outline:none;}
 .fc-hit{fill:transparent;}
-.fc-col.on .fc-hit{fill:rgba(255,255,255,.05);}
-.fc-col:hover .fc-hit,.fc-col:focus-visible .fc-hit{fill:rgba(255,255,255,.08);}
-.fc-tip{position:absolute;top:0;z-index:2;pointer-events:none;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted);box-shadow:0 6px 18px rgba(0,0,0,.45);white-space:nowrap;}
+.fc-col.on .fc-hit{fill:rgba(255,255,255,.045);}
+.fc-col:hover .fc-hit,.fc-col:focus-visible .fc-hit{fill:rgba(255,255,255,.07);}
+.fc-tip{position:absolute;top:0;z-index:2;pointer-events:none;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted);box-shadow:0 6px 16px rgba(0,0,0,.25);white-space:nowrap;}
 .fc-tip b{color:var(--text);}
 .fc-tip-head{margin-bottom:4px;}
 .fc-tip-row{display:flex;align-items:center;gap:6px;}
@@ -295,7 +303,7 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fc-bar-val b{color:var(--text);font-size:13px;}
 .fc-bar-track{height:8px;margin-top:6px;}
 .fc-bar-fill{height:100%;border-radius:0 4px 4px 0;}
-.fc-table{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:0 16px;margin:0 0 10px;}
+.fc-table{background:var(--surface);border:none;border-radius:18px;padding:0 16px;margin:0 0 10px;}
 .fc-table table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;}
 .fc-table th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);}
 .fc-table td{padding:8px 0;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
