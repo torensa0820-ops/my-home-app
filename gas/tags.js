@@ -8,7 +8,7 @@
 function manageTags(ss, data) {
   const sheetName = { stock: SHEET_STOCK, finance: SHEET_FINANCE }[data.sheet];
   if (!sheetName) throw new Error("sheet が不正です: " + data.sheet);
-  const tag = String(data.tag || "").trim();
+  const tag = normText(data.tag);
   if (!tag) throw new Error("タグ名が空です。");
 
   const sheet = ss.getSheetByName(sheetName);
@@ -25,7 +25,7 @@ function manageTags(ss, data) {
   };
 
   if (data.action === "rename") {
-    const newName = String(data.newName || "").trim();
+    const newName = normText(data.newName);
     if (!newName || /[,，、]/.test(newName)) throw new Error("新しいタグ名が不正です。");
     rows.forEach((r, i) => {
       const tags = splitTags(r[idxTags]);

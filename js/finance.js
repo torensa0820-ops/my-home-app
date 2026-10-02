@@ -109,7 +109,7 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
   e.preventDefault();
   const category = getHybridValue(fCatSelect, fCatInput);
   const amount = Number(document.getElementById('f-amount').value) || 0;
-  const memo = document.getElementById('f-memo').value.trim();
+  const memo = normText(document.getElementById('f-memo').value);
   const tags = financeTagPicker.value();
   const payment = getHybridValue(fPaySelect, fPayInput);
   if(!category){ toast('カテゴリを選択してください'); return; }
@@ -276,7 +276,7 @@ function tmFinanceView(r){
       category: getHybridValue(catSelect, catInput),
       amount: Number(amount.value) || 0,
       payment: getHybridValue(paySelect, payInput),
-      memo: memo.value.trim(),
+      memo: normText(memo.value),
       tags: picker.value(),
       splits: splitEditor.splits()
     };

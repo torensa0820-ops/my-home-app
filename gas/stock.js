@@ -34,13 +34,15 @@ function updateStock(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
   const col = stockColumns(values[0]);
-  const name = String(data.target || "").trim();
+  const name = normText(data.target);
   if (!name) throw new Error("商品名が空です。");
   const exp = normDate(data.expirationDate);
+  const info = { location: normText(data.location), tags: normTags(data.tags), modelNumber: normText(data.modelNumber) };
 
+  // 同じ商品かどうかは、正規化した商品名どうしで比べる
   const lots = [];
   for (let i = 1; i < values.length; i++) {
-    if (values[i][col.itemName] === name) lots.push(i);
+    if (normText(values[i][col.itemName]) === name) lots.push(i);
   }
   const target = lots.find(i => normDate(values[i][col.expirationDate]) === exp);
 
@@ -48,7 +50,7 @@ function updateStock(ss, data) {
   if (target === undefined) {
     // 既存商品の新しいロットなら、未指定の商品情報は既存ロットから引き継ぐ
     const base = lots.length ? values[lots[0]] : null;
-    const inherit = (key) => data[key] || (base ? base[col[key]] : "");
+    const inherit = (key) => info[key] || (base ? base[col[key]] : "");
     const newRow = new Array(values[0].length).fill("");
     newRow[col.id] = Utilities.getUuid();
     newRow[col.itemName] = name;
@@ -67,8 +69,8 @@ function updateStock(ss, data) {
 
   // 商品情報の指定があれば、同じ商品名の既存ロットすべてに反映する
   ["location", "tags", "modelNumber"].forEach(key => {
-    if (!data[key]) return;
-    lots.forEach(i => sheet.getRange(i + 1, col[key] + 1).setValue(data[key]));
+    if (!info[key]) return;
+    lots.forEach(i => sheet.getRange(i + 1, col[key] + 1).setValue(info[key]));
   });
 }
 
@@ -93,11 +95,12 @@ function deleteStock(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
   const idxName = values[0].indexOf("itemName");
+  const target = normText(data.target);
 
   let deleted = 0;
   // 下の行から消すことで、行番号がずれないようにする
   for (let i = values.length - 1; i >= 1; i--) {
-    if (values[i][idxName] === data.target) {
+    if (normText(values[i][idxName]) === target) {
       sheet.deleteRow(i + 1);
       deleted++;
     }
@@ -112,13 +115,17 @@ function editItem(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
   const col = stockColumns(values[0]);
-  const name = String(data.itemName || "").trim();
+  const name = normText(data.itemName);
   if (!name) throw new Error("商品名が空です。");
+  const oldName = normText(data.oldName);
+  const location = normText(data.location);
+  const tags = normTags(data.tags);
+  const modelNumber = normText(data.modelNumber);
 
   const itemRows = [];
   for (let i = 1; i < values.length; i++) {
-    const rowName = values[i][col.itemName];
-    if (rowName === data.oldName) itemRows.push(i);
+    const rowName = normText(values[i][col.itemName]);
+    if (rowName === oldName) itemRows.push(i);
     else if (rowName === name) throw new Error(`「${name}」は既に登録されています。`);
   }
   if (!itemRows.length) throw new Error("商品が見つかりませんでした。一覧を読み込み直してください。");
@@ -144,9 +151,9 @@ function editItem(ss, data) {
     if (deleteIds.has(id)) return;
     const row = values[i].slice();
     row[col.itemName] = name;
-    row[col.location] = data.location || "";
-    row[col.tags] = data.tags || "";
-    row[col.modelNumber] = data.modelNumber || "";
+    row[col.location] = location;
+    row[col.tags] = tags;
+    row[col.modelNumber] = modelNumber;
     const lot = lotById[id];
     if (lot) {
       row[col.expirationDate] = normDate(lot.expirationDate);
@@ -162,10 +169,10 @@ function editItem(ss, data) {
     newRow[col.id] = Utilities.getUuid();
     newRow[col.itemName] = name;
     newRow[col.stock] = Number(l.stock) || 0;
-    newRow[col.location] = data.location || "";
-    newRow[col.tags] = data.tags || "";
+    newRow[col.location] = location;
+    newRow[col.tags] = tags;
     newRow[col.expirationDate] = normDate(l.expirationDate);
-    newRow[col.modelNumber] = data.modelNumber || "";
+    newRow[col.modelNumber] = modelNumber;
     newRow[col.lastUpdated] = now;
     sheet.appendRow(newRow);
   });

@@ -202,7 +202,7 @@ function tmListView(){
   const tags = uniqSorted(Object.keys(counts));
   const input = h('input', {type:'text', placeholder:'新しいタグ名'});
   const next = ()=>{
-    const name = input.value.trim();
+    const name = normText(input.value);
     if(!name || hasSeparator(name)) return;
     tmShow(counts[name] ? tmDetailView : tmAssignView, name);
   };
@@ -224,7 +224,7 @@ function tmDetailView(tag){
   const count = tmTagCounts()[tag] || 0;
   const input = h('input', {type:'text', value:tag});
   const renameBtn = h('button', {type:'button', class:'tm-btn', onclick:()=>{
-    const newName = input.value.trim();
+    const newName = normText(input.value);
     if(!newName || newName === tag || hasSeparator(newName)) return;
     if(tmTagCounts()[newName] && !confirm(`「${newName}」は既にあります。「${tag}」を「${newName}」に統合しますか？`)) return;
     renameBtn.disabled = true;

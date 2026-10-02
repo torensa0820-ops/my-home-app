@@ -29,7 +29,7 @@ function updateTodo(ss, data) {
   const now = new Date();
 
   if (data.action === "add") {
-    const taskName = String(data.taskName || "").trim();
+    const taskName = normText(data.taskName);
     if (!taskName) throw new Error("家事名が空です。");
     const rule = choreParseRule(data.rule);
     const err = choreValidate(rule);
@@ -68,7 +68,7 @@ function updateTodo(ss, data) {
         return null;
       }
       // 家事名と周期を上書きする。周期が変わったら次の予定日時を計算し直す
-      const taskName = String(data.taskName || "").trim();
+      const taskName = normText(data.taskName);
       if (!taskName) throw new Error("家事名が空です。");
       const rule = choreParseRule(data.rule);
       const err = choreValidate(rule);

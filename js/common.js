@@ -94,7 +94,7 @@ function setupHybrid(selectEl, inputEl, presetValues){
   };
 }
 function getHybridValue(selectEl, inputEl){
-  return selectEl.value === '__new__' ? inputEl.value.trim() : selectEl.value;
+  return normText(selectEl.value === '__new__' ? inputEl.value : selectEl.value);
 }
 function escapeHtml(s){
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -115,9 +115,13 @@ function setHybridValue(selectEl, inputEl, v){
   else { selectEl.value = '__new__'; inputEl.style.display = 'block'; inputEl.value = v; }
 }
 
-// タグ文字列を配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
+// 保存する文字列をそろえる（英数字・記号は半角、カタカナは全角。Unicode の NFKC 正規化。GAS 側と同じ）
+function normText(s){
+  return String(s ?? '').normalize('NFKC').trim();
+}
+// タグ文字列を正規化した配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
 function splitTags(s){
-  return String(s ?? '').split(/[,，、]/).map(t=>t.trim()).filter(Boolean);
+  return normText(s).split(/[,，、]/).map(normText).filter(Boolean);
 }
 // 重複と空欄を除いて五十音順に並べる
 function uniqSorted(values){

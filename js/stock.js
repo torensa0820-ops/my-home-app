@@ -183,13 +183,13 @@ function loadStock(preloaded){
 }
 document.getElementById('stock-form').addEventListener('submit', e=>{
   e.preventDefault();
-  const name = document.getElementById('s-name').value.trim();
+  const name = normText(document.getElementById('s-name').value);
   if(!name) return;
   const value = Number(document.getElementById('s-value').value) || 0;
   const location = getHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'));
   const tags = stockTagPicker.value();
   const expirationDate = document.getElementById('s-expiration').value;
-  const modelNumber = document.getElementById('s-model').value.trim();
+  const modelNumber = normText(document.getElementById('s-model').value);
   postToGas({type:'stock', target:name, value, location, tags, expirationDate, modelNumber})
     .then(res=>{
       if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
@@ -262,7 +262,7 @@ function tmItemView(g){
   picker.render(uniqSorted(stockCache.flatMap(r=>splitTags(r.tags))));
 
   save.addEventListener('click', ()=>{
-    const itemName = name.value.trim();
+    const itemName = normText(name.value);
     if(!itemName){ toast('商品名を入力してください'); return; }
     const lots = lotRows.map(r=>({id:r.id, expirationDate:r.exp.value, stock:Number(r.count.value) || 0}));
     const exps = lots.map(l=>l.expirationDate);
@@ -274,7 +274,7 @@ function tmItemView(g){
       type:'stock', action:'editItem', oldName:g.name, itemName,
       location:getHybridValue(locSelect, locInput),
       tags:picker.value(),
-      modelNumber:model.value.trim(),
+      modelNumber:normText(model.value),
       lots, deleteIds
     })
       .then(res=>{

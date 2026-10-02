@@ -92,10 +92,10 @@ function ensureFinanceColumns(sheet) {
   });
 }
 
-// 内訳 [{category, amount}] を確かめて、カテゴリの前後の空白を除いたものを返す
+// 内訳 [{category, amount}] を確かめて、カテゴリを正規化したものを返す
 function financeItems(items) {
   return items.map(it => {
-    const category = String(it.category || "").trim();
+    const category = normText(it.category);
     const amount = Number(it.amount);
     if (!category) throw new Error("カテゴリが空です。");
     if (!(amount > 0)) throw new Error("金額が不正です: " + category);
@@ -122,8 +122,8 @@ function addFinance(ss, data) {
   const createdAt = new Date();
   const date = financeDate(data.date);
   appendFinanceRows(sheet, items.map(it => ({
-    date: date, category: it.category, amount: it.amount, memo: data.memo || "", tags: data.tags || "",
-    payment: String(data.payment || "").trim(), groupId: groupId, createdAt: createdAt,
+    date: date, category: it.category, amount: it.amount, memo: normText(data.memo), tags: normTags(data.tags),
+    payment: normText(data.payment), groupId: groupId, createdAt: createdAt,
   })));
 }
 
@@ -170,7 +170,10 @@ function editFinance(ss, data) {
   const col = name => found.headers.indexOf(name);
   const v = data.values || {};
   const amount = Number(v.amount);
-  if (!String(v.category || "").trim()) throw new Error("カテゴリが空です。");
+  const category = normText(v.category);
+  const memo = normText(v.memo);
+  const tags = normTags(v.tags);
+  if (!category) throw new Error("カテゴリが空です。");
   if (!amount) throw new Error("金額が不正です。");
   const splits = financeItems(Array.isArray(v.splits) ? v.splits : []);
   const mainAmount = amount - splits.reduce((sum, it) => sum + it.amount, 0);
@@ -179,12 +182,12 @@ function editFinance(ss, data) {
   const oldGroupId = String(row[col("groupId")] || "");
   const groupId = oldGroupId || (splits.length ? Utilities.getUuid() : "");
   const date = financeDate(v.date);
-  const payment = String(v.payment || "").trim();
+  const payment = normText(v.payment);
   row[col("date")] = date;
-  row[col("category")] = String(v.category).trim();
+  row[col("category")] = category;
   row[col("amount")] = mainAmount;
-  row[col("memo")] = v.memo || "";
-  row[col("tags")] = v.tags || "";
+  row[col("memo")] = memo;
+  row[col("tags")] = tags;
   row[col("payment")] = payment;
   row[col("groupId")] = groupId;
   sheet.getRange(Number(data.row), 1, 1, row.length).setValues([row]);
@@ -197,7 +200,7 @@ function editFinance(ss, data) {
     });
   }
   appendFinanceRows(sheet, splits.map(it => ({
-    date: date, category: it.category, amount: it.amount, memo: v.memo || "", tags: v.tags || "",
+    date: date, category: it.category, amount: it.amount, memo: memo, tags: tags,
     payment: payment, groupId: groupId, createdAt: row[col("createdAt")],
   })));
 }

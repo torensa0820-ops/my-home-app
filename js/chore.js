@@ -196,7 +196,7 @@ function loadChores(preloaded){
 }
 choreEl('chore-form').addEventListener('submit', e=>{
   e.preventDefault();
-  const taskName = choreEl('c-name').value.trim();
+  const taskName = normText(choreEl('c-name').value);
   if(!taskName) return;
   const rule = choreRuleEditor.get();
   const err = choreValidate(rule);
@@ -243,7 +243,7 @@ function tmChoreView(t){
   );
   tmFoot.append(save);
   save.addEventListener('click', ()=>{
-    const taskName = name.value.trim();
+    const taskName = normText(name.value);
     if(!taskName){ toast('家事名を入力してください'); return; }
     const rule = editor.get();
     const err = choreValidate(rule);
