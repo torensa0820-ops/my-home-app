@@ -71,6 +71,7 @@ function getFinanceRows(p) {
 // ---- 後から増えた列 ----
 // date は支出した日（入力した日にち）、createdAt はアプリで登録した時刻
 // payment は支払い方法、groupId は1回の会計をカテゴリごとに分けた行に共通の ID（分けていない記録は空）
+// sourceId は取り込んだ記録の取込待ちシートの id
 // 列がなければ末尾に追加する。createdAt は既存の記録に date の値（これまでは登録時刻が入っていた）を写す
 function ensureFinanceColumns(sheet) {
   const values = sheet.getDataRange().getValues();
@@ -80,6 +81,7 @@ function ensureFinanceColumns(sheet) {
     { name: "createdAt", fill: r => r[idxDate] },
     { name: "payment" },
     { name: "groupId" },
+    { name: "sourceId" }, // カード利用通知などから取り込んだ記録の、取込待ちシートの id（手入力の記録は空）
   ];
   let col = headers.length;
   extra.forEach(c => {
@@ -123,7 +125,7 @@ function addFinance(ss, data) {
   const date = financeDate(data.date);
   appendFinanceRows(sheet, items.map(it => ({
     date: date, category: it.category, amount: it.amount, memo: normText(data.memo), tags: normTags(data.tags),
-    payment: normText(data.payment), groupId: groupId, createdAt: createdAt,
+    payment: normText(data.payment), groupId: groupId, createdAt: createdAt, sourceId: data.sourceId || "",
   })));
 }
 

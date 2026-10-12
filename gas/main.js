@@ -2,7 +2,7 @@
 // Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
-// 各処理は stock.js / finance.js / tags.js / chore.js にある
+// 各処理は stock.js / finance.js / finance-import.js / tags.js / chore.js にある
 // =========================================================
 
 function doGet(e) {
@@ -14,12 +14,14 @@ function doGet(e) {
       tasks: getChoreRows(),
       financeOptions: getFinanceOptions(),
       finance: getFinanceRows({ offset: 0, limit: "all" }),
+      imports: getPendingImports(),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());
   if (p.action === "getTasks") return jsonOutput(getChoreRows());
   if (p.action === "getFinanceOptions") return jsonOutput(getFinanceOptions());
   if (p.action === "getFinance") return jsonOutput(getFinanceRows(p));
+  if (p.action === "getImports") return jsonOutput(getPendingImports());
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -41,6 +43,10 @@ function doPost(e) {
       deleteFinance(ss, data);
     } else if (data.type === "finance" && data.action === "edit") {
       editFinance(ss, data);
+    } else if (data.type === "finance" && data.action === "importConfirm") {
+      confirmImport(ss, data);
+    } else if (data.type === "finance" && data.action === "importSkip") {
+      skipImport(ss, data);
     } else if (data.type === "finance") {
       addFinance(ss, data);
     } else if (data.type === "todo") {

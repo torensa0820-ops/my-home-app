@@ -309,3 +309,24 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .fc-table th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);}
 .fc-table td{padding:8px 0;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
 .fc-table th:not(:first-child),.fc-table td:not(:first-child){text-align:right;}
+
+/* 家計簿：カード利用の取り込み */
+.import-banner{width:100%;display:flex;align-items:center;gap:12px;background:var(--finance-dim);border:none;border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--text);text-align:left;}
+.import-banner .dot{flex-shrink:0;min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:var(--finance);color:var(--on-accent);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+.import-banner .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
+.import-banner .text b{font-size:15px;}
+.import-banner .text span{font-size:12px;color:var(--muted);}
+.import-banner .chev{color:var(--muted);font-size:20px;}
+.import-row .when{flex-shrink:0;width:72px;font-size:12px;color:var(--muted);font-weight:500;}
+.import-row .name{display:flex;flex-direction:column;gap:2px;}
+.import-row .name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.import-row .name small{font-size:12px;color:var(--muted);font-weight:500;}
+.import-row .amt{flex-shrink:0;font-weight:700;}
+.import-row.error .name{color:var(--danger);}
+.import-info{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.6;word-break:break-all;}
+.import-info .top{display:flex;justify-content:space-between;gap:12px;font-size:16px;font-weight:700;}
+.import-info .sub{font-size:12px;color:var(--muted);}
+.import-dup{background:var(--danger-dim);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6;}
+.import-dup b{color:var(--danger);}
+.import-dup p{margin:4px 0 8px;}
+.import-dup .dup-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;}

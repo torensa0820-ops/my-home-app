@@ -39,10 +39,11 @@ getFromGas('action=getAll')
     loadStock(all.stock);
     loadFinanceOptions(all.financeOptions);
     loadFinanceHistory(all.finance);
+    loadImports(all.imports || {pending:[], rules:{}});
     loadChores(all.tasks);
   })
   .catch(err=>{
     document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>reloadList('stock-list', loadStock)));
-    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); }));
+    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); loadImports(); }));
     document.getElementById('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores)));
   });
