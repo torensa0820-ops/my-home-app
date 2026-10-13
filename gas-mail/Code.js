@@ -65,28 +65,36 @@ function mailToRows(msg, base) {
 }
 
 // ---- メール本文の読み取り ----
-// 本文（HTML メールをテキストにしたもの）から「ご利用日時：yyyy/MM/dd HH:mm」「店名（買物）」「545円」を探す
+// 本文（HTML メールをテキストにしたもの）から利用日時・店名・取引の種類・金額を探す。次の2つの形に対応する
+//   項目ごとの行：「◇利用日:yyyy/MM/dd HH:mm」「◇利用先:店名」「◇利用取引:買物」「◇利用金額:1,550円」
+//   1行に並ぶ形：「ご利用日時：yyyy/MM/dd HH:mm 店名（買物） 545円」
 // 戻り値：[{usedAt:"yyyy/MM/dd HH:mm", merchant, kind, amount, card}]
 function parseCardMail(body) {
   const text = String(body || "").normalize("NFKC").replace(/\r/g, "");
+  const cardLine = text.match(/ご利用カード\s*:\s*([^\n]+)/);
   const cardMatch = text.match(/三井住友カード\s*(.*?)\s*について/);
-  const card = cardMatch ? ("三井住友カード " + cardMatch[1]).trim() : "";
+  const card = cardLine ? cardLine[1].trim() : cardMatch ? ("三井住友カード " + cardMatch[1]).trim() : "";
+  const pad = s => String(s).padStart(2, "0");
   const result = [];
-  const re = /ご利用日時\s*[:：]\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})([\s\S]*?)([\d,]+)\s*円/g;
-  let m;
-  while ((m = re.exec(text))) {
-    // 日時と金額の間の文字が「店名（取引の種類）」。改行・余分な空白を除く
-    const between = m[6].replace(/\s+/g, " ").trim();
-    const kindMatch = between.match(/^(.*?)\s*\(([^()]*)\)$/);
-    const merchant = (kindMatch ? kindMatch[1] : between).trim();
-    const kind = kindMatch ? kindMatch[2].trim() : "";
-    const amount = Number(m[7].replace(/,/g, ""));
-    if (!merchant || !(amount > 0)) continue;
-    const pad = s => String(s).padStart(2, "0");
+  const add = (m, merchant, kind, amountText) => {
+    const amount = Number(amountText.replace(/,/g, ""));
+    if (!merchant || !(amount > 0)) return;
     result.push({
       usedAt: `${m[1]}/${pad(m[2])}/${pad(m[3])} ${pad(m[4])}:${m[5]}`,
       merchant: merchant, kind: kind, amount: amount, card: card,
     });
+  };
+  let m;
+  // 項目ごとの行（「利用日時」ではなく「利用日」の直後に「:」が来るものだけ）
+  const lines = /利用日\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})[^\n]*\n\s*◇?\s*利用先\s*:([^\n]*)\n\s*◇?\s*利用取引\s*:([^\n]*)\n\s*◇?\s*利用金額\s*:\s*([\d,]+)\s*円/g;
+  while ((m = lines.exec(text))) add(m, m[6].trim(), m[7].trim(), m[8]);
+  if (result.length) return result;
+  const inline = /ご利用日時\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})([\s\S]*?)([\d,]+)\s*円/g;
+  while ((m = inline.exec(text))) {
+    // 日時と金額の間の文字が「店名（取引の種類）」。改行・余分な空白を除く
+    const between = m[6].replace(/\s+/g, " ").trim();
+    const kindMatch = between.match(/^(.*?)\s*\(([^()]*)\)$/);
+    add(m, (kindMatch ? kindMatch[1] : between).trim(), kindMatch ? kindMatch[2].trim() : "", m[7]);
   }
   return result;
 }
@@ -121,4 +129,16 @@ function debugParseLatest() {
   threads.forEach(t => t.getMessages().forEach(msg => {
     Logger.log(`件名：${msg.getSubject()}\n差出人：${msg.getFrom()}\n結果：${JSON.stringify(parseCardMail(msg.getPlainBody()))}`);
   }));
+}
+
+// ---- 【確認用】最新の通知メール1通の本文（読み取りに使うテキスト）をログに出す ----
+// 読み取れないときに、本文の形を確かめるために使う。改行などが見えるよう JSON の文字列で出す
+function debugDumpLatestBody() {
+  const threads = GmailApp.search(MAIL_QUERY, 0, 1);
+  if (!threads.length) { Logger.log("通知メールが見つかりません。転送の設定を確認してください。"); return; }
+  const msg = threads[0].getMessages().pop();
+  const text = String(msg.getPlainBody() || "").normalize("NFKC").replace(/\r/g, "");
+  Logger.log(`件名：${msg.getSubject()}\n本文（${text.length}文字）：`);
+  // ログ1件の長さに上限があるので、1500文字ずつに分けて出す
+  for (let i = 0; i < Math.min(text.length, 6000); i += 1500) Logger.log(JSON.stringify(text.slice(i, i + 1500)));
 }
