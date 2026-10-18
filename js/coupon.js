@@ -2,6 +2,7 @@
 // 家計簿タブの上に「クーポン n枚」を出し、一覧で「使った」「不要」を選ぶ。期限の近い順に並べ、近いものを目立たせる
 // status=候補：レシートとして撮った写真の中で Claude が見つけたクーポン・キャンペーン・告知など。
 //   一覧の上の「レシートから見つかった候補」で内容を直して「リマインドする」（通常のクーポンになり、翌朝通知される）か「不要」を選ぶ
+// repeat（monthly:9,19,29 ／ weekly:0,6）があるクーポンはくり返しの日の前日・当日に通知される。一覧では期間の代わりに次の日を出す
 
 let couponList = []; // 未使用（status が空）と候補（status=候補）の両方
 const COUPON_CANDIDATE = '候補';
@@ -16,6 +17,46 @@ function loadCoupons(preloaded){
     .catch(err=>toast(`クーポンの読み込みに失敗しました（${errMsg(err)}）`));
 }
 
+// ---------- くり返し（repeat。GAS の parseCouponRepeat と同じ書き方）----------
+// monthly:9,19,29（毎月その日。-1 は末日）／ weekly:0,6（毎週その曜日。0=日〜6=土）。空・読めなければ null
+const WEEKDAYS = '日月火水木金土';
+function parseRepeat(v){
+  const m = normText(v).toLowerCase().replace(/\s/g, '').match(/^(monthly|weekly):([-\d,]+)$/);
+  if(!m) return null;
+  const values = [...new Set(m[2].split(',').filter(Boolean).map(Number))];
+  const ok = m[1] === 'monthly' ? n=>n === -1 || (n >= 1 && n <= 31) : n=>n >= 0 && n <= 6;
+  if(!values.length || !values.every(n=>Number.isInteger(n) && ok(n))) return null;
+  return {type:m[1], values:values.sort((a, b)=>(a === -1 ? 99 : a) - (b === -1 ? 99 : b))};
+}
+// 「毎月9・19・29日」「毎月15日・末日」「毎週日・土曜」
+function repeatLabel(r){
+  if(r.type === 'weekly') return '毎週' + r.values.map(n=>WEEKDAYS[n]).join('・') + '曜';
+  const days = r.values.filter(n=>n !== -1);
+  return '毎月' + [days.length ? days.join('・') + '日' : '', r.values.includes(-1) ? '末日' : ''].filter(Boolean).join('・');
+}
+function repeatMatches(r, d){
+  if(r.type === 'weekly') return r.values.includes(d.getDay());
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return r.values.some(n=>n === -1 ? d.getDate() === last : n === d.getDate());
+}
+// 今日以降で、使える期間の中の次のくり返しの日（yyyy-mm-dd）。1年先までになければ空
+function nextRepeatDate(c, r){
+  const from = toDateInputValue(c.validFrom), until = toDateInputValue(c.validUntil);
+  const d = new Date(); d.setHours(0,0,0,0);
+  for(let i = 0; i <= 366; i++, d.setDate(d.getDate() + 1)){
+    const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    if(until && ymd > until) return '';
+    if((!from || from <= ymd) && repeatMatches(r, d)) return ymd;
+  }
+  return '';
+}
+// 「毎月9・19・29日（次は10/19）」。次が今日・明日ならそう書く
+function repeatText(c, r){
+  const next = nextRepeatDate(c, r);
+  const d = next ? daysFromToday(next) : null;
+  return `${repeatLabel(r)}（${d === null ? '次はありません' : d === 0 ? '今日' : d === 1 ? '明日' : `次は${mdLabel(next)}`}）`;
+}
+
 // 使える期間「10/20〜10/26」（validFrom が空なら「〜10/26まで」）
 function couponPeriod(c){
   const from = toDateInputValue(c.validFrom), until = toDateInputValue(c.validUntil);
@@ -26,9 +67,16 @@ function couponPeriod(c){
 }
 // 今の状態：まだ使えない（「10/20から」）、期限が近い（今日まで・明日まで・あと3日）など
 // cls：later（まだ使えない）・soon（3日以内）・urgent（今日まで）
+// くり返しのクーポンは、次の日が今日（soon）・明日なら「今日」「明日」
 function couponState(c){
   const from = toDateInputValue(c.validFrom), until = toDateInputValue(c.validUntil);
   if(from && daysFromToday(from) > 0) return {label:`${mdLabel(from)}から`, cls:'later'};
+  const r = parseRepeat(c.repeat);
+  if(r){
+    const next = nextRepeatDate(c, r);
+    const d = next ? daysFromToday(next) : null;
+    return d === 0 ? {label:'今日', cls:'soon'} : d === 1 ? {label:'明日', cls:''} : {label:'', cls:''};
+  }
   if(!until) return {label:'', cls:''};
   const d = daysFromToday(until);
   if(d <= 0) return {label:'今日まで', cls:'urgent'};
@@ -82,35 +130,69 @@ function tmCouponList(){
   }
   if(!list.length) return;
   tmBody.append(h('h3', {class:'tm-subhead'}, 'クーポン'),
-    h('p', {class:'tm-note tm-lead'}, 'レシートに付いていたクーポン・割引券です。期限の近い順に並べています。使ったら「使った」を押してください。'));
+    h('p', {class:'tm-note tm-lead'}, 'レシートに付いていたクーポン・割引券です。期限の近い順に並べています。使ったら「使った」を押してください。くり返しのものは、通知が要らなくなったら「もう通知しない」を押してください。'));
   list.forEach(c=>{
     const st = couponState(c);
-    const used = h('button', {type:'button', class:'tm-btn'}, '使った');
-    const dismiss = h('button', {type:'button', class:'row-action'}, '不要');
-    used.addEventListener('click', ()=>couponDone(c, 'used', [used, dismiss]));
-    dismiss.addEventListener('click', ()=>couponDone(c, 'dismiss', [used, dismiss]));
+    const r = parseRepeat(c.repeat);
+    // くり返しのクーポンは何度も使うので「使った」を出さず、「もう通知しない」（dismissed）だけにする
+    const used = r ? null : h('button', {type:'button', class:'tm-btn'}, '使った');
+    const dismiss = h('button', {type:'button', class:r ? 'tm-btn' : 'row-action'}, r ? 'もう通知しない' : '不要');
+    const buttons = [used, dismiss].filter(Boolean);
+    if(used) used.addEventListener('click', ()=>couponDone(c, 'used', buttons));
+    dismiss.addEventListener('click', ()=>couponDone(c, 'dismiss', buttons));
     tmBody.append(h('div', {class:'coupon-card ' + st.cls},
       h('div', {class:'coupon-top'},
         h('span', {class:'store'}, c.store || '店名不明'),
         st.label ? h('span', {class:'coupon-badge'}, st.label) : ''),
       h('div', {class:'coupon-title'}, c.title || 'クーポン'),
       c.detail ? h('div', {class:'coupon-detail'}, c.detail) : '',
-      h('div', {class:'coupon-period'}, `使える期間 ${couponPeriod(c)}`),
+      h('div', {class:'coupon-period'}, r ? repeatText(c, r) : `使える期間 ${couponPeriod(c)}`),
       h('div', {class:'coupon-actions'}, photoLinks(c.fileId ? [c.fileId] : [], '写真を開く'), dismiss, used)));
   });
 }
 
-// 候補の1件：店・内容（直せる）・詳細・期間（直せる）・写真。「不要」「リマインドする」
+// くり返しの入力：「なし・毎月・毎週」を選び、毎月は日付（「9,19,29」。末日は -1）、毎週は曜日のチップで選ぶ
+// value() は repeat 列の書き方（monthly:9,19,29 など）。入力が読めなければ null
+function createRepeatEditor(initial){
+  const r = parseRepeat(initial);
+  const type = h('select', {},
+    h('option', {value:''}, 'くり返しなし'), h('option', {value:'monthly'}, '毎月'), h('option', {value:'weekly'}, '毎週'));
+  type.value = r ? r.type : '';
+  const days = h('input', {type:'text', inputMode:'numeric', placeholder:'日付を「,」区切りで（例：9,19,29。末日は -1）',
+    value:r && r.type === 'monthly' ? r.values.join(',') : ''});
+  const picked = new Set(r && r.type === 'weekly' ? r.values : []);
+  const weeks = h('div', {class:'chips repeat-weeks'}, [...WEEKDAYS].map((w, i)=>{
+    const chip = h('button', {type:'button', class:'chip' + (picked.has(i) ? ' on' : '')}, w);
+    chip.addEventListener('click', ()=>{ if(picked.has(i)) picked.delete(i); else picked.add(i); chip.classList.toggle('on', picked.has(i)); });
+    return chip;
+  }));
+  const show = ()=>{ days.hidden = type.value !== 'monthly'; weeks.hidden = type.value !== 'weekly'; };
+  type.addEventListener('change', show);
+  show();
+  return {
+    el:h('div', {class:'field coupon-field'}, h('label', {}, 'くり返し（任意）'), type, h('div', {class:'repeat-input'}, days, weeks)),
+    value(){
+      if(!type.value) return '';
+      const list = type.value === 'monthly' ? normText(days.value).replace(/[、，\s]+/g, ',') : [...picked].join(',');
+      const parsed = parseRepeat(`${type.value}:${list}`);
+      return parsed ? `${parsed.type}:${parsed.values.join(',')}` : null;
+    }
+  };
+}
+
+// 候補の1件：店・内容（直せる）・詳細・期間（直せる）・くり返し（直せる）・写真。「不要」「リマインドする」
 function couponCandidateCard(c){
   const title = h('input', {type:'text', value:c.title || '', placeholder:'例：次回100円引き'});
   const from = h('input', {type:'date', value:toDateInputValue(c.validFrom)});
   const until = h('input', {type:'date', value:toDateInputValue(c.validUntil)});
+  const repeat = createRepeatEditor(c.repeat);
   const remind = h('button', {type:'button', class:'tm-btn'}, 'リマインドする');
   const dismiss = h('button', {type:'button', class:'row-action'}, '不要');
   remind.addEventListener('click', ()=>{
-    const values = {title:normText(title.value), validFrom:from.value, validUntil:until.value};
+    const values = {title:normText(title.value), validFrom:from.value, validUntil:until.value, repeat:repeat.value()};
     if(!values.title){ toast('内容を入力してください'); return; }
     if(values.validFrom && values.validUntil && values.validFrom > values.validUntil){ toast('開始日が期限より後になっています'); return; }
+    if(values.repeat === null){ toast('くり返しの日付・曜日を正しく入れてください'); return; }
     couponDone(c, 'remind', [remind, dismiss], values);
   });
   dismiss.addEventListener('click', ()=>couponDone(c, 'dismiss', [remind, dismiss]));
@@ -123,6 +205,7 @@ function couponCandidateCard(c){
     h('div', {class:'coupon-dates'},
       h('div', {class:'field'}, h('label', {}, '使える日（任意）'), from),
       h('div', {class:'field'}, h('label', {}, '期限（任意）'), until)),
+    repeat.el,
     h('div', {class:'coupon-actions'}, photoLinks(c.fileId ? [c.fileId] : [], '写真を開く'), dismiss, remind));
 }
 
@@ -141,7 +224,7 @@ function couponDone(c, action, buttons, values = {}){
         : couponList.filter(x=>x.id !== c.id);
       renderCouponBanner();
       tm.busy = false;
-      toast(COUPON_DONE_MSG[action]);
+      toast(action === 'dismiss' && parseRepeat(c.repeat) ? 'もう通知しないようにしました' : COUPON_DONE_MSG[action]);
       if(!sortedCoupons().length && !sortedCoupons(true).length){ closeSheet(); return; }
       tmRender();
     })

@@ -15,7 +15,7 @@ const SHEET_STOCK_IMPORT = "在庫取込";
 const SHEET_COUPON = "クーポン";
 const RECEIPT_HEADERS = ["id", "kind", "fileIds", "uploadedAt", "status", "store", "purchasedAt", "total", "payment", "importId", "note", "processedAt"];
 const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt"];
-const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt"];
+const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt", "repeat"];
 // 取込待ち：gas-mail/ が作る列（列の位置で書き込むので順番を変えない）と、レシートの読み取りで足す列（末尾に足す）
 const IMPORT_BASE_HEADERS = ["id", "source", "usedAt", "merchant", "kind", "amount", "card", "receivedAt", "status", "note"];
 const IMPORT_RECEIPT_HEADERS = ["suggestItems", "suggestTags", "suggestMemo", "suggestPayment", "receiptId"];
@@ -320,7 +320,7 @@ function couponExpired(o, today) {
 // クーポンの操作（data.action）。すでに処理済み（対象の status でない）ならエラー
 //   used    … 使った（status=used）。未使用のクーポンだけ
 //   dismiss … 不要（status=dismissed）。未使用のクーポンと候補
-//   remind  … 候補を直した内容（title・validFrom・validUntil）で保存し、status を空にする。
+//   remind  … 候補を直した内容（title・validFrom・validUntil・repeat）で保存し、status を空にする。
 //             notifiedOn は空にするので、翌朝「新しいクーポン」として通知される
 function couponAction(ss, data) {
   const allowed = { used: [""], dismiss: ["", COUPON_CANDIDATE], remind: [COUPON_CANDIDATE] }[data.action];
@@ -342,10 +342,60 @@ function couponAction(ss, data) {
     const until = couponDateInput(data.validUntil, "期限");
     if (!title) throw new Error("内容（title）を入れてください。");
     if (from && until && from > until) throw new Error("開始日が期限より後になっています。");
-    receiptWrite(sheet, t.headers, found._row, { title: title, validFrom: from, validUntil: until, status: "", notifiedOn: "" });
+    const repeat = couponRepeatInput(data.repeat);
+    receiptSheet(ss, SHEET_COUPON, COUPON_HEADERS); // repeat の列がなければ末尾に足す
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+    receiptWrite(sheet, headers, found._row, { title: title, validFrom: from, validUntil: until, repeat: repeat, status: "", notifiedOn: "" });
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---- くり返し（repeat 列）----
+// monthly:9,19,29 … 毎月その日（-1 は末日。その月にない日は飛ばす）
+// weekly:0,6      … 毎週その曜日（0=日〜6=土）
+// 空ならくり返しなし。読めなければ null
+function parseCouponRepeat(v) {
+  const m = normText(v).toLowerCase().replace(/\s/g, "").match(/^(monthly|weekly):([-\d,]+)$/);
+  if (!m) return null;
+  const values = [...new Set(m[2].split(",").filter(Boolean).map(Number))];
+  const ok = m[1] === "monthly" ? n => n === -1 || (n >= 1 && n <= 31) : n => n >= 0 && n <= 6;
+  if (!values.length || !values.every(n => Number.isInteger(n) && ok(n))) return null;
+  return { type: m[1], values: values.sort((a, b) => (a === -1 ? 99 : a) - (b === -1 ? 99 : b)) };
+}
+
+// 画面から届いた repeat をそろえた文字列にする（空は空。読めなければエラー）
+function couponRepeatInput(v) {
+  if (normText(v) === "") return "";
+  const r = parseCouponRepeat(v);
+  if (!r) throw new Error("くり返しの書き方が不正です: " + v);
+  return `${r.type}:${r.values.join(",")}`;
+}
+
+// yyyy-MM-dd がくり返しの日か
+function couponRepeatMatches(r, ymd) {
+  const d = new Date(ymd + "T00:00:00Z");
+  if (r.type === "weekly") return r.values.indexOf(d.getUTCDay()) !== -1;
+  const day = d.getUTCDate();
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  return r.values.some(n => n === -1 ? day === last : n === day);
+}
+
+// 「毎月9・19・29日」「毎月15日・末日」「毎週日・土曜」
+function couponRepeatLabel(r) {
+  if (r.type === "weekly") return "毎週" + r.values.map(n => "日月火水木金土"[n]).join("・") + "曜";
+  const days = r.values.filter(n => n !== -1);
+  const parts = [];
+  if (days.length) parts.push(days.join("・") + "日");
+  if (r.values.indexOf(-1) !== -1) parts.push("末日");
+  return "毎月" + parts.join("・");
+}
+
+// yyyy-MM-dd に n 日足す
+function couponAddDays(ymd, n) {
+  const d = new Date(ymd + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 // 画面から届いた日付を yyyy-MM-dd にする（空はそのまま空。読めなければエラー）
@@ -409,8 +459,11 @@ function buildCouponNotice(ss) {
   const sheet = ss.getSheetByName(SHEET_COUPON);
   const t = receiptRead(sheet);
   const today = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
-  const groups = { fresh: [], start: [], end: [] };
+  const tomorrow = couponAddDays(today, 1);
+  const groups = { fresh: [], repeat: [], start: [], end: [] };
   const expired = [];
+  // くり返しの日が使える期間（validFrom〜validUntil）の中か
+  const inRange = (ymd, from, until) => (!from || from <= ymd) && (!until || ymd <= until);
   t.rows.forEach(o => {
     const status = String(o.status ?? "");
     if (status !== "" && status !== COUPON_CANDIDATE) return;
@@ -423,6 +476,18 @@ function buildCouponNotice(ss) {
     const fromDays = from ? couponDays(today, from) : null;
     const untilDays = until ? couponDays(today, until) : null;
     const endLabel = { 0: "今日まで", 1: "明日まで", 3: "あと3日" }[untilDays];
+    const repeat = parseCouponRepeat(o.repeat); // 読めない repeat はくり返しなしとして扱う
+    if (repeat) {
+      // くり返し：最初の朝は「新しいクーポン」、それ以降はくり返しの日の前日（明日は）と当日（今日は）
+      if (!notifiedOn) {
+        groups.fresh.push({ o: o, key: until || "9999", line: couponRepeatLine(o, "新しいクーポン", repeat, from, until) });
+      } else if (couponRepeatMatches(repeat, today) && inRange(today, from, until)) {
+        groups.repeat.push({ o: o, key: "0", line: couponRepeatLine(o, "今日は", repeat, from, until) });
+      } else if (couponRepeatMatches(repeat, tomorrow) && inRange(tomorrow, from, until)) {
+        groups.repeat.push({ o: o, key: "1", line: couponRepeatLine(o, "明日は", repeat, from, until) });
+      }
+      return;
+    }
     if (!notifiedOn) {
       // 登録後の最初の朝（まだ使えない物も含む）。期限が3日以内なら残りも書く
       const left = untilDays !== null && untilDays <= 3 ? { 0: "今日まで", 1: "明日まで" }[untilDays] || `あと${untilDays}日` : "";
@@ -433,7 +498,7 @@ function buildCouponNotice(ss) {
       groups.end.push({ o: o, key: String(untilDays), line: couponLine(o, endLabel, from, until, "") });
     }
   });
-  const ordered = ["fresh", "start", "end"].flatMap(g => groups[g].sort((a, b) => a.key.localeCompare(b.key)));
+  const ordered = ["fresh", "repeat", "start", "end"].flatMap(g => groups[g].sort((a, b) => a.key.localeCompare(b.key)));
   const lines = ordered.map(x => x.line);
   if (lines.length && COUPON_MENTION) lines[0] = COUPON_MENTION + " " + lines[0];
   const pending = pendingCountsLine(ss, today);
@@ -446,6 +511,13 @@ function couponLine(o, label, from, until, extra) {
   const what = [o.store, o.title].map(v => saleOneLine(v)).filter(Boolean).join(" ");
   const detail = saleOneLine(o.detail);
   return `【クーポン】${label}：${what}${detail ? `（${detail}）` : " "}${couponPeriod(from, until)}${extra ? `（${extra}）` : ""} ${COUPON_REMINDER}`;
+}
+
+// くり返しのクーポンの行。例「【クーポン】明日は：くすりの福太郎 ふくちゃんデー 会員10%OFF（毎月9・19・29日）」
+// 使える期間が決まっていれば後ろに書く。紙を持っていくとは限らない（お店の告知など）ので COUPON_REMINDER は付けない
+function couponRepeatLine(o, label, repeat, from, until) {
+  const what = [o.store, o.title, o.detail].map(v => saleOneLine(v)).filter(Boolean).join(" ");
+  return `【クーポン】${label}：${what}（${couponRepeatLabel(repeat)}）${from || until ? " " + couponPeriod(from, until) : ""}`;
 }
 
 // 使える期間「10/20〜10/26」（validFrom が空なら「〜10/26まで」、validUntil が空なら「10/20から」）
