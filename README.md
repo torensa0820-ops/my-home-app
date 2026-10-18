@@ -20,6 +20,7 @@
 
 - 賞味期限：期限が今日〜3日後で、個数が1以上のロットを通知する
 - 家事：時刻を指定した家事は予定時刻に通知する。期限切れの家事と、時刻を指定していない今日の家事は、毎朝 8:00 にまとめて通知する
+- セールチェック：Claude のスケジュールタスクが毎週「セールチェック」シートに追記した結果（Amazon・Yahoo!ショッピングの価格）を、1時間ごとに確認して1回分（`runId`）ずつ通知する。`notifiedAt` が空の行が未送信で、送信できた回の全行に送信日時を書く。何か入っている行（「チャットで確認済み」など）は送らない。先頭のメンションは `gas/sale-notify.js` の `SALE_MENTION`
 
 ## ファイル構成
 
@@ -48,6 +49,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
   chore-rule.js       家事の周期の計算。GAS と画面（index.html から読み込む）の両方で使う
   notify.js           Discord への送信、賞味期限の通知
   finance-import.js   カード利用の取り込み（確認待ちの取得・登録・スキップ、お店ごとの取込ルール）
+  sale-notify.js      セールチェックの結果（「セールチェック」シート）の通知
 gas-mail/             カード利用通知メールの読み取り。通知受け取り専用の Gmail アカウントで動かす別の GAS（くらしログの GAS とは別）
   Code.js             メールを読み、「取込待ち」シートに追加する（10分ごと）
   appsscript.json     GAS の設定
@@ -185,9 +187,10 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 3. GAS エディタで次のトリガーを用意する
    - `setupChoreTrigger` を一度実行する（`checkChores` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）
    - `checkExpirationAndNotifyDiscord` を1日1回実行する時間主導型トリガーを作る
+   - `setupSaleCheckTrigger` を一度実行する（`notifySaleCheck` を1時間ごとに実行するトリガーが作られる。何度実行しても重複しない）
 4. Web アプリとしてデプロイし、URL を `js/common.js` の `GAS_URL` に入れる
 
-通知のテストは `debugForceDiscordNotify` を実行する。
+通知のテストは `debugForceDiscordNotify` を実行する。セールチェックの通知文は `debugSaleCheckPreview` でログに出せる（送信も `notifiedAt` の書き込みもしない）。
 
 ### 2. カード利用通知メールの取り込み（gas-mail）
 
