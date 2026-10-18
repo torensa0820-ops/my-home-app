@@ -25,6 +25,10 @@ function doGet(e) {
   if (p.action === "getFinance") return jsonOutput(getFinanceRows(p));
   if (p.action === "getImports") return jsonOutput(getPendingImports());
   if (p.action === "getReceipts") return jsonOutput(getReceiptSummary());
+  if (p.action === "getReceiptDetail") {
+    try { return jsonOutput(getReceiptDetail(p)); }
+    catch (err) { return jsonOutput({ status: "error", message: err.toString() }); }
+  }
   if (p.action === "getStockImports") return jsonOutput(getStockImports());
   if (p.action === "getCoupons") return jsonOutput(getCoupons());
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
@@ -58,6 +62,8 @@ function doPost(e) {
       return jsonOutput(Object.assign({ status: "success" }, uploadReceipt(ss, data)));
     } else if (data.type === "receipt" && data.action === "skip") {
       skipReceipt(ss, data);
+    } else if (data.type === "receipt" && data.action === "reread") {
+      rereadReceipt(ss, data);
     } else if (data.type === "stockImport") {
       return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
     } else if (data.type === "coupon") {

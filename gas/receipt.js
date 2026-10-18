@@ -13,14 +13,20 @@
 const SHEET_RECEIPT = "レシート";
 const SHEET_STOCK_IMPORT = "在庫取込";
 const SHEET_COUPON = "クーポン";
+const SHEET_RECEIPT_ITEMS = "レシート明細";
 const RECEIPT_HEADERS = ["id", "kind", "fileIds", "uploadedAt", "status", "store", "purchasedAt", "total", "payment", "importId", "note", "processedAt"];
 const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt"];
+// レシート明細：レシートの全品目と、在庫についての判断（decision：自動追加 / 確認 / 対象外）と理由。Claude が書く
+const RECEIPT_ITEM_HEADERS = ["id", "receiptId", "itemName", "qty", "price", "matchedStock", "decision", "reason", "stockImportId", "createdAt", "updatedAt"];
 const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt", "repeat"];
 // 取込待ち：gas-mail/ が作る列（列の位置で書き込むので順番を変えない）と、レシートの読み取りで足す列（末尾に足す）
 const IMPORT_BASE_HEADERS = ["id", "source", "usedAt", "merchant", "kind", "amount", "card", "receivedAt", "status", "note"];
 const IMPORT_RECEIPT_HEADERS = ["suggestItems", "suggestTags", "suggestMemo", "suggestPayment", "receiptId"];
 const COUPON_DATE_COLUMNS = ["validFrom", "validUntil", "notifiedOn"]; // yyyy-MM-dd の文字列で持つ列
 const RECEIPT_MAX_BYTES = 5 * 1024 * 1024; // 受け取る写真1枚の上限
+const RECEIPT_REREAD = "再読"; // レシートの status。アプリで「在庫の判断を読み直す」を押したもの（今夜 Claude が在庫の判断だけやり直す）
+const RECEIPT_UNREAD = ["", RECEIPT_REREAD]; // 今夜 Claude が読む status
+const RECEIPT_RECENT_DAYS = 14; // 撮影画面に出す「最近撮った分」の日数
 const STOCK_IMPORT_AUTO_DAYS = 7; // 自動追加をこの日数のあいだ画面に出す（取り消せるようにする）
 const COUPON_MENTION = ""; // 通知の先頭に付けるメンション（"@everyone" にすると付く）
 const COUPON_REMINDER = "※紙のクーポンを持っていく"; // クーポンの通知の行末に付ける
@@ -54,6 +60,7 @@ function receiptSheet(ss, name, headers, textColumns) {
 // Claude が書き込むシートと列をそろえる（写真を受け取ったときと setupReceiptTriggers で呼ぶ）
 function ensureReceiptSheets(ss) {
   receiptSheet(ss, SHEET_STOCK_IMPORT, STOCK_IMPORT_HEADERS);
+  receiptSheet(ss, SHEET_RECEIPT_ITEMS, RECEIPT_ITEM_HEADERS);
   receiptSheet(ss, SHEET_COUPON, COUPON_HEADERS, COUPON_DATE_COLUMNS);
   receiptSheet(ss, SHEET_IMPORT, IMPORT_BASE_HEADERS.concat(IMPORT_RECEIPT_HEADERS), ["usedAt"]);
   return receiptSheet(ss, SHEET_RECEIPT, RECEIPT_HEADERS);
@@ -189,16 +196,89 @@ function saveReceiptFile(bytes, kind, id, n, now) {
 }
 
 // ---- 撮影した分の一覧（今日撮った分と、まだ読まれていない件数）----
+// ---- 撮影した分の一覧（直近 RECEIPT_RECENT_DAYS 日）と、まだ読まれていない件数 ----
+// recent：[{id, kind, uploadedAt, status, store, purchasedAt, total, payment, importId, note, count（写真の枚数）,
+//           items（明細の件数）, auto・confirm・skip（明細の判断ごとの件数）, coupons（このレシートから作ったクーポン・候補の件数）}]
+// unread：status が空か「再読」の件数（今夜読む分）
 function getReceiptSummary() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rows = receiptRead(ss.getSheetByName(SHEET_RECEIPT)).rows;
-  const today = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
+  const since = Utilities.formatDate(new Date(Date.now() - (RECEIPT_RECENT_DAYS - 1) * 86400000), "Asia/Tokyo", "yyyy-MM-dd");
+  const recent = rows.filter(o => normDate(o.uploadedAt) >= since);
+  const ids = new Set(recent.map(o => String(o.id)));
+  const counts = {};
+  const count = id => counts[id] || (counts[id] = { items: 0, auto: 0, confirm: 0, skip: 0, coupons: 0 });
+  receiptRead(ss.getSheetByName(SHEET_RECEIPT_ITEMS)).rows.forEach(o => {
+    const id = String(o.receiptId);
+    if (!ids.has(id)) return;
+    const c = count(id);
+    c.items++;
+    const key = { 自動追加: "auto", 確認: "confirm", 対象外: "skip" }[String(o.decision ?? "")];
+    if (key) c[key]++;
+  });
+  receiptRead(ss.getSheetByName(SHEET_COUPON)).rows.forEach(o => { if (ids.has(String(o.receiptId))) count(String(o.receiptId)).coupons++; });
   return {
-    today: rows.filter(o => normDate(o.uploadedAt) === today)
-      .map(o => Object.assign(receiptOut(o), { count: receiptFileIds(o.fileIds).length }))
+    recent: recent
+      .map(o => Object.assign(receiptOut(o), { count: receiptFileIds(o.fileIds).length }, count(String(o.id))))
       .sort((a, b) => String(b.uploadedAt).localeCompare(String(a.uploadedAt))),
-    unread: rows.filter(o => String(o.status ?? "") === "").length,
+    unread: rows.filter(o => RECEIPT_UNREAD.indexOf(String(o.status ?? "")) !== -1).length,
   };
+}
+
+// ---- 撮影した1件の詳細：何がどこに反映されたか ----
+// receipt：レシートの行（files に写真のファイル ID の配列）
+// items：レシート明細（品目ごとの判断）。stockImport に対応する在庫取込の行（あれば）
+// finance：家計簿の確認待ち（取込待ちの行。importId か receiptId で探す）。なければ null
+// coupons：このレシートから作ったクーポン・候補
+function getReceiptDetail(p) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const found = receiptRead(ss.getSheetByName(SHEET_RECEIPT)).rows.find(o => String(o.id) === String(p.id));
+  if (!found) throw new Error("撮影した記録が見つかりません。読み込み直してください。");
+  const id = String(found.id);
+  const imports = {};
+  receiptRead(ss.getSheetByName(SHEET_STOCK_IMPORT)).rows.forEach(o => { if (String(o.receiptId) === id) imports[String(o.id)] = o; });
+  const items = receiptRead(ss.getSheetByName(SHEET_RECEIPT_ITEMS)).rows
+    .filter(o => String(o.receiptId) === id)
+    .sort((a, b) => a._row - b._row)
+    .map(o => {
+      const imp = imports[String(o.stockImportId)];
+      if (imp) delete imports[String(o.stockImportId)];
+      return Object.assign(receiptOut(o), { stockImport: imp ? receiptOut(imp) : null });
+    });
+  const importId = String(found.importId ?? "");
+  const fin = receiptRead(ss.getSheetByName(SHEET_IMPORT)).rows
+    .find(o => (importId && String(o.id) === importId) || String(o.receiptId ?? "") === id);
+  return {
+    receipt: Object.assign(receiptOut(found), { files: receiptFileIds(found.fileIds) }),
+    items: items,
+    // 明細に結びついていない在庫取込（明細の記録を始める前に読んだレシートなど）
+    otherStockImports: Object.keys(imports).map(k => receiptOut(imports[k])),
+    finance: fin ? receiptOut(fin) : null,
+    coupons: receiptRead(ss.getSheetByName(SHEET_COUPON)).rows.filter(o => String(o.receiptId) === id).map(receiptOut),
+  };
+}
+
+// 在庫の判断を読み直す（読み取り済みのレシートだけ。status を「再読」にし、今夜 Claude が在庫の判断だけをやり直す）
+// ストックタグを後から付けた品目などを拾うため。家計簿・クーポン・セール品目は書き直さない
+function rereadReceipt(ss, data) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = ensureReceiptSheets(ss); // 今夜 Claude が書く「レシート明細」シートもここで用意する
+    const t = receiptRead(sheet);
+    const found = t.rows.find(o => String(o.id) === String(data.id));
+    if (!found) throw new Error("撮影した記録が見つかりません。読み込み直してください。");
+    if (String(found.kind ?? "") !== "レシート") throw new Error("読み直せるのはレシートだけです。");
+    const status = String(found.status ?? "");
+    if (status === RECEIPT_REREAD) throw new Error("すでに読み直しを頼んであります（今夜読みます）。");
+    if (status !== "read") throw new Error("まだ読み取られていないレシートです。");
+    const note = String(found.note ?? "");
+    receiptWrite(sheet, t.headers, found._row, {
+      status: RECEIPT_REREAD, note: (note ? note + " ／ " : "") + "在庫の読み直しを依頼：" + receiptNow(),
+    });
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // 撮り間違えた写真を読まないようにする（まだ読まれていない1件だけ。status を skipped にする）

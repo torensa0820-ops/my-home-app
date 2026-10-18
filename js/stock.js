@@ -246,7 +246,8 @@ function tmItemView(g){
   tmBody.append(
     field('商品名', name),
     field('収納場所', locSelect, locInput),
-    field('タグ（複数選択可）', chips, tagInput),
+    field('タグ（複数選択可）', chips, tagInput,
+      h('p', {class:'tm-note'}, 'タグ「ストック」を付けると、撮ったレシートにあれば夜に自動で個数を足します。')),
     field('型番', model),
     h('div', {class:'field'},
       h('div', {class:'lot-edit lot-head'}, h('label', {}, '賞味期限'), h('label', {}, '個数'), h('span')),
