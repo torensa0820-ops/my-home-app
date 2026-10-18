@@ -24,6 +24,7 @@ const RECEIPT_MAX_BYTES = 5 * 1024 * 1024; // 受け取る写真1枚の上限
 const STOCK_IMPORT_AUTO_DAYS = 7; // 自動追加をこの日数のあいだ画面に出す（取り消せるようにする）
 const COUPON_MENTION = ""; // 通知の先頭に付けるメンション（"@everyone" にすると付く）
 const COUPON_REMINDER = "※紙のクーポンを持っていく"; // クーポンの通知の行末に付ける
+const COUPON_CANDIDATE = "候補"; // クーポンの status。レシートの写真から Claude が見つけた候補（画面で確認するまで通知しない）
 
 // ---- シートの用意 ----
 
@@ -299,26 +300,60 @@ function reduceStockLot(ss, stockRowId, qty) {
 }
 
 // ---- クーポン ----
-// 未使用（status が空）で期限を過ぎていないもの。期限の近い順（期限なしは最後）
+// status が空（未使用）と「候補」で、期限を過ぎていないもの。期限の近い順（期限なしは最後）
+// 候補：レシートとして撮った写真の中で Claude が見つけたクーポン・キャンペーン・告知など。画面で確認するまで通知しない
 function getCoupons() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const today = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy-MM-dd");
   return receiptRead(ss.getSheetByName(SHEET_COUPON)).rows
-    .filter(o => String(o.status ?? "") === "" && !(normDate(o.validUntil) && normDate(o.validUntil) < today))
+    .filter(o => ["", COUPON_CANDIDATE].indexOf(String(o.status ?? "")) !== -1 && !couponExpired(o, today))
     .map(receiptOut)
     .sort((a, b) => (a.validUntil || "9999-99-99").localeCompare(b.validUntil || "9999-99-99"));
 }
 
-// クーポンの操作（data.action）：used … 使った、dismiss … 不要（status=dismissed）
+// validUntil を過ぎているか（today は yyyy-MM-dd）
+function couponExpired(o, today) {
+  const until = normDate(o.validUntil);
+  return !!until && until < today;
+}
+
+// クーポンの操作（data.action）。すでに処理済み（対象の status でない）ならエラー
+//   used    … 使った（status=used）。未使用のクーポンだけ
+//   dismiss … 不要（status=dismissed）。未使用のクーポンと候補
+//   remind  … 候補を直した内容（title・validFrom・validUntil）で保存し、status を空にする。
+//             notifiedOn は空にするので、翌朝「新しいクーポン」として通知される
 function couponAction(ss, data) {
-  const status = { used: "used", dismiss: "dismissed" }[data.action];
-  if (!status) throw new Error("action が不正です: " + data.action);
-  const sheet = ss.getSheetByName(SHEET_COUPON);
-  const t = receiptRead(sheet);
-  const found = t.rows.find(o => String(o.id) === String(data.id));
-  if (!found) throw new Error("クーポンが見つかりません。読み込み直してください。");
-  if (String(found.status ?? "") !== "") throw new Error("このクーポンはすでに処理されています。読み込み直してください。");
-  receiptWrite(sheet, t.headers, found._row, { status: status });
+  const allowed = { used: [""], dismiss: ["", COUPON_CANDIDATE], remind: [COUPON_CANDIDATE] }[data.action];
+  if (!allowed) throw new Error("action が不正です: " + data.action);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = ss.getSheetByName(SHEET_COUPON);
+    const t = receiptRead(sheet);
+    const found = t.rows.find(o => String(o.id) === String(data.id));
+    if (!found) throw new Error("クーポンが見つかりません。読み込み直してください。");
+    if (allowed.indexOf(String(found.status ?? "")) === -1) throw new Error("このクーポンはすでに処理されています。読み込み直してください。");
+    if (data.action !== "remind") {
+      receiptWrite(sheet, t.headers, found._row, { status: data.action === "used" ? "used" : "dismissed" });
+      return;
+    }
+    const title = normText(data.title);
+    const from = couponDateInput(data.validFrom, "開始日");
+    const until = couponDateInput(data.validUntil, "期限");
+    if (!title) throw new Error("内容（title）を入れてください。");
+    if (from && until && from > until) throw new Error("開始日が期限より後になっています。");
+    receiptWrite(sheet, t.headers, found._row, { title: title, validFrom: from, validUntil: until, status: "", notifiedOn: "" });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 画面から届いた日付を yyyy-MM-dd にする（空はそのまま空。読めなければエラー）
+function couponDateInput(v, label) {
+  if (String(v ?? "").trim() === "") return "";
+  const d = normDate(v);
+  if (!d) throw new Error(`${label}の日付が不正です: ${v}`);
+  return d;
 }
 
 // ---- 毎朝の通知：クーポンの期限と、確認待ちの件数 ----
@@ -377,10 +412,12 @@ function buildCouponNotice(ss) {
   const groups = { fresh: [], start: [], end: [] };
   const expired = [];
   t.rows.forEach(o => {
-    if (String(o.status ?? "") !== "") return;
+    const status = String(o.status ?? "");
+    if (status !== "" && status !== COUPON_CANDIDATE) return;
     const from = normDate(o.validFrom);
     const until = normDate(o.validUntil);
-    if (until && until < today) { expired.push(o); return; }
+    if (until && until < today) { expired.push(o); return; } // 未使用のクーポンも候補も、期限を過ぎたら expired
+    if (status === COUPON_CANDIDATE) return; // 候補は画面で確認する（「リマインドする」）まで通知しない
     const notifiedOn = normDate(o.notifiedOn);
     if (notifiedOn === today) return; // 同じ日に二重に通知しない
     const fromDays = from ? couponDays(today, from) : null;
@@ -399,7 +436,7 @@ function buildCouponNotice(ss) {
   const ordered = ["fresh", "start", "end"].flatMap(g => groups[g].sort((a, b) => a.key.localeCompare(b.key)));
   const lines = ordered.map(x => x.line);
   if (lines.length && COUPON_MENTION) lines[0] = COUPON_MENTION + " " + lines[0];
-  const pending = pendingCountsLine(ss);
+  const pending = pendingCountsLine(ss, today);
   if (pending) lines.push(pending);
   return { sheet: sheet, headers: t.headers, today: today, lines: lines, notified: ordered.map(x => x.o), expired: expired };
 }
@@ -425,12 +462,15 @@ function couponDays(from, to) {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000);
 }
 
-// 「確認待ち：家計簿 n件・在庫 n件」（0件の項目は書かない。どちらも0件なら空）
-function pendingCountsLine(ss) {
+// 「確認待ち：家計簿 n件・在庫 n件・クーポン候補 n件」（0件の項目は書かない。すべて0件なら空）
+// クーポン候補は期限を過ぎていないものだけ数える（過ぎたものは同じ通知で expired にする）
+function pendingCountsLine(ss, today) {
   const finance = receiptRead(ss.getSheetByName(SHEET_IMPORT)).rows
     .filter(o => ["", "error"].indexOf(String(o.status ?? "")) !== -1).length;
   const stock = receiptRead(ss.getSheetByName(SHEET_STOCK_IMPORT)).rows
     .filter(o => String(o.kind ?? "") === "確認" && String(o.status ?? "") === "").length;
-  const parts = [finance ? `家計簿 ${finance}件` : "", stock ? `在庫 ${stock}件` : ""].filter(Boolean);
+  const candidates = receiptRead(ss.getSheetByName(SHEET_COUPON)).rows
+    .filter(o => String(o.status ?? "") === COUPON_CANDIDATE && !couponExpired(o, today)).length;
+  const parts = [finance ? `家計簿 ${finance}件` : "", stock ? `在庫 ${stock}件` : "", candidates ? `クーポン候補 ${candidates}件` : ""].filter(Boolean);
   return parts.length ? "確認待ち：" + parts.join("・") : "";
 }

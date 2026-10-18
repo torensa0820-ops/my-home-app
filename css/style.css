@@ -380,3 +380,10 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .capture-kind .capture-pair{margin-bottom:0;}
 .capture-status{background:var(--finance-dim);color:var(--finance);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:700;}
 .capture-summary{margin-top:20px;}
+/* クーポンの候補（内容と期間をその場で直す） */
+.tm-subhead{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;}
+.coupon-card.candidate{border-style:dashed;}
+.coupon-card.candidate .coupon-badge{background:var(--finance-dim);color:var(--finance);}
+.coupon-field{margin:8px 0 6px;}
+.coupon-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.coupon-dates .field{margin-bottom:0;min-width:0;}
