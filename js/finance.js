@@ -33,19 +33,27 @@ document.getElementById('f-date').value = todayStr();
 
 // 1回の会計をカテゴリごとに分ける内訳の入力（登録フォームと記録の編集画面で使う）
 // 内訳には分けるカテゴリと金額だけを入れ、合計から内訳を引いた残りがメインカテゴリの金額になる
-function createSplitEditor(totalInput, catSelect, catInput){
+// opts.memo なら内訳ごとのメモ欄も出す（レシートの取り込み用。空なら記録全体のメモになる）
+function createSplitEditor(totalInput, catSelect, catInput, opts = {}){
   const rows = [];
   const list = h('div', {class:'split-rows'});
   const preview = h('div', {class:'split-preview', hidden:true});
   const addBtn = h('button', {type:'button', class:'split-add', onclick:()=>{ addRow(); }}, '＋ 内訳を分ける（食品と日用品など）');
   const el = h('div', {class:'split-editor'}, list, preview, addBtn);
 
-  function addRow(){
+  // init：{category, amount, memo} の初期値（なければ空の行を足して入力欄に移る）
+  function addRow(init){
     const select = h('select');
     const input = h('input', {type:'text', class:'hybrid-input', placeholder:'新しいカテゴリを入力'});
     setupHybrid(select, input, uniqSorted(financeOpts.categories || []));
     const amount = h('input', {type:'number', inputMode:'numeric', placeholder:'金額'});
-    const row = {select, input, amount};
+    const memo = opts.memo ? h('input', {type:'text', class:'split-memo', placeholder:'この内訳のメモ（任意）'}) : null;
+    if(init){
+      setHybridValue(select, input, init.category);
+      amount.value = init.amount || '';
+      if(memo) memo.value = init.memo || '';
+    }
+    const row = {select, input, amount, memo};
     row.el = h('div', {class:'split-row'},
       h('div', {class:'split-cat'}, select, input),
       amount,
@@ -53,16 +61,21 @@ function createSplitEditor(totalInput, catSelect, catInput){
         rows.splice(rows.indexOf(row), 1);
         row.el.remove();
         update();
-      }}, '×'));
+      }}, '×'),
+      memo);
     [select, input, amount].forEach(x=>x.addEventListener('input', update));
     select.addEventListener('change', update);
     rows.push(row);
     list.append(row.el);
     update();
-    select.focus();
+    if(!init) select.focus();
   }
   function splits(){
-    return rows.map(r=>({category:getHybridValue(r.select, r.input), amount:Number(r.amount.value) || 0}));
+    return rows.map(r=>{
+      const s = {category:getHybridValue(r.select, r.input), amount:Number(r.amount.value) || 0};
+      if(r.memo) s.memo = normText(r.memo.value);
+      return s;
+    });
   }
   // 内訳の入力に問題があればその内容を返す（内訳がなければ空文字）
   function error(){
@@ -99,7 +112,9 @@ function createSplitEditor(totalInput, catSelect, catInput){
   return {
     el, error, splits, items, update,
     count(){ return rows.length; },
-    clear(){ rows.splice(0).forEach(r=>r.el.remove()); update(); }
+    clear(){ rows.splice(0).forEach(r=>r.el.remove()); update(); },
+    // 内訳を初期値で埋める（[{category, amount, memo}]）
+    set(list){ rows.splice(0).forEach(r=>r.el.remove()); list.forEach(s=>addRow(s)); update(); }
   };
 }
 const financeSplits = createSplitEditor(document.getElementById('f-amount'), fCatSelect, fCatInput);

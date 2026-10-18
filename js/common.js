@@ -147,6 +147,22 @@ function errMsg(err){
   return !m || m === 'Failed to fetch' || m === 'Load failed' ? '通信エラー' : m.replace(/^Error:\s*/, '');
 }
 
+// レシート・クーポンの写真（Google ドライブのファイル）を開くリンク。複数枚なら「写真1」「写真2」…
+function photoLinks(fileIds, label = 'レシートの写真を開く'){
+  const ids = (fileIds || []).filter(Boolean);
+  if(!ids.length) return '';
+  return h('div', {class:'photo-links'}, ids.map((id, i)=>h('a', {
+    href:`https://drive.google.com/file/d/${encodeURIComponent(id)}/view`, target:'_blank', rel:'noopener'
+  }, ids.length > 1 ? `写真${i + 1}` : label)));
+}
+// "2026-10-20" → "10/20"
+function mdLabel(ymd){ return ymd ? `${Number(ymd.slice(5,7))}/${Number(ymd.slice(8,10))}` : ''; }
+// 今日から yyyy-mm-dd までの日数（過ぎていれば負）
+function daysFromToday(ymd){
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((new Date(ymd + 'T00:00:00') - today) / 86400000);
+}
+
 // シートの日付（ISO文字列や「2026/10/5」など）を <input type="date"> 用の yyyy-mm-dd にする
 function toDateInputValue(v){
   if(!v) return '';

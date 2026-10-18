@@ -2,7 +2,7 @@
 // Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
-// 各処理は stock.js / finance.js / finance-import.js / tags.js / chore.js にある
+// 各処理は stock.js / finance.js / finance-import.js / receipt.js / tags.js / chore.js にある
 // =========================================================
 
 function doGet(e) {
@@ -15,6 +15,8 @@ function doGet(e) {
       financeOptions: getFinanceOptions(),
       finance: getFinanceRows({ offset: 0, limit: "all" }),
       imports: getPendingImports(),
+      stockImports: getStockImports(),
+      coupons: getCoupons(),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());
@@ -22,6 +24,9 @@ function doGet(e) {
   if (p.action === "getFinanceOptions") return jsonOutput(getFinanceOptions());
   if (p.action === "getFinance") return jsonOutput(getFinanceRows(p));
   if (p.action === "getImports") return jsonOutput(getPendingImports());
+  if (p.action === "getReceipts") return jsonOutput(getReceiptSummary());
+  if (p.action === "getStockImports") return jsonOutput(getStockImports());
+  if (p.action === "getCoupons") return jsonOutput(getCoupons());
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -49,6 +54,14 @@ function doPost(e) {
       skipImport(ss, data);
     } else if (data.type === "finance") {
       addFinance(ss, data);
+    } else if (data.type === "receipt" && data.action === "upload") {
+      return jsonOutput(Object.assign({ status: "success" }, uploadReceipt(ss, data)));
+    } else if (data.type === "receipt" && data.action === "skip") {
+      skipReceipt(ss, data);
+    } else if (data.type === "stockImport") {
+      return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
+    } else if (data.type === "coupon") {
+      couponAction(ss, data);
     } else if (data.type === "todo") {
       return jsonOutput({ status: "success", task: updateTodo(ss, data) });
     } else if (data.type === "tag") {

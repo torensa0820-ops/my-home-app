@@ -6,13 +6,17 @@
 // ここでは確認待ち（status が空）とエラー（status=error）の行を画面に渡し、
 // 画面で内容を確認したものだけを家計簿に登録する。
 // 「取込ルール」シートには、お店ごとに前回登録したカテゴリ・タグ・メモを覚えておき、次回の入力候補にする。
+// 夜に Claude がレシートを読むと、カード利用の行に内訳の案（suggestItems など）が入り、
+// カード利用のない支払い（PayPay・現金）は source=receipt の行として追加される（receipt.js）。
 // =========================================================
 const SHEET_IMPORT = "取込待ち";
 const SHEET_IMPORT_RULES = "取込ルール";
 const IMPORT_RULE_HEADERS = ["merchant", "category", "tags", "memo", "payment", "updatedAt"];
 
 // ---- 確認待ちの一覧と、お店ごとの入力候補 ----
-// pending：[{id, usedAt, merchant, kind, amount, card, receivedAt, status, note}]（利用日時の古い順）
+// pending：[{id, source, usedAt, merchant, kind, amount, card, receivedAt, status, note,
+//            suggestItems, suggestTags, suggestMemo, suggestPayment, receiptId, receiptFiles}]（利用日時の古い順）
+//   receiptFiles はレシートの写真のファイル ID の配列（receiptId があるとき）
 // rules：{ 店名（正規化済み）: {category, tags, memo, payment} }
 function getPendingImports() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -30,6 +34,10 @@ function getPendingImports() {
       if (status === "" || status === "error") pending.push(o);
     });
     pending.sort((a, b) => String(a.usedAt || a.receivedAt).localeCompare(String(b.usedAt || b.receivedAt)));
+    if (pending.some(o => o.receiptId)) {
+      const files = receiptFileMap(ss);
+      pending.forEach(o => { if (o.receiptId) o.receiptFiles = files[String(o.receiptId)] || []; });
+    }
   }
   const rules = {};
   const ruleSheet = ss.getSheetByName(SHEET_IMPORT_RULES);

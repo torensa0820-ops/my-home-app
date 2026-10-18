@@ -94,14 +94,15 @@ function ensureFinanceColumns(sheet) {
   });
 }
 
-// 内訳 [{category, amount}] を確かめて、カテゴリを正規化したものを返す
+// 内訳 [{category, amount, memo（任意）}] を確かめて、カテゴリ・メモを正規化したものを返す
+// memo はその内訳だけのメモ（レシートの取り込みで使う）。空なら記録全体のメモになる
 function financeItems(items) {
   return items.map(it => {
     const category = normText(it.category);
     const amount = Number(it.amount);
     if (!category) throw new Error("カテゴリが空です。");
     if (!(amount > 0)) throw new Error("金額が不正です: " + category);
-    return { category: category, amount: amount };
+    return { category: category, amount: amount, memo: normText(it.memo) };
   });
 }
 
@@ -114,7 +115,7 @@ function financeDate(str) {
 // ---- 家計簿タブへの行追加 ----
 // data.items = [{category, amount}, ...] が2件以上なら、1回の会計をカテゴリごとに分けた行として
 // 同じ groupId・同じ createdAt で追加する（items がなければ data.category・data.amount の1件）
-// date・memo・tags・payment は全行共通
+// date・tags・payment は全行共通。memo は内訳ごとのメモ（items[].memo）がなければ data.memo
 function addFinance(ss, data) {
   const sheet = ss.getSheetByName(SHEET_FINANCE);
   ensureFinanceColumns(sheet);
@@ -124,7 +125,7 @@ function addFinance(ss, data) {
   const createdAt = new Date();
   const date = financeDate(data.date);
   appendFinanceRows(sheet, items.map(it => ({
-    date: date, category: it.category, amount: it.amount, memo: normText(data.memo), tags: normTags(data.tags),
+    date: date, category: it.category, amount: it.amount, memo: it.memo || normText(data.memo), tags: normTags(data.tags),
     payment: normText(data.payment), groupId: groupId, createdAt: createdAt, sourceId: data.sourceId || "",
   })));
 }

@@ -17,9 +17,14 @@
   <header>
     <div class="app-bar">
       <div class="brand"><img src="apple-touch-icon.png" alt="">くらしログ</div>
-      <button type="button" id="reload-btn" class="icon-btn" aria-label="最新版を読み込む">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
-      </button>
+      <div class="app-actions">
+        <button type="button" id="camera-btn" class="icon-btn" aria-label="レシート・クーポンを撮る">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.6-2.4h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.5"/></svg>
+        </button>
+        <button type="button" id="reload-btn" class="icon-btn" aria-label="最新版を読み込む">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+        </button>
+      </div>
     </div>
     <h1 id="page-title">在庫管理</h1>
     <p id="page-sub">商品名をタップで編集・＋−で数量を更新</p>
@@ -28,6 +33,7 @@
   <main>
     <!-- ===== 在庫タブ ===== -->
     <section id="stock-panel" class="tab-panel active">
+      <div id="stock-imports"></div>
       <div class="list-head">
         <div class="section-title">登録中の商品</div>
         <button type="button" id="stock-edit-toggle" class="edit-toggle">整理</button>
@@ -76,6 +82,7 @@
       </div>
       <div class="filter-bar" id="finance-filter"></div>
       <div id="finance-imports"></div>
+      <div id="finance-coupons"></div>
       <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
       <div id="finance-chart" hidden></div>
 
@@ -174,6 +181,9 @@
 <script src="js/finance.js"></script>
 <script src="js/finance-chart.js"></script>
 <script src="js/finance-import.js"></script>
+<script src="js/stock-import.js"></script>
+<script src="js/coupon.js"></script>
+<script src="js/receipt.js"></script>
 <script src="js/chore.js"></script>
 <script src="js/main.js"></script>
 </body>

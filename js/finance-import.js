@@ -1,6 +1,8 @@
 // 家計簿：カード利用の取り込み（確認待ちの一覧と、1件ずつ確認して登録する画面）
 // 確認待ちは「取込待ち」シートの行（カード利用通知メールから gas-mail/ が追加する）
 // お店ごとに前回登録したカテゴリ・タグ・メモ（取込ルール）を入力候補にする
+// 夜に Claude がレシートを読んだ行は、内訳の案（suggestItems など）を取込ルールより優先して入れる
+// カード利用のない支払い（PayPay・現金）のレシートは source=receipt の行として同じ一覧に出る
 
 const imp = {pending:[], rules:{}};
 const IMPORT_DUP_DAYS = 3; // この日数以内に同じ金額の記録があれば「登録済みかも」と表示する
@@ -23,11 +25,13 @@ function renderImportBanner(){
   const n = imp.pending.length;
   if(!n) return;
   const errors = imp.pending.filter(p=>p.status === 'error').length;
+  const receipts = imp.pending.filter(p=>p.source === 'receipt').length;
+  const notes = [errors ? `読み取れなかったメール ${errors}件` : '', receipts ? `レシートの支払い ${receipts}件` : ''].filter(Boolean);
   wrap.append(h('button', {type:'button', class:'import-banner', onclick:()=>openSheet('finance', tmImportList)},
     h('span', {class:'dot'}, String(n)),
     h('span', {class:'text'},
       h('b', {}, 'カード利用の確認待ち'),
-      h('span', {}, errors ? `読み取れなかったメール ${errors}件を含みます` : 'タップして内容を確認・登録')),
+      h('span', {}, notes.length ? `${notes.join('・')}を含みます` : 'タップして内容を確認・登録')),
     h('span', {class:'chev'}, '›')));
 }
 
@@ -46,12 +50,34 @@ function importDuplicates(p, date){
     && Math.abs(finDay(r) - base) <= IMPORT_DUP_DAYS * 86400000);
 }
 // お店の入力候補：取込ルールがあればそれ、なければ店名に含まれる登録済みのお店タグ
+// レシートから読んだ案（suggest*）があれば、項目ごとにそちらを優先する。items はレシートの内訳（先頭がメインのカテゴリ）
 function importSuggestion(p){
+  const base = importRuleSuggestion(p);
+  const items = receiptSuggestItems(p);
+  const tags = normText(p.suggestTags), memo = normText(p.suggestMemo), payment = normText(p.suggestPayment);
+  if(!items.length && !tags && !memo && !payment) return {...base, items:[], fromReceipt:false};
+  return {
+    category:(items[0] && items[0].category) || base.category,
+    tags:tags || base.tags,
+    memo:memo || (items[0] && items[0].memo) || base.memo,
+    payment:payment || base.payment,
+    items, fromRule:false, fromReceipt:true
+  };
+}
+function importRuleSuggestion(p){
   const rule = imp.rules[normText(p.merchant)];
   if(rule) return {category:rule.category || '', tags:rule.tags || '', memo:rule.memo || '', payment:rule.payment || '', fromRule:true};
   const name = normText(p.merchant);
   const tag = uniqSorted(financeOpts.tags || []).filter(t=>t.length >= 2 && name.includes(t)).sort((a, b)=>b.length - a.length)[0];
   return {category:'', tags:tag || '', memo:'', payment:'', fromRule:false};
+}
+// suggestItems（JSON の配列 [{category, amount, memo}]）を読む。読めなければ空
+function receiptSuggestItems(p){
+  let list;
+  try { list = JSON.parse(p.suggestItems || '[]'); } catch(_) { return []; }
+  if(!Array.isArray(list)) return [];
+  return list.map(it=>({category:normText(it && it.category), amount:Number(it && it.amount) || 0, memo:normText(it && it.memo)}))
+    .filter(it=>it.category && it.amount > 0);
 }
 
 // ---------- 確認待ちの一覧 ----------
@@ -62,7 +88,7 @@ function tmImportList(){
     return;
   }
   tmBody.append(h('p', {class:'tm-note tm-lead'},
-    'カードの利用通知メールから読み取りました。1件ずつ内容を確かめて登録してください。お店の締めの都合で、カードの明細の日付は利用日とずれることがあります。'));
+    'カードの利用通知メールとレシートから読み取りました。1件ずつ内容を確かめて登録してください。お店の締めの都合で、カードの明細の日付は利用日とずれることがあります。'));
   imp.pending.forEach(p=>{
     if(p.status === 'error'){
       tmBody.append(h('button', {type:'button', class:'tm-row import-row error', onclick:()=>tmShow(tmImportError, p)},
@@ -72,11 +98,13 @@ function tmImportList(){
     }
     const dups = importDuplicates(p);
     const sug = importSuggestion(p);
+    const guess = sug.category ? `→ ${sug.category}${sug.items.length > 1 ? ` ほか${sug.items.length - 1}件` : ''}` : '分類を選んでください';
     tmBody.append(h('button', {type:'button', class:'tm-row import-row', onclick:()=>tmShow(tmImportItem, p)},
       h('span', {class:'when'}, importWhen(p)),
       h('span', {class:'name'},
         h('span', {}, p.merchant || '店名不明'),
-        h('small', {}, dups.length ? '⚠ 登録済みかも' : (sug.category ? `→ ${sug.category}` : '分類を選んでください'))),
+        h('small', {}, dups.length ? '⚠ 登録済みかも'
+          : [guess, p.source === 'receipt' ? (sug.payment || 'レシート') : (sug.fromReceipt ? 'レシートの内訳あり' : '')].filter(Boolean).join('・'))),
       h('span', {class:'amt'}, `¥${(Number(p.amount) || 0).toLocaleString()}`),
       h('span', {class:'chev'}, '›')));
   });
@@ -118,7 +146,8 @@ function tmImportError(p){
 
 // ---------- 1件を確認して登録する ----------
 function tmImportItem(p){
-  tmTitle.textContent = 'カード利用を登録';
+  const fromReceiptOnly = p.source === 'receipt'; // カード利用がなく、レシートだけから分かった支払い（PayPay・現金）
+  tmTitle.textContent = fromReceiptOnly ? 'レシートの支払いを登録' : 'カード利用を登録';
   const sug = importSuggestion(p);
   const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const date = h('input', {type:'date', value:importDate(p)});
@@ -127,11 +156,14 @@ function tmImportItem(p){
   setupHybrid(catSelect, catInput, uniqSorted(financeOpts.categories || []));
   setHybridValue(catSelect, catInput, sug.category);
   const amount = h('input', {type:'number', value:Number(p.amount) || 0, inputMode:'numeric'});
-  const splitEditor = createSplitEditor(amount, catSelect, catInput);
+  const splitEditor = createSplitEditor(amount, catSelect, catInput, {memo:sug.fromReceipt});
+  // レシートの内訳の案：先頭がメインのカテゴリ（金額は合計の残り）、2件目からを内訳に入れる
+  if(sug.items.length > 1) splitEditor.set(sug.items.slice(1));
+  const itemsTotal = sug.items.reduce((s, it)=>s + it.amount, 0);
   const paySelect = h('select');
   const payInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しい支払い方法を入力'});
-  setupHybrid(paySelect, payInput, uniqSorted([...(financeOpts.payments || []), 'クレジットカード']));
-  setHybridValue(paySelect, payInput, sug.payment || 'クレジットカード');
+  setupHybrid(paySelect, payInput, uniqSorted([...(financeOpts.payments || []), ...(fromReceiptOnly ? [] : ['クレジットカード'])]));
+  setHybridValue(paySelect, payInput, sug.payment || (fromReceiptOnly ? '' : 'クレジットカード'));
   const memo = h('input', {type:'text', value:sug.memo, placeholder:'例：サブスクのサービス名'});
   const chips = h('div', {class:'chips', id:'fi-tags-chips'});
   const tagInput = h('input', {type:'text', id:'fi-tags-input', placeholder:'新しいタグを入力して改行で追加'});
@@ -160,8 +192,11 @@ function tmImportItem(p){
   tmBody.append(
     h('div', {class:'import-info'},
       h('div', {class:'top'}, h('span', {}, p.merchant || '店名不明'), h('b', {}, `¥${(Number(p.amount) || 0).toLocaleString()}`)),
-      h('div', {class:'sub'}, [`利用 ${importWhen(p)}`, p.kind, p.card].filter(Boolean).join(' ・ '))),
+      h('div', {class:'sub'}, [`利用 ${importWhen(p)}`, p.kind, p.card, fromReceiptOnly ? 'レシートから' : ''].filter(Boolean).join(' ・ ')),
+      p.receiptId ? photoLinks(p.receiptFiles) : ''),
     dupBox,
+    sug.fromReceipt ? h('p', {class:'tm-note tm-lead'}, 'レシートから読み取った内訳を入れています。写真と見比べて直してください。'
+      + (sug.items.length && itemsTotal !== (Number(p.amount) || 0) ? `（レシートの内訳の合計 ¥${itemsTotal.toLocaleString()} と金額が違います）` : '')) : '',
     field('日付', date),
     field('カテゴリ', catSelect, catInput),
     field('金額（円）', amount),

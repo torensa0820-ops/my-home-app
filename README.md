@@ -15,12 +15,22 @@
 | 家計簿 | 支出の記録（日付・支払い方法を指定できる）、グラフ（月の合計・前月との差・1日あたり、月別の支出をカテゴリ別に積み上げた棒グラフ、選んだ月のカテゴリ別・支払い方法別の内訳。絞り込みも反映される）、1回の会計をカテゴリごとに分けて記録（内訳の分割）、履歴（30件ずつ表示・月別合計）、記録の編集・削除、カテゴリ・タグでの絞り込み（全記録を一度に取得してアプリ側で絞り込むので、すぐ反映される。合計も絞り込んだ分だけになる）、カード利用の取り込み（三井住友カードの利用通知メールから読み取った利用を「確認待ち」に出し、1件ずつ確認して登録。お店ごとに前回の分類を候補にし、同じ金額の記録が近い日にあれば「登録済みかも」と表示する） |
 | 家事 | 周期（N日ごと・N週ごと・毎月何日・毎月第何週何曜日・完了からN日後）と時刻の設定、長押しで完了すると次の予定日時へ進む、家事の編集・削除 |
 | 共通 | タグ管理（名称変更・統合・一括削除・一括付与）、登録パネルを開いたまま一覧をタップするとフォームに入力 |
+| レシート | ヘッダーのカメラのボタンからレシート・クーポン（割引券）を撮影（アルバムからも選べる。長いレシートは「続きを撮る」で同じ1件に写真を足す）。写真は縮めて Google ドライブに保存し、毎晩 0:00 に Claude のスケジュールタスクが読み取って、次の3か所に反映する。撮影画面では今日撮った分と未読の件数を見られ、未読の写真は取り消せる |
+| 　在庫 | 「レシートから」：Claude が勧める新しい品目（確認待ち）を直して「在庫に追加」か「追加しない」。在庫に登録済み（タグ「ストック」）の品目は Claude が自動で足しており、7日以内なら「取り消す」で個数を戻せる |
+| 　家計簿 | カード利用の確認待ちに、レシートから読んだ内訳（カテゴリごとの金額・メモ）・タグ・支払い方法の案を入れ、写真へのリンクを出す。カード利用がない支払い（PayPay・現金）も同じ一覧に出る。「クーポン」：期限の近い順の一覧（まだ使えない物は「10/20から」、期限が3日以内は目立たせる）、「使った」「不要」 |
 
 通知（Discord）：
 
 - 賞味期限：期限が今日〜3日後で、個数が1以上のロットを通知する
 - 家事：時刻を指定した家事は予定時刻に通知する。期限切れの家事と、時刻を指定していない今日の家事は、毎朝 8:00 にまとめて通知する
 - セールチェック：Claude のスケジュールタスクが毎週「セールチェック」シートに追記した結果（Amazon・Yahoo!ショッピングの価格）を、1時間ごとに確認して1回分（`runId`）ずつ通知する。`notifiedAt` が空の行が未送信で、送信できた回の全行に送信日時を書く。何か入っている行（「チャットで確認済み」など）は送らない。先頭のメンションは `gas/sale-notify.js` の `SALE_MENTION`
+- クーポンと確認待ち：毎朝 7:00 に、未使用（`status` が空）のクーポンを次の日に通知する。1回の通知の中では「新しいクーポン」「今日から・明日から使える」「期限が近い」の順に並べ、どの行にも使える期間（`10/20〜10/26`。`validFrom` が空なら `〜10/26まで`）を書く。例：`【クーポン】明日から使える：ベルク 次回100円引き（1,000円以上）10/20〜10/26 ※紙のクーポンを持っていく`
+  - 新しいクーポン：登録後の最初の朝（`notifiedOn` が空のもの。まだ使えない物も含む）
+  - 使える期間が先のもの：`validFrom` の前日（明日から使える）と当日（今日から使える）
+  - 期限：`validUntil` の3日前・前日・当日（あと3日・明日まで・今日まで）
+  - 通知したクーポンの `notifiedOn` に今日の日付を書き、同じ日に二重に通知しない。期限を過ぎた未使用のクーポンは `status` を `expired` にする
+  - 最後に「確認待ち：家計簿 n件・在庫 n件」を1行添える（0件の項目は書かない）。通知するクーポンも確認待ちもなければ送らない
+  - 先頭のメンションは `gas/receipt.js` の `COUPON_MENTION`、行末の一言は `COUPON_REMINDER`
 
 ## ファイル構成
 
@@ -34,7 +44,10 @@ js/                   画面の処理。index.html で上から順に読み込�
   stock.js            在庫
   finance.js          家計簿
   finance-chart.js    家計簿のグラフ（手元の全記録から描く）
-  finance-import.js   家計簿のカード利用の取り込み（確認待ちの一覧と確認画面）
+  finance-import.js   家計簿のカード利用の取り込み（確認待ちの一覧と確認画面。レシートから読んだ内訳の案も入れる）
+  stock-import.js     在庫の「レシートから」（確認待ちの追加・追加しない、自動追加の取り消し）
+  coupon.js           クーポンの一覧（使った・不要）
+  receipt.js          レシート・クーポンの撮影（写真を縮めて送る、今日撮った分）
   chore.js            家事
   main.js             タブ切り替え、再読み込みボタン、起動時のデータ読み込み
 apple-touch-icon.png  ホーム画面のアイコン（180×180）
@@ -50,6 +63,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
   notify.js           Discord への送信、賞味期限の通知
   finance-import.js   カード利用の取り込み（確認待ちの取得・登録・スキップ、お店ごとの取込ルール）
   sale-notify.js      セールチェックの結果（「セールチェック」シート）の通知
+  receipt.js          レシート・クーポンの写真の保存、在庫取込・クーポンの一覧と操作、毎朝のクーポンの通知
 gas-mail/             カード利用通知メールの読み取り。通知受け取り専用の Gmail アカウントで動かす別の GAS（くらしログの GAS とは別）
   Code.js             メールを読み、「取込待ち」シートに追加する（10分ごと）
   appsscript.json     GAS の設定
@@ -109,8 +123,17 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 | `receivedAt` | メールを受信した日時 |
 | `status` | 空＝確認待ち、`registered`＝登録済み、`skipped`＝登録しない、`error`＝読み取れなかったメール |
 | `note` | 処理した日時や、読み取れなかったメールの件名 |
+| `suggestItems` | レシートから読んだ内訳の案（JSON の配列）。例：`[{"category":"食費","amount":4246},{"category":"日用品","amount":547,"memo":"大型ポリ袋"}]`。先頭がメインのカテゴリ（画面では合計からほかの内訳を引いた残りになる）。`memo` はその内訳だけのメモ |
+| `suggestTags` | タグの案（`,` 区切り） |
+| `suggestMemo` | メモの案 |
+| `suggestPayment` | 支払い方法の案（`PayPay`・`現金` など） |
+| `receiptId` | レシートシートの `id`（画面に写真へのリンクを出す） |
 
 家計簿に登録した記録の `sourceId` 列には、取込待ちの `id` が入る。
+
+- `suggestItems` 〜 `receiptId` の5列は、レシートの読み取りのために末尾に足した列（なければ写真を受け取ったときと `setupReceiptTriggers` で GAS が足す）。値があれば、画面の入力欄の初期値として取込ルールより優先する
+- `gas-mail/` は先頭10列（`id` 〜 `note`）を列の位置で書き込む。末尾に列を足しても壊れないが、先頭10列の順番は変えないこと
+- カード利用がない支払い（PayPay・現金）は、Claude が `source`=`receipt` の行を追加する。`id` は `receipt:レシートのid`、`card`・`kind` は空、`usedAt` に購入日時、`merchant` に店名、`amount` に合計、`receivedAt` に書き込んだ日時を入れる
 
 ### 取込ルール（1行＝1店）
 
@@ -136,6 +159,54 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 
 `rule`・`nextDue`・`notifiedFor` などの列がなければ、最初に登録したときに自動で追加される。
 
+### レシート（1行＝1回の撮影）
+
+アプリで撮った写真の記録。長いレシートを複数枚に分けて撮ったときは1行にまとめる。`store` 以降は Claude が書く（アプリは表示だけ）。
+
+| 列 | 内容 |
+| --- | --- |
+| `id` | UUID |
+| `kind` | `レシート` / `クーポン` |
+| `fileIds` | ドライブのファイル ID（複数枚は `,` 区切り。撮った順） |
+| `uploadedAt` | 撮影（送信）した日時 |
+| `status` | 空＝未読（Claude が読む）、`read`、`error`、`skipped`（アプリで取り消したものも `skipped`） |
+| `store` | 店名 |
+| `purchasedAt` | 購入日時 |
+| `total` | 合計 |
+| `payment` | 支払い方法 |
+| `importId` | 内訳の案を書いた取込待ちの行の `id` |
+| `note` | 読み取りのメモ・エラーの内容 |
+| `processedAt` | Claude が読み取った日時 |
+
+写真はスクリプトプロパティ `RECEIPT_FOLDER_ID` のフォルダに保存する（なければマイドライブに「くらしログ/レシート」を作って ID を保存する）。ファイル名は `20261018-193005_レシート_1a2b3c4d_1.jpg`（撮影日時・種類・id の先頭8文字・何枚目か）。
+
+### 在庫取込（1行＝1品目）
+
+| 列 | 内容 |
+| --- | --- |
+| `id` | UUID |
+| `receiptId` | レシートシートの `id` |
+| `itemName`・`qty`・`location`・`tags` | 品目・個数・収納場所・タグ（アプリで「在庫に追加」したときは直した値で上書きする） |
+| `kind` | `自動`（在庫シートにタグ「ストック」で登録済みの品目。Claude が在庫に直接足す）／ `確認`（新しく在庫管理したほうがよさそうな品目） |
+| `status` | `自動追加`（Claude が在庫に足し済み）、空＝確認待ち、`added`、`dismissed`、`undone`（自動追加をアプリで取り消した） |
+| `reason` | Claude が追加を勧める理由 |
+| `stockRowId` | 自動追加で足した在庫シートの行（ロット）の `id`。取り消すとこのロットの個数を `qty` だけ減らす（0 未満にはしない） |
+| `createdAt`・`updatedAt` | 作成日時・アプリで処理した日時。自動追加は `createdAt` から7日間アプリに出す |
+
+### クーポン（1行＝1枚）
+
+| 列 | 内容 |
+| --- | --- |
+| `id` | UUID |
+| `receiptId`・`fileId` | レシートシートの `id` と、クーポンが写った写真のファイル ID |
+| `store` | 店名 |
+| `title` | 例：`次回 100円引き` |
+| `detail` | 対象・条件（`1,000円以上` など） |
+| `validFrom`・`validUntil` | 使える期間（`yyyy-MM-dd`。`validFrom` は空のこともある）。GAS が作ったシートでは文字列の書式にしてある |
+| `status` | 空＝未使用、`used`、`dismissed`、`expired`（期限切れ。毎朝の通知で付ける） |
+| `notifiedOn` | 最後に通知した日（`yyyy-MM-dd`）。空なら「新しいクーポン」としてまだ通知していない |
+| `createdAt` | 作成日時 |
+
 ### 文字の正規化（保存時に NFKC で正規化する）
 
 アプリから保存する文字列は、Unicode の NFKC 正規化と前後の空白の除去（`normText`：`String(s ?? '').normalize('NFKC').trim()`）をしてから書き込む。英数字・記号は半角、カタカナは全角にそろう（例：`（ＳＨＡＲＰ）` → `(SHARP)`、`ＡＢＣ　１２３` → `ABC 123`、`ﾃｨｯｼｭ` → `ティッシュ`）。チャットからスプレッドシートに書き込むときも同じ形にそろえる。
@@ -154,11 +225,14 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 
 | action | 返すもの |
 | --- | --- |
-| `getAll` | 起動時に使う。`stock`・`tasks`・`financeOptions`・`finance`（全件）をまとめて返す |
+| `getAll` | 起動時に使う。`stock`・`tasks`・`financeOptions`・`finance`（全件）・`imports`・`stockImports`・`coupons` をまとめて返す（在庫取込とクーポンは行数が少なく、起動がほとんど遅くならないので含める） |
 | `getStock` | 在庫の全行 |
 | `getTasks` | 家事の全行 |
 | `getFinanceOptions` | 家計簿のカテゴリ・支払い方法（`payments`）・タグの候補と、タグごとの件数 |
-| `getImports` | カード利用の確認待ち（`pending`。`status` が空と `error` の行）と、お店ごとの入力候補（`rules`）。`getAll` にも `imports` として入る |
+| `getImports` | カード利用の確認待ち（`pending`。`status` が空と `error` の行。`receiptId` があればレシートの写真のファイル ID を `receiptFiles` に入れる）と、お店ごとの入力候補（`rules`）。`getAll` にも `imports` として入る |
+| `getReceipts` | 今日撮った分（`today`。`count` に写真の枚数）と、まだ読まれていない件数（`unread`） |
+| `getStockImports` | 在庫取込の確認待ち（`pending`）と、7日以内の自動追加（`auto`）。どちらも `receiptFiles` 付き |
+| `getCoupons` | 未使用で期限を過ぎていないクーポン（期限の近い順） |
 | `getFinance` | 家計簿の履歴。`offset`・`limit`（`all` で全件）で範囲、`tags`（`,` 区切り）・`mode`（`any` / `all`）でタグ、`categories`（JSON の配列。いずれかに一致）でカテゴリの絞り込み。`monthTotals` に月別合計 |
 
 ### 書き込み（POST。本文は JSON）
@@ -169,11 +243,17 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 | `stock` | `bump` | ロットの個数を増減（`id`・`value`） |
 | `stock` | `editItem` | 商品の編集（商品情報と、賞味期限ごとの個数をまとめて保存） |
 | `stock` | `delete` | 商品の全ロットを削除（`target` に商品名） |
-| `finance` | なし | 記録の追加。`items`（`[{category, amount}]`）が2件以上なら、同じ `groupId` の行に分けて追加する。`date`・`memo`・`tags`・`payment` は全行共通 |
+| `finance` | なし | 記録の追加。`items`（`[{category, amount, memo}]`。`memo` は任意）が2件以上なら、同じ `groupId` の行に分けて追加する。`date`・`tags`・`payment` は全行共通。`memo` は内訳の `memo` がなければ全体の `memo` |
 | `finance` | `importConfirm` | 確認待ちを家計簿に登録（`id` と、記録の追加と同じ `date`・`items`・`memo`・`tags`・`payment`）。`remember` なら取込ルールに保存。取込待ちの `status` を `registered` にする |
 | `finance` | `importSkip` | 確認待ちを登録しない（`id`）。`status` を `skipped` にする |
 | `finance` | `edit` / `delete` | 記録の編集・削除（`row` と `date`・`createdAt` で行を確認してから行う）。編集の `values.splits`（`[{category, amount}]`）で内訳を分けられる（この記録の金額は合計から内訳を引いた残り）。`groupId` のある記録の日付と支払い方法は、同じ会計のほかの行にも反映する |
 | `tag` | `rename` / `delete` / `assign` | タグの名称変更・一括削除・一括付与（`sheet` は `stock` / `finance`） |
+| `receipt` | `upload` | 写真を1枚受け取り、ドライブに保存する（`kind`：`レシート` / `クーポン`、`image`：JPEG の base64。1枚 5MB まで）。`receiptId` があればその1件（未読のものだけ）に写真を足す。返り値に `id`・`count`（その1件の枚数） |
+| `receipt` | `skip` | まだ読まれていない1件を読まないようにする（`id`）。`status` を `skipped` にする |
+| `stockImport` | `add` | 確認待ちを在庫に登録する（`id`・`itemName`・`qty`・`location`・`tags`・`expirationDate`。在庫の登録と同じ処理）。`status` を `added` にする |
+| `stockImport` | `dismiss` | 確認待ちを追加しない（`id`）。`status` を `dismissed` にする |
+| `stockImport` | `undo` | 自動追加を取り消す（`id`）。`stockRowId` のロットの個数を `qty` だけ減らし、`status` を `undone` にする。ロットが見つからなければ個数は変えず、返り値の `message` で知らせる |
+| `coupon` | `used` / `dismiss` | クーポンを使った（`used`）・不要（`dismissed`）にする（`id`） |
 | `todo` | `add` / `done` / `edit` / `delete` | 家事の登録・完了・編集・削除 |
 
 返り値は `{ "status": "success" }` または `{ "status": "error", "message": "..." }`。
@@ -188,9 +268,12 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
    - `setupChoreTrigger` を一度実行する（`checkChores` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）
    - `checkExpirationAndNotifyDiscord` を1日1回実行する時間主導型トリガーを作る
    - `setupSaleCheckTrigger` を一度実行する（`notifySaleCheck` を1時間ごとに実行するトリガーが作られる。何度実行しても重複しない）
+   - `setupReceiptTriggers` を一度実行する（`notifyCouponsAndPending` を毎朝 7:00 に実行するトリガーが作られる。何度実行しても重複しない）。あわせて「レシート」「在庫取込」「クーポン」シートと取込待ちの列を用意し、写真の保存先のフォルダを作る。初回はドライブの権限の許可を求められる
 4. Web アプリとしてデプロイし、URL を `js/common.js` の `GAS_URL` に入れる
 
-通知のテストは `debugForceDiscordNotify` を実行する。セールチェックの通知文は `debugSaleCheckPreview` でログに出せる（送信も `notifiedAt` の書き込みもしない）。
+通知のテストは `debugForceDiscordNotify` を実行する。セールチェックの通知文は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
+
+レシートの読み取りは、アプリの外で用意した Claude のスケジュールタスクが毎晩 0:00 に行う。「レシート」シートの `status` が空の行の写真（`fileIds`）を読み、上の「スプレッドシートの構成」のとおりに「レシート」「在庫取込」「取込待ち」「クーポン」シートへ書き込む（在庫の自動追加では在庫シートの個数も足し、足したロットの `id` を `stockRowId` に入れる）。
 
 ### 2. カード利用通知メールの取り込み（gas-mail）
 
@@ -253,4 +336,5 @@ clasp deploy -i AKfycbzCsng8oDxwQnSnUlxz1m3ANECSSH1tkmK1GIhowAkyhAM_ao7BydA1venB
   - 書き込み（`postToGas`）：60秒まで待つ。時間切れでも GAS 側では処理が済んでいることがあり、再試行すると二重に書き込むおそれがあるので、自動では再試行しない
   - 失敗したときは、一覧に理由（時間切れ・通信エラー・GAS のエラーの内容）と「もう一度読み込む」ボタンを出す
 - **日付**：GAS は `Asia/Tokyo` で動く。家計簿の日付と家事の予定日時は、日本時間で計算する
+- **写真**：送る前に画面で長い辺 1600px・JPEG（品質 0.8）に縮める（iPhone の HEIC もここで JPEG になる）。1枚ずつ送るので、時間切れになっても撮った写真がまとめて失われることはない。時間切れのときは、撮影画面の「今日撮った分」で届いたか確かめる
 - **動作確認**：手元では Edge のヘッドレスモードで `index.html` を開いてスクリーンショットを撮れる（`msedge --headless=new --screenshot=... --window-size=520,900 file:///.../index.html`）。ヘッドレスの Edge は幅が約500px より狭くならない
