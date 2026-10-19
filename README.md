@@ -306,6 +306,10 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 
 1. `gas/` フォルダで `clasp push` する
 2. GAS エディタの「プロジェクトの設定」→「スクリプト プロパティ」に `DISCORD_WEBHOOK_URL`（Discord の Webhook URL）を追加する
+   - 通知を別のチャンネルに分けたいときは、そのチャンネルの Webhook URL を次のプロパティに追加する（未設定のものは `DISCORD_WEBHOOK_URL` に送られる）
+     - `DISCORD_WEBHOOK_URL_EXPIRATION`：賞味期限アラート
+     - `DISCORD_WEBHOOK_URL_COUPON`：クーポンの期限と確認待ちの件数
+     - `DISCORD_WEBHOOK_URL_SALE`：セールチェック
 3. GAS エディタで次のトリガーを用意する
    - `setupChoreTrigger` を一度実行する（`checkChores` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）
    - `checkExpirationAndNotifyDiscord` を1日1回実行する時間主導型トリガーを作る

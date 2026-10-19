@@ -24,7 +24,7 @@ function notifySaleCheck() {
     const col = sheet.getDataRange().getValues()[0].indexOf("notifiedAt") + 1;
     runs.forEach(run => {
       // 1回分が複数のメッセージに分かれたときは、途中で失敗すると次回は最初から送り直す
-      buildSaleMessages(run).forEach(msg => sendDiscordMessage(msg));
+      buildSaleMessages(run).forEach(msg => sendDiscordMessage(msg, "SALE"));
       const ts = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss");
       run.rows.forEach(r => sheet.getRange(r.row, col).setValue(ts));
       Logger.log(`セールチェック ${run.runId} を通知しました（${run.rows.length}行）。`);

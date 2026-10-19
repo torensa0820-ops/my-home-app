@@ -504,7 +504,7 @@ function notifyCouponsAndPending() {
       Logger.log("通知するクーポンも確認待ちもありませんでした。");
       return;
     }
-    saleSplitMessages(notice.lines, SALE_DISCORD_LIMIT).forEach(msg => sendDiscordMessage(msg));
+    saleSplitMessages(notice.lines, SALE_DISCORD_LIMIT).forEach(msg => sendDiscordMessage(msg, "COUPON"));
     // 送れたクーポンだけ、今日通知したことを書く（失敗したら書かず、次回また送る）
     notice.notified.forEach(o => receiptWrite(notice.sheet, notice.headers, o._row, { notifiedOn: notice.today }));
     Logger.log(`クーポン ${notice.notified.length}件と確認待ちを通知しました。`);

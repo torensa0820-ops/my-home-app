@@ -2,9 +2,12 @@
 // 通知：Discord への送信と、賞味期限が近い食材の通知
 // =========================================================
 
-// Discord Webhook URLはスクリプトプロパティ「DISCORD_WEBHOOK_URL」から読み込む
-function getDiscordWebhookUrl() {
-  const url = PropertiesService.getScriptProperties().getProperty("DISCORD_WEBHOOK_URL");
+// Discord Webhook URLはスクリプトプロパティから読み込む
+// channel を渡すと「DISCORD_WEBHOOK_URL_<channel>」（例：DISCORD_WEBHOOK_URL_EXPIRATION）を使い、
+// それが未設定なら「DISCORD_WEBHOOK_URL」に送る（チャンネルを分けたい通知だけ設定すればよい）
+function getDiscordWebhookUrl(channel) {
+  const props = PropertiesService.getScriptProperties();
+  const url = (channel && props.getProperty(`DISCORD_WEBHOOK_URL_${channel}`)) || props.getProperty("DISCORD_WEBHOOK_URL");
   if (!url) throw new Error("スクリプトプロパティ DISCORD_WEBHOOK_URL が設定されていません。");
   return url;
 }
@@ -58,7 +61,7 @@ function checkExpirationAndNotifyDiscord() {
 
   const message = "@everyone 【賞味期限アラート】期限が迫っている食材があります！\n" + lines.join("\n");
 
-  sendDiscordMessage(message);
+  sendDiscordMessage(message, "EXPIRATION");
 }
 
 // 【修正】スプレッドシートの表記に関わらず、確実に日本時間のDateオブジェクトに正規化する
@@ -82,9 +85,9 @@ function parseExpirationDate(raw) {
   return null;
 }
 
-// Discord Webhookへメッセージを送信
+// Discord Webhookへメッセージを送信（channel で送り先を選ぶ。省略すると DISCORD_WEBHOOK_URL）
 // 429（レート制限）の場合は待ってから再送し、最終的に失敗したらエラーを投げる
-function sendDiscordMessage(content) {
+function sendDiscordMessage(content, channel) {
   const MAX_RETRIES = 3;
   const options = {
     method: "post",
@@ -92,7 +95,7 @@ function sendDiscordMessage(content) {
     payload: JSON.stringify({ content: content }),
     muteHttpExceptions: true
   };
-  const url = getDiscordWebhookUrl();
+  const url = getDiscordWebhookUrl(channel);
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     const res = UrlFetchApp.fetch(url, options);
