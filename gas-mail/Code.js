@@ -68,6 +68,7 @@ function mailToRows(msg, base) {
 // 本文（HTML メールをテキストにしたもの）から利用日時・店名・取引の種類・金額を探す。次の2つの形に対応する
 //   項目ごとの行：「◇利用日:yyyy/MM/dd HH:mm」「◇利用先:店名」「◇利用取引:買物」「◇利用金額:1,550円」
 //   1行に並ぶ形：「ご利用日時：yyyy/MM/dd HH:mm 店名（買物） 545円」
+//   金額が「3,153.00 JPY」のように通貨コードで書かれる形（Uber Eats など。JPY 以外の通貨は円の金額が分からないので読み取らない）
 // 戻り値：[{usedAt:"yyyy/MM/dd HH:mm", merchant, kind, amount, card}]
 function parseCardMail(body) {
   const text = String(body || "").normalize("NFKC").replace(/\r/g, "");
@@ -77,7 +78,7 @@ function parseCardMail(body) {
   const pad = s => String(s).padStart(2, "0");
   const result = [];
   const add = (m, merchant, kind, amountText) => {
-    const amount = Number(amountText.replace(/,/g, ""));
+    const amount = Math.round(Number(amountText.replace(/,/g, ""))); // 「3,153.00」のような小数つきも整数の円にする
     if (!merchant || !(amount > 0)) return;
     result.push({
       usedAt: `${m[1]}/${pad(m[2])}/${pad(m[3])} ${pad(m[4])}:${m[5]}`,
@@ -86,10 +87,10 @@ function parseCardMail(body) {
   };
   let m;
   // 項目ごとの行（「利用日時」ではなく「利用日」の直後に「:」が来るものだけ）
-  const lines = /利用日\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})[^\n]*\n\s*◇?\s*利用先\s*:([^\n]*)\n\s*◇?\s*利用取引\s*:([^\n]*)\n\s*◇?\s*利用金額\s*:\s*([\d,]+)\s*円/g;
+  const lines = /利用日\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})[^\n]*\n\s*◇?\s*利用先\s*:([^\n]*)\n\s*◇?\s*利用取引\s*:([^\n]*)\n\s*◇?\s*利用金額\s*:\s*([\d,]+(?:\.\d+)?)\s*(?:円|JPY)/g;
   while ((m = lines.exec(text))) add(m, m[6].trim(), m[7].trim(), m[8]);
   if (result.length) return result;
-  const inline = /ご利用日時\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})([\s\S]*?)([\d,]+)\s*円/g;
+  const inline = /ご利用日時\s*:\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})([\s\S]*?)([\d,]+(?:\.\d+)?)\s*(?:円|JPY)/g;
   while ((m = inline.exec(text))) {
     // 日時と金額の間の文字が「店名（取引の種類）」。改行・余分な空白を除く
     const between = m[6].replace(/\s+/g, " ").trim();
