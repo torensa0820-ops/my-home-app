@@ -290,7 +290,7 @@ function tmAssignView(tag){
     if(!groups.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
     groups.forEach(g=>{
       const tags = splitTags(g.tags);
-      const sub = [g.location, tags.join(', ')].filter(Boolean).join(' ・ ') || '収納場所・タグなし';
+      const sub = [stockCategoryOf(g), g.location, tags.join(', ')].filter(Boolean).join(' ・ ');
       tmBody.append(makeRow(g.name, g.name, g.name, sub, tags.includes(tag)));
     });
     return;

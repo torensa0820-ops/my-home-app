@@ -15,7 +15,7 @@ const SHEET_STOCK_IMPORT = "在庫取込";
 const SHEET_COUPON = "クーポン";
 const SHEET_RECEIPT_ITEMS = "レシート明細";
 const RECEIPT_HEADERS = ["id", "kind", "fileIds", "uploadedAt", "status", "store", "purchasedAt", "total", "payment", "importId", "note", "processedAt"];
-const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt"];
+const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt", "category"];
 // レシート明細：レシートの全品目と、在庫についての判断（decision：自動追加 / 確認 / 対象外）と理由。Claude が書く
 const RECEIPT_ITEM_HEADERS = ["id", "receiptId", "itemName", "qty", "price", "matchedStock", "decision", "reason", "stockImportId", "createdAt", "updatedAt"];
 const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt", "repeat"];
@@ -322,7 +322,7 @@ function getStockImports() {
 }
 
 // 在庫取込の操作（data.action）
-//   add     … 確認待ちを在庫に登録する（在庫の登録と同じ処理。itemName・qty・location・tags・expirationDate は画面で直した値）。status=added
+//   add     … 確認待ちを在庫に登録する（在庫の登録と同じ処理。itemName・qty・category・location・tags・expirationDate は画面で直した値）。status=added
 //   dismiss … 確認待ちを追加しない。status=dismissed
 //   undo    … 自動追加を取り消す。stockRowId のロットの個数を qty だけ減らす（0 未満にはしない）。status=undone
 // 戻り値：画面のトーストに出す文（なければ空）
@@ -345,10 +345,10 @@ function stockImportAction(ss, data) {
       }
       const qty = Number(data.qty);
       if (!(qty > 0)) throw new Error("個数を入れてください。");
-      updateStock(ss, { target: data.itemName, value: qty, location: data.location, tags: data.tags, expirationDate: data.expirationDate || "" });
-      receiptWrite(sheet, t.headers, found._row, {
-        status: "added", updatedAt: now, itemName: normText(data.itemName), qty: qty, location: normText(data.location), tags: normTags(data.tags),
-      });
+      updateStock(ss, { target: data.itemName, value: qty, category: data.category, location: data.location, tags: data.tags, expirationDate: data.expirationDate || "" });
+      const written = { status: "added", updatedAt: now, itemName: normText(data.itemName), qty: qty, location: normText(data.location), tags: normTags(data.tags) };
+      if (t.headers.indexOf("category") !== -1) written.category = normCategory(data.category);
+      receiptWrite(sheet, t.headers, found._row, written);
       return "";
     }
 

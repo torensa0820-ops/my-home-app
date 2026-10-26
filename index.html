@@ -38,6 +38,7 @@
         <div class="section-title">登録中の商品</div>
         <button type="button" id="stock-edit-toggle" class="edit-toggle">整理</button>
       </div>
+      <div class="cat-tabs" id="stock-cats" role="tablist" aria-label="カテゴリ"></div>
       <div class="filter-bar" id="stock-filter"></div>
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
 
@@ -48,11 +49,16 @@
           <h2 id="stock-compose-title">新しく登録する</h2>
           <button type="button" class="text-btn compose-close">閉じる</button>
         </div>
-        <p class="compose-hint">一覧の商品をタップすると、商品名・収納場所・タグを入力できます</p>
+        <p class="compose-hint">一覧の商品をタップすると、商品名・カテゴリ・収納場所・タグを入力できます</p>
         <div class="compose-body">
           <form id="stock-form">
             <div class="field"><label>商品名</label><input type="text" id="s-name" required placeholder="例：ティッシュ"></div>
             <div class="row2"><div class="field"><label>個数</label><input type="number" id="s-value" required value="1" inputmode="numeric"></div></div>
+            <div class="field"><label>カテゴリ</label>
+              <select id="s-category-select" class="hybrid-select"></select>
+              <input type="text" id="s-category-input" class="hybrid-input" placeholder="新しいカテゴリを入力">
+              <p class="form-note">未選択なら「未分類」に入ります。最初は選んでいるタブのカテゴリが入ります。</p>
+            </div>
             <div class="field"><label>収納場所</label>
               <select id="s-location-select" class="hybrid-select"></select>
               <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
@@ -65,7 +71,7 @@
             <details>
               <summary>賞味期限・型番（任意）</summary>
               <div class="field" style="margin-top:10px;"><label>賞味期限</label><input type="date" id="s-expiration"><p class="form-note">登録済みの商品名で登録すると、賞味期限が同じなら個数を足し、違えば期限ごとに分けて管理します。</p></div>
-              <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"><p class="form-note">型番を入れた商品は取扱説明書用の登録として扱い、「登録中の商品」には表示しません。</p></div>
+              <div class="field"><label>型番</label><input type="text" id="s-model" placeholder="例：EC-CT12"><p class="form-note">型番を入れた商品は家具・家電や設備の記録として扱い、一覧では個数の＋−の代わりに型番を表示します。</p></div>
             </details>
             <button type="submit" class="submit-btn">この商品を登録</button>
           </form>

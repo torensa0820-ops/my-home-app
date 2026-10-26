@@ -1,4 +1,4 @@
-// 在庫：一覧（賞味期限ごとのロットを商品ごとにまとめて表示）、登録、削除、商品の編集
+// 在庫：カテゴリのタブ、一覧（賞味期限ごとのロットを商品ごとにまとめて表示）、登録、削除、商品の編集
 
 // ---------- 在庫 ----------
 // 在庫は1行＝1ロット（賞味期限ごと）。画面では商品名ごとにまとめて表示する
@@ -14,12 +14,67 @@ function groupStock(){
   return [...map.entries()].map(([name, lots])=>{
     lots.sort((a,b)=>expKey(a).localeCompare(expKey(b)));
     const pick = key=>(lots.find(l=>l[key]) || {})[key] || '';
-    return {name, lots, location:pick('location'), tags:pick('tags'), modelNumber:pick('modelNumber')};
+    return {name, lots, category:pick('category'), location:pick('location'), tags:pick('tags'), modelNumber:pick('modelNumber')};
   });
 }
-// 「登録中の商品」に出す商品。型番を入れた商品は取扱説明書を探すための登録で、個数を増減しないので出さない
-function listedStock(){
-  return groupStock().filter(g=>!g.modelNumber);
+
+// ---------- カテゴリのタブ ----------
+// タブはこの順に並べ（GAS の STOCK_CATEGORIES と同じ）、ほかのカテゴリは五十音順で後ろに足す
+// カテゴリが空の商品は「未分類」に出す。商品のないタブは出さない。最後に選んだタブは端末に覚えておく
+const STOCK_CATEGORIES = ['食品', '日用品', '医薬品', '家具・家電', '住宅設備', 'PC周辺機器'];
+const STOCK_ALL = 'すべて';
+const STOCK_UNCATEGORIZED = '未分類';
+const STOCK_TAB_KEY = 'kurashilog.stockTab';
+let stockTab = STOCK_ALL;
+try { stockTab = localStorage.getItem(STOCK_TAB_KEY) || STOCK_ALL; } catch(_){}
+
+function stockCategoryOf(g){ return g.category || STOCK_UNCATEGORIZED; }
+// カテゴリの入力候補（決まったカテゴリと、登録済みのほかのカテゴリ）
+function stockCategoryOptions(){
+  const extra = uniqSorted(stockCache.map(r=>r.category)).filter(c=>!STOCK_CATEGORIES.includes(c) && c !== STOCK_UNCATEGORIZED);
+  return [...STOCK_CATEGORIES, ...extra];
+}
+// 表示するタブ。覚えていたタブに商品がなければ「すべて」
+function currentStockTab(groups){
+  return stockTab === STOCK_ALL || groups.some(g=>stockCategoryOf(g) === stockTab) ? stockTab : STOCK_ALL;
+}
+// 選んでいるタブの商品
+function stockInTab(){
+  const all = groupStock();
+  const tab = currentStockTab(all);
+  return tab === STOCK_ALL ? all : all.filter(g=>stockCategoryOf(g) === tab);
+}
+function renderStockTabs(groups){
+  const wrap = document.getElementById('stock-cats');
+  wrap.replaceChildren();
+  if(!groups.length) return;
+  const tab = currentStockTab(groups);
+  const counts = {};
+  groups.forEach(g=>{ const c = stockCategoryOf(g); counts[c] = (counts[c] || 0) + 1; });
+  const tabs = [STOCK_ALL, ...stockCategoryOptions().filter(c=>counts[c]), ...(counts[STOCK_UNCATEGORIZED] ? [STOCK_UNCATEGORIZED] : [])];
+  tabs.forEach(c=>wrap.append(h('button', {type:'button', class:'chip' + (c === tab ? ' on' : ''), onclick:()=>selectStockTab(c)},
+    c, h('span', {class:'n'}, String(c === STOCK_ALL ? groups.length : counts[c])))));
+  // 選んでいるタブが横にはみ出していれば、タブの行だけを横にずらして見せる（一覧は縦にずらさない）
+  const on = wrap.querySelector('.on');
+  const r = on.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+  if(r.left < w.left || r.right > w.right) wrap.scrollLeft += r.left - w.left - 16;
+}
+function selectStockTab(c){
+  stockTab = c;
+  try { localStorage.setItem(STOCK_TAB_KEY, c); } catch(_){}
+  renderStockFilterTags();
+  renderStockList();
+  if(!isComposing()) setStockFormCategory();
+}
+// 絞り込みの候補は、選んでいるタブの商品に付いているタグだけ（選んでも0件になるタグを出さない）
+function renderStockFilterTags(){
+  stockFilter.render(uniqSorted(stockInTab().flatMap(g=>splitTags(g.tags))));
+}
+// 登録フォームのカテゴリを、選んでいるタブのカテゴリにする（「すべて」「未分類」なら未選択）
+function setStockFormCategory(){
+  const tab = currentStockTab(groupStock());
+  setHybridValue(document.getElementById('s-category-select'), document.getElementById('s-category-input'),
+    tab === STOCK_ALL || tab === STOCK_UNCATEGORIZED ? '' : tab);
 }
 // 期限の表示（「期限 10/5」）と、3日以内・期限切れの判定
 function expInfo(lot){
@@ -31,18 +86,23 @@ function expInfo(lot){
 }
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
-  const listed = listedStock();
-  if(!listed.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
+  const all = groupStock();
+  renderStockTabs(all);
+  if(!all.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   wrap.innerHTML = '';
-  const groups = listed.filter(g=>stockFilter.matches(g.tags));
+  const showAll = currentStockTab(all) === STOCK_ALL;
+  const groups = stockInTab().filter(g=>stockFilter.matches(g.tags));
   if(stockFilter.active()) stockFilter.setCount(`${groups.length}件`);
   if(!groups.length){ wrap.innerHTML = '<p class="empty-msg">該当する商品がありません</p>'; return; }
   groups.forEach(g=>{
-    const single = g.lots.length === 1;
-    const exp = single ? expInfo(g.lots[0]) : null;
+    // 型番を入れた商品（家具・家電や設備）は個数を増減しないので、＋−を出さず、型番を表示する
+    const model = !!g.modelNumber;
+    const single = model || g.lots.length === 1;
+    const exp = single && !model ? expInfo(g.lots[0]) : null;
+    const text = [showAll ? stockCategoryOf(g) : '', model ? `型番 ${g.modelNumber}` : '', g.location, splitTags(g.tags).join(', ')].filter(Boolean).join(' ・ ');
     const meta = h('div', {class:'card-meta'});
-    if(exp && exp.label) meta.append(h('span', {class:'exp ' + exp.cls}, exp.label), (g.location || g.tags) ? ' ・ ' : '');
-    meta.append([g.location, splitTags(g.tags).join(', ')].filter(Boolean).join(' ・ ') || (exp && exp.label ? '' : '—'));
+    if(exp && exp.label) meta.append(h('span', {class:'exp ' + exp.cls}, exp.label), text ? ' ・ ' : '');
+    meta.append(text || (exp && exp.label ? '' : '—'));
     const info = h('div', {class:'card-info'}, h('div', {class:'card-name'}, g.name), meta);
     const card = h('div', {class:'card' + (single ? '' : ' multi')});
 
@@ -53,7 +113,9 @@ function renderStockList(){
       return;
     }
     info.addEventListener('click', ()=>isComposing() ? fillStockForm(g, card) : openItemEditor(g));
-    if(single){
+    if(model){
+      card.append(info, h('span', {class:'card-chev'}, '›'));
+    } else if(single){
       card.append(info, makeStepper(g.lots[0]));
     } else {
       const total = h('div', {class:'card-total'});
@@ -173,11 +235,12 @@ function loadStock(preloaded){
     .then(rows=>{
       stockCache = rows;
       renderStockList();
-      // 収納場所・タグの候補はスプレッドシートに登録済みの値から作る
+      // カテゴリ・収納場所・タグの候補はスプレッドシートに登録済みの値から作る（カテゴリは決まったカテゴリも出す）
+      setupHybrid(document.getElementById('s-category-select'), document.getElementById('s-category-input'), stockCategoryOptions());
+      setStockFormCategory();
       setupHybrid(document.getElementById('s-location-select'), document.getElementById('s-location-input'), uniqSorted(rows.map(r=>r.location)));
       stockTagPicker.render(uniqSorted(rows.flatMap(r=>splitTags(r.tags))));
-      // 絞り込みの候補は「登録中の商品」に出る商品のタグだけ（選んでも0件になるタグを出さない）
-      stockFilter.render(uniqSorted(listedStock().flatMap(g=>splitTags(g.tags))));
+      renderStockFilterTags();
     })
     .catch(err=>{ document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>reloadList('stock-list', loadStock))); });
 }
@@ -186,19 +249,21 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
   const name = normText(document.getElementById('s-name').value);
   if(!name) return;
   const value = Number(document.getElementById('s-value').value) || 0;
+  const category = getHybridValue(document.getElementById('s-category-select'), document.getElementById('s-category-input'));
   const location = getHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'));
   const tags = stockTagPicker.value();
   const expirationDate = document.getElementById('s-expiration').value;
   const modelNumber = normText(document.getElementById('s-model').value);
-  postToGas({type:'stock', target:name, value, location, tags, expirationDate, modelNumber})
+  postToGas({type:'stock', target:name, value, category, location, tags, expirationDate, modelNumber})
     .then(res=>{
       if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
       else toast(res.message || '登録に失敗しました');
     }).catch(err=>toast(errMsg(err)));
 });
-// 一覧の商品をタップすると、商品名・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
+// 一覧の商品をタップすると、商品名・カテゴリ・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
 function fillStockForm(g, card){
   document.getElementById('s-name').value = g.name;
+  setHybridValue(document.getElementById('s-category-select'), document.getElementById('s-category-input'), g.category);
   setHybridValue(document.getElementById('s-location-select'), document.getElementById('s-location-input'), g.location);
   stockTagPicker.set(splitTags(g.tags));
   document.getElementById('s-model').value = g.modelNumber || '';
@@ -214,6 +279,10 @@ function tmItemView(g){
   tmTitle.textContent = '商品を編集';
   const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const name = h('input', {type:'text', value:g.name});
+  const catSelect = h('select');
+  const catInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しいカテゴリを入力'});
+  setupHybrid(catSelect, catInput, stockCategoryOptions());
+  setHybridValue(catSelect, catInput, g.category);
   const locSelect = h('select');
   const locInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しい収納場所を入力'});
   setupHybrid(locSelect, locInput, uniqSorted(stockCache.map(r=>r.location)));
@@ -245,6 +314,7 @@ function tmItemView(g){
 
   tmBody.append(
     field('商品名', name),
+    field('カテゴリ', catSelect, catInput),
     field('収納場所', locSelect, locInput),
     field('タグ（複数選択可）', chips, tagInput,
       h('p', {class:'tm-note'}, 'タグ「ストック」を付けると、撮ったレシートにあれば夜に自動で個数を足します。')),
@@ -273,6 +343,7 @@ function tmItemView(g){
     tm.busy = true;
     postToGas({
       type:'stock', action:'editItem', oldName:g.name, itemName,
+      category:getHybridValue(catSelect, catInput),
       location:getHybridValue(locSelect, locInput),
       tags:picker.value(),
       modelNumber:normText(model.value),
