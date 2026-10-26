@@ -66,6 +66,7 @@
             <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="stock">管理</button></div>
               <div id="s-tags-chips" class="chips"></div>
               <input type="text" id="s-tags-input" placeholder="新しいタグを入力して改行で追加">
+              <p class="form-note">カテゴリを選ぶと、そのカテゴリで使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。</p>
               <p class="form-note">タグ「ストック」を付けた商品は、撮ったレシートにあれば夜に自動で個数を足します。</p>
             </div>
             <details>
@@ -87,6 +88,7 @@
           <button type="button" data-view="chart">グラフ</button>
         </div>
       </div>
+      <div class="cat-tabs" id="finance-cats" role="tablist" aria-label="カテゴリ"></div>
       <div class="filter-bar" id="finance-filter"></div>
       <div id="finance-imports"></div>
       <div id="finance-coupons"></div>
@@ -118,6 +120,7 @@
             <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
               <div id="f-tags-chips" class="chips"></div>
               <input type="text" id="f-tags-input" placeholder="新しいタグを入力して改行で追加">
+              <p class="form-note">カテゴリを選ぶと、そのカテゴリ（内訳を分けたときは内訳のカテゴリも）で使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。</p>
             </div>
             <button type="submit" class="submit-btn">記録する</button>
           </form>

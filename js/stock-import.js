@@ -139,7 +139,7 @@ function tmStockImportItem(it){
     field('個数', qty),
     field('カテゴリ', catSelect, catInput),
     field('収納場所', locSelect, locInput),
-    field('タグ（複数選択可）', chips, tagInput),
+    field('タグ（複数選択可）', chips, tagInput, h('p', {class:'tm-note'}, TAG_LIMIT_NOTE)),
     field('賞味期限（任意）', exp),
     h('div', {class:'tm-section tm-danger'},
       h('h3', {}, '追加しない'),
@@ -150,7 +150,8 @@ function tmStockImportItem(it){
   const picker = createTagPicker('si-tags-chips', 'si-tags-input');
   const current = splitTags(it.tags || (g0 ? g0.tags : ''));
   current.forEach(t=>picker.select(t));
-  picker.render(uniqSorted([...stockCache.flatMap(r=>splitTags(r.tags)), ...current]));
+  picker.render(uniqSorted([...stockAllTags(), ...current]));
+  stockTagSync(picker, catSelect, catInput)(); // タグ候補はカテゴリの欄で選んだカテゴリのタグ
 
   save.addEventListener('click', ()=>{
     const itemName = normText(name.value);

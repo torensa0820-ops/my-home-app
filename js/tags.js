@@ -5,11 +5,14 @@ function createTagPicker(chipsId, inputId){
   const wrap = document.getElementById(chipsId);
   const input = document.getElementById(inputId);
   const selected = new Set();
-  let known = [];         // 登録済みのタグ（render で渡された候補）
-  const added = new Set(); // 入力欄から追加した、まだ保存していないタグ
+  let known = [];         // 登録済みのタグ（render・limit で渡された候補）
+  const added = new Set(); // 入力欄から追加した、まだ保存していないタグと、limit で候補から外れた選択中のタグ
+  let emptyText = '';      // 候補がひとつもないときに出す文
   function draw(){
     wrap.innerHTML = '';
-    [...new Set([...known, ...added])].forEach(tag=>{
+    const shown = [...new Set([...known, ...added])];
+    if(!shown.length && emptyText) wrap.append(h('p', {class:'tm-note chips-empty'}, emptyText));
+    shown.forEach(tag=>{
       const chip = document.createElement('button');
       chip.type = 'button';
       chip.className = 'chip' + (selected.has(tag) ? ' on' : '');
@@ -40,6 +43,16 @@ function createTagPicker(chipsId, inputId){
       // 名称変更・削除で無くなったタグは選択状態からも外す（入力欄から追加したタグは残す）
       [...selected].forEach(t=>{ if(!tags.includes(t) && !added.has(t)) selected.delete(t); });
       known = tags;
+      emptyText = '';
+      draw();
+    },
+    // 候補を tags に絞る（カテゴリに合わせるとき用）。選んでいるタグは候補になくてもチップのまま残す
+    // 候補にないタグも、入力欄に入れれば付けられる。empty：候補がひとつもないときに出す文
+    limit(tags, empty = ''){
+      [...added].forEach(t=>{ if(!selected.has(t)) added.delete(t); });
+      known = tags;
+      selected.forEach(t=>{ if(!known.includes(t)) added.add(t); });
+      emptyText = empty;
       draw();
     },
     // render の前に呼ぶと、そのタグを選択済みの状態で表示する
@@ -65,21 +78,64 @@ function createTagPicker(chipsId, inputId){
     }
   };
 }
-// タグ（と、opts.categories なら カテゴリ）の絞り込み
-// 一覧の上には「絞り込み」ボタンと選択中のカテゴリ・タグだけを出し、候補は下から出るパネルに折り返して並べる
+// 登録・編集画面で、タグの候補を選んでいるカテゴリのタグに絞る関数を作る（在庫・家計簿共通）
+// cats()：選んでいるカテゴリの配列（空なら全タグを出す）、tagsOf(c)：カテゴリ c のデータに付いているタグ、allTags()：全タグ
+// ほかのカテゴリにしかないタグは、新規入力欄に入れると付けられる
+const TAG_LIMIT_NOTE = 'カテゴリを選ぶと、そのカテゴリで使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。';
+function categoryTagSync(picker, cats, tagsOf, allTags){
+  return ()=>{
+    const cs = [...new Set(cats().filter(Boolean))];
+    if(!cs.length){ picker.limit(allTags()); return; }
+    picker.limit(uniqSorted(cs.flatMap(tagsOf)), 'このカテゴリで使っているタグはまだありません。入力欄に入れて追加できます。');
+  };
+}
+// カテゴリが空のデータを出すタブ・候補の名前（在庫・家計簿共通）
+const UNCATEGORIZED = '未分類';
+// カテゴリごとの件数を、タブの並び順の [{name, count}] にする
+// order にあるカテゴリはその順で先頭に、ほかは件数の多い順（同じなら五十音順）、「未分類」は最後
+function categoryCounts(cats, order = []){
+  const counts = {};
+  cats.forEach(c=>{ counts[c] = (counts[c] || 0) + 1; });
+  const rank = c=>c === UNCATEGORIZED ? 1 : order.includes(c) ? order.indexOf(c) - order.length : 0;
+  return Object.keys(counts)
+    .sort((a, b)=>rank(a) - rank(b) || counts[b] - counts[a] || a.localeCompare(b, 'ja'))
+    .map(name=>({name, count:counts[name]}));
+}
+// タグと、opts.tabs があればカテゴリの絞り込み
+// 一覧の上には「絞り込み」ボタンと選択中のタグだけを出し、候補は下から出るパネルに折り返して並べる
 // パネルは一覧に重ねて表示するので、選ぶとすぐ上の一覧に結果が反映される
-// カテゴリは選んだもののいずれか、タグとの組み合わせは「カテゴリの条件かつタグの条件」
+// opts.tabs = {id, storageKey}：id の要素にカテゴリのタブ（すべて・各カテゴリ）を出す。タブを押すとそのカテゴリだけを選び、
+// パネルではカテゴリを複数選べる（いずれかを含む）。選んだカテゴリは storageKey で端末に覚えておく
+// 条件は「選んだカテゴリのいずれか」かつ「タグの条件」
 function createFilterBar(barId, sheet, onChange, opts = {}){
   const bar = document.getElementById(barId);
   const section = bar.closest('.tab-panel');
+  const tabsWrap = opts.tabs ? document.getElementById(opts.tabs.id) : null;
   const status = h('div', {class:'filter-status'});
   bar.after(status);
   const selected = new Set();
-  const selectedCats = new Set();
+  const selectedCats = new Set(loadCats());
   let mode = 'any';
   let tags = [];
-  let categories = [];
+  let categories = []; // [{name, count}]（タブの並び順）
+  let total = 0;       // 「すべて」の件数
   const clearAll = ()=>{ selected.clear(); selectedCats.clear(); changed(); };
+  // 「絞り込みを解除」：タグを外す。カテゴリを複数選んでいたら、それも外して「すべて」に戻す（1つならタブはそのまま）
+  const clearFilter = ()=>{ selected.clear(); if(selectedCats.size > 1) selectedCats.clear(); changed(); };
+
+  function loadCats(){
+    if(!opts.tabs) return [];
+    try {
+      const v = JSON.parse(localStorage.getItem(opts.tabs.storageKey) || '[]');
+      return Array.isArray(v) ? v.map(String) : [];
+    } catch(_){ return []; }
+  }
+  function saveCats(){
+    if(!opts.tabs) return;
+    try { localStorage.setItem(opts.tabs.storageKey, JSON.stringify([...selectedCats])); } catch(_){}
+  }
+  // 一覧の上に出す条件の数。タブで見えている1つのカテゴリは数えない
+  const condCount = ()=>selected.size + (selectedCats.size > 1 ? selectedCats.size : 0);
 
   // ---- パネル ----
   const search = h('input', {type:'search', class:'filter-search', placeholder:'タグを検索', oninput:()=>drawPanel()});
@@ -89,11 +145,15 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
   const panel = h('div', {class:'compose', role:'dialog'},
     h('div', {class:'compose-grip'}, h('span')),
     h('div', {class:'compose-head'},
-      h('h2', {}, opts.categories ? '絞り込む' : 'タグで絞り込む'),
+      h('h2', {}, opts.tabs ? '絞り込む' : 'タグで絞り込む'),
       h('button', {type:'button', class:'text-btn', onclick:closeCompose}, '閉じる')),
-    h('p', {class:'compose-hint'}, opts.categories ? '選んだカテゴリ・タグのデータだけを一覧に表示します' : '選んだタグの付いたデータだけを一覧に表示します'),
+    h('p', {class:'compose-hint'}, opts.tabs ? '選んだカテゴリ・タグのデータだけを一覧に表示します' : '選んだタグの付いたデータだけを一覧に表示します'),
     h('div', {class:'compose-body'},
-      opts.categories ? [h('div', {class:'filter-label'}, 'カテゴリ（いずれか）'), catCloud, h('div', {class:'filter-label'}, 'タグ')] : '',
+      opts.tabs ? [
+        h('div', {class:'filter-label'}, 'カテゴリ（いずれかを含む）'),
+        h('p', {class:'tm-note filter-note'}, '一覧の上のタブはカテゴリを1つだけ選びます。ここでは複数のカテゴリを選べます。'),
+        catCloud,
+        h('div', {class:'filter-label'}, 'タグ')] : '',
       h('div', {class:'filter-tools'}, search, modeSeg),
       cloud,
       h('div', {class:'filter-actions'},
@@ -103,12 +163,12 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
   section.append(panel);
   enableComposeDrag(panel);
 
-  const changed = ()=>{ draw(); onChange(); };
+  const changed = ()=>{ saveCats(); draw(); onChange(); };
   const toggle = (set, v)=>{ if(set.has(v)) set.delete(v); else set.add(v); changed(); };
   function drawPanel(){
     catCloud.innerHTML = '';
     if(!categories.length) catCloud.append(h('p', {class:'tm-note'}, 'カテゴリはまだありません'));
-    categories.forEach(c=>catCloud.append(h('button', {type:'button', class:'chip cat' + (selectedCats.has(c) ? ' on' : ''), onclick:()=>toggle(selectedCats, c)}, c)));
+    categories.forEach(({name})=>catCloud.append(h('button', {type:'button', class:'chip cat' + (selectedCats.has(name) ? ' on' : ''), onclick:()=>toggle(selectedCats, name)}, name)));
     modeSeg.innerHTML = '';
     [['any', 'いずれかを含む'], ['all', 'すべてを含む']].forEach(([m, label])=>modeSeg.append(
       h('button', {type:'button', class: mode === m ? 'on' : '', onclick:()=>{ if(mode !== m){ mode = m; changed(); } }}, label)));
@@ -118,25 +178,45 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
     if(!shown.length) cloud.append(h('p', {class:'tm-note'}, tags.length ? '該当するタグがありません' : 'タグはまだありません'));
     shown.forEach(t=>cloud.append(h('button', {type:'button', class:'chip' + (selected.has(t) ? ' on' : ''), onclick:()=>toggle(selected, t)}, t)));
   }
+  // ---- カテゴリのタブ（1行に並べ、はみ出したら横にスクロール）----
+  function drawTabs(){
+    if(!tabsWrap) return;
+    tabsWrap.replaceChildren();
+    if(!categories.length) return;
+    const tab = (label, n, on, onclick)=>h('button', {type:'button', class:'chip' + (on ? ' on' : ''), onclick}, label, h('span', {class:'n'}, String(n)));
+    tabsWrap.append(tab('すべて', total, !selectedCats.size, ()=>{ if(selectedCats.size){ selectedCats.clear(); changed(); } }));
+    categories.forEach(({name, count})=>tabsWrap.append(tab(name, count, selectedCats.has(name), ()=>{
+      if(selectedCats.size === 1 && selectedCats.has(name)) return;
+      selectedCats.clear();
+      selectedCats.add(name);
+      changed();
+    })));
+    // 選んでいるタブが横にはみ出していれば、タブの行だけを横にずらして見せる（一覧は縦にずらさない）
+    const on = tabsWrap.querySelector('.on');
+    const r = on.getBoundingClientRect(), w = tabsWrap.getBoundingClientRect();
+    if(r.left < w.left || r.right > w.right) tabsWrap.scrollLeft += r.left - w.left - 16;
+  }
   // ---- 一覧の上のバー ----
   function drawBar(){
     bar.innerHTML = '';
-    const count = selectedCats.size + selected.size;
+    const count = condCount();
     const open = h('button', {type:'button', class:'filter-open' + (count ? ' on' : ''), onclick:()=>openCompose('filter')},
       count ? `絞り込み（${count}）` : '絞り込み');
-    // 選択中のカテゴリ・タグは×付きで並べ、タップで外せるようにする
+    // 選択中のタグは×付きで並べ、タップで外せるようにする（カテゴリはタブで見える）
     const chips = h('div', {class:'filter-chips'});
-    [...selectedCats].forEach(c=>chips.append(h('button', {type:'button', class:'chip cat on', onclick:()=>toggle(selectedCats, c)}, `${c} ×`)));
     [...selected].forEach(t=>chips.append(h('button', {type:'button', class:'chip on', onclick:()=>toggle(selected, t)}, `${t} ×`)));
     bar.append(open, chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
     status.innerHTML = '';
     if(count){
       status.append(h('span', {class:'count'}),
+        selectedCats.size > 1 ? h('span', {}, `・カテゴリは${selectedCats.size}つのいずれか`) : '',
         selected.size > 1 ? h('span', {}, mode === 'any' ? '・タグはいずれかを含む' : '・タグはすべてを含む') : '',
-        h('button', {type:'button', class:'clear', onclick:clearAll}, '絞り込みを解除'));
+        h('button', {type:'button', class:'clear', onclick:clearFilter}, '絞り込みを解除'));
     }
   }
-  function draw(){ drawBar(); drawPanel(); }
+  function draw(){ drawTabs(); drawBar(); drawPanel(); }
+  // カテゴリの条件に合うか（カテゴリを選んでいなければすべて合う）
+  const matchesCategory = category=>!selectedCats.size || selectedCats.has(String(category ?? '').trim());
 
   return {
     // タグ一覧を描き直す。名称変更・削除で無くなったタグは選択から外し、絞り込みを更新する
@@ -147,18 +227,25 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
       draw();
       if(selected.size !== before) onChange();
     },
-    // カテゴリ一覧を描き直す（opts.categories のときだけ使う）。無くなったカテゴリは選択から外す
-    renderCategories(list){
+    // カテゴリのタブとパネルの候補を描き直す（opts.tabs のときだけ使う）
+    // list：[{name, count}]（この順にタブを並べる）、all：「すべて」の件数。無くなったカテゴリは選択から外す
+    renderCategories(list, all){
       categories = list;
+      total = all;
+      const names = list.map(c=>c.name);
       const before = selectedCats.size;
-      [...selectedCats].forEach(c=>{ if(!categories.includes(c)) selectedCats.delete(c); });
+      [...selectedCats].forEach(c=>{ if(!names.includes(c)) selectedCats.delete(c); });
+      if(selectedCats.size !== before) saveCats();
       draw();
       if(selectedCats.size !== before) onChange();
     },
     active(){ return selected.size > 0 || selectedCats.size > 0; },
-    // 絞り込みの条件に合うか（カテゴリを選んでいなければ category は見ない）
+    // 選んでいるカテゴリ（「すべて」なら空）
+    categories(){ return [...selectedCats]; },
+    matchesCategory,
+    // 絞り込みの条件に合うか
     matches(tagStr, category){
-      if(selectedCats.size && !selectedCats.has(String(category ?? '').trim())) return false;
+      if(!matchesCategory(category)) return false;
       if(!selected.size) return true;
       const t = splitTags(tagStr);
       return mode === 'all' ? [...selected].every(x=>t.includes(x)) : [...selected].some(x=>t.includes(x));
@@ -187,7 +274,8 @@ function tagOp(payload){
   return postToGas({type:'tag', sheet:tm.sheet, ...payload})
     .then(res=>{
       if(res.status !== 'success') throw new Error(res.message || '処理に失敗しました');
-      return (tm.sheet === 'stock' ? loadStock() : loadFinanceOptions()).then(()=>res);
+      // 家計簿は絞り込みの候補と履歴のタグも変わるので、履歴も読み込み直す
+      return (tm.sheet === 'stock' ? loadStock() : Promise.all([loadFinanceOptions(), loadFinanceHistory()])).then(()=>res);
     })
     .finally(()=>{ tm.busy = false; });
 }

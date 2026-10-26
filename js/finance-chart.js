@@ -1,5 +1,5 @@
 // 家計簿のグラフ：選んだ月の合計・前月との差・1日あたり、月別の支出（カテゴリ別の積み上げ）、
-// 選んだ月のカテゴリ別・支払い方法別の内訳、月別の表
+// 選んだ月のカテゴリ別（カテゴリを1つに絞っているときはタグ別）・支払い方法別の内訳、月別の表
 // 手元の全記録（fin.all）と一覧の絞り込み（financeFilter）から描くので、通信しない
 
 // カテゴリの色。支出の多い順に上位5カテゴリへ割り当て、6つ目以降は「その他」にまとめる
@@ -45,7 +45,7 @@ function fcAggregate(rows, colors){
   rows.forEach(r=>{
     const key = finMonthKey(finDay(r));
     const c = colors[String(r.category || '').trim() || '—'];
-    const m = months[key] || (months[key] = {total:0, groups:{}, cats:{}, pays:{}, count:0});
+    const m = months[key] || (months[key] = {total:0, groups:{}, cats:{}, pays:{}, tags:{}, count:0});
     const amount = Number(r.amount) || 0;
     m.total += amount;
     m.count++;
@@ -54,6 +54,9 @@ function fcAggregate(rows, colors){
     m.cats[cat] = (m.cats[cat] || 0) + amount;
     const pay = String(r.payment || '').trim() || '未設定';
     m.pays[pay] = (m.pays[pay] || 0) + amount;
+    // タグ別：1件に複数のタグがあれば、それぞれに金額を足す（タグのない記録は「タグなし」）
+    const tags = splitTags(r.tags);
+    (tags.length ? tags : ['タグなし']).forEach(t=>{ m.tags[t] = (m.tags[t] || 0) + amount; });
   });
   return months;
 }
@@ -74,6 +77,8 @@ function renderFinanceChart(){
 
   const colors = fcColorMap();
   const agg = fcAggregate(rows, colors);
+  const cats = financeFilter.categories();
+  const oneCat = cats.length === 1 ? (cats[0] === UNCATEGORIZED ? '—' : cats[0]) : null; // colors のキーは空のカテゴリを「—」にしている
   // 表示する月：記録のある最初の月〜今月（記録が未来の日付ならその月）まで。最大12か月
   const keys = Object.keys(agg).sort();
   const today = finMonthKey(new Date());
@@ -98,8 +103,12 @@ function renderFinanceChart(){
       h('div', {class:'fc-hint'}, '棒をタップすると、その月の内訳を表示します'),
       h('div', {class:'fc-legend'}, groups.map(g=>h('span', {class:'fc-key'}, h('i', {style:`background:${groupColor[g].color}`}), g))),
       fcColumns(wrap, months, agg, groups, groupColor)),
-    fcBreakdown(`${fcMonthLabel(fc.month)}のカテゴリ別`, agg[fc.month] && agg[fc.month].cats,
-      cat=>(colors[cat] || {}).color || FC_OTHER),
+    // カテゴリを1つに絞っているときは、カテゴリ別の代わりにタグ別の内訳を出す（色はそのカテゴリの色）
+    oneCat
+      ? fcBreakdown(`${fcMonthLabel(fc.month)}のタグ別`, agg[fc.month] && agg[fc.month].tags, ()=>(colors[oneCat] || {}).color || FC_OTHER,
+        {total:agg[fc.month] && agg[fc.month].total, note:'1件に複数のタグがあると、それぞれのタグに金額を数えます（割合はこの月の支出に対する割合で、足すと100%を超えることがあります）'})
+      : fcBreakdown(`${fcMonthLabel(fc.month)}のカテゴリ別`, agg[fc.month] && agg[fc.month].cats,
+        cat=>(colors[cat] || {}).color || FC_OTHER),
     fcBreakdown(`${fcMonthLabel(fc.month)}の支払い方法別`, agg[fc.month] && agg[fc.month].pays, ()=>'var(--muted)'),
     fcTable(months, agg));
 }
@@ -218,11 +227,12 @@ function fcColumns(wrap, months, agg, groups, groupColor){
 }
 
 // 内訳（金額の多い順の横棒）。値と割合は常に文字でも出す
-function fcBreakdown(title, map, colorOf){
-  const card = h('div', {class:'fc-card'}, h('div', {class:'fc-title'}, title));
+// opts.total：割合の分母（省略時は内訳の合計）、opts.note：タイトルの下に出す説明
+function fcBreakdown(title, map, colorOf, opts = {}){
+  const card = h('div', {class:'fc-card'}, h('div', {class:'fc-title'}, title), opts.note ? h('div', {class:'fc-hint'}, opts.note) : '');
   const entries = Object.entries(map || {}).sort((a, b)=>b[1] - a[1]);
   if(!entries.length){ card.append(h('p', {class:'tm-note'}, 'この月の記録はありません')); return card; }
-  const total = entries.reduce((sum, [, v])=>sum + v, 0);
+  const total = opts.total || entries.reduce((sum, [, v])=>sum + v, 0);
   const max = entries[0][1];
   entries.forEach(([name, v])=>card.append(h('div', {class:'fc-bar-row'},
     h('div', {class:'fc-bar-head'},

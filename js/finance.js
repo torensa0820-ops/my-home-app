@@ -1,8 +1,26 @@
-// 家計簿：記録、履歴（30件ずつ・月別合計）、記録の編集・削除
+// 家計簿：カテゴリのタブ、記録、履歴（30件ずつ・月別合計）、記録の編集・削除
 
-const financeFilter = createFilterBar('finance-filter', 'finance', ()=>renderFinanceHistory(), {categories:true});
+// カテゴリのタブとタグの絞り込み。選び直したら、タグの候補・履歴（とグラフ）・記録フォームのカテゴリを合わせる
+const financeFilter = createFilterBar('finance-filter', 'finance', ()=>{
+  renderFinanceFilterTags();
+  renderFinanceHistory();
+  if(!isComposing()) setFinanceFormCategory();
+}, {tabs:{id:'finance-cats', storageKey:'kurashilog.financeCats'}});
 
 financeFilter.render([]);
+
+function finCategoryOf(r){ return String(r.category ?? '').trim() || UNCATEGORIZED; }
+// 絞り込みの候補は、選んでいるカテゴリの記録に付いているタグだけ（選んでも0件になるタグを出さない）
+function renderFinanceFilterTags(){
+  if(!fin.loaded) return;
+  financeFilter.render(uniqSorted(fin.all.filter(r=>financeFilter.matchesCategory(finCategoryOf(r))).flatMap(r=>splitTags(r.tags))));
+}
+// 記録フォームのカテゴリを、タブで選んでいるカテゴリにする（「すべて」や複数選んでいるときは未選択）
+function setFinanceFormCategory(){
+  const cats = financeFilter.categories();
+  setHybridValue(fCatSelect, fCatInput, cats.length === 1 && cats[0] !== UNCATEGORIZED ? cats[0] : '');
+  financeSplits.update();
+}
 
 // ---------- 家計簿 ----------
 const financeTagPicker = createTagPicker('f-tags-chips', 'f-tags-input');
@@ -20,9 +38,7 @@ function loadFinanceOptions(preloaded){
       setupHybrid(fCatSelect, fCatInput, uniqSorted(opts.categories || []));
       setupHybrid(fPaySelect, fPayInput, uniqSorted(opts.payments || []));
       financeTagPicker.render(uniqSorted(opts.tags || []));
-      financeFilter.render(uniqSorted(opts.tags || []));
-      financeFilter.renderCategories(uniqSorted(opts.categories || []));
-      financeSplits.update();
+      setFinanceFormCategory();
     })
     .catch(err=>toast(`家計簿の候補の読み込みに失敗しました（${errMsg(err)}）`));
 }
@@ -34,6 +50,7 @@ document.getElementById('f-date').value = todayStr();
 // 1回の会計をカテゴリごとに分ける内訳の入力（登録フォームと記録の編集画面で使う）
 // 内訳には分けるカテゴリと金額だけを入れ、合計から内訳を引いた残りがメインカテゴリの金額になる
 // opts.memo なら内訳ごとのメモ欄も出す（レシートの取り込み用。空なら記録全体のメモになる）
+// opts.onChange：メインのカテゴリ・内訳・金額が変わるたびに呼ぶ（タグの候補をカテゴリに合わせる用）
 function createSplitEditor(totalInput, catSelect, catInput, opts = {}){
   const rows = [];
   const list = h('div', {class:'split-rows'});
@@ -94,8 +111,12 @@ function createSplitEditor(totalInput, catSelect, catInput, opts = {}){
     const main = (Number(totalInput.value) || 0) - ss.reduce((sum, s)=>sum + s.amount, 0);
     return [{category:getHybridValue(catSelect, catInput), amount:main}, ...ss];
   }
-  // 入力中に、分けた後のカテゴリごとの金額をその場で表示する
   function update(){
+    drawPreview();
+    if(opts.onChange) opts.onChange();
+  }
+  // 入力中に、分けた後のカテゴリごとの金額をその場で表示する
+  function drawPreview(){
     preview.hidden = !rows.length;
     if(!rows.length) return;
     const err = error();
@@ -117,7 +138,15 @@ function createSplitEditor(totalInput, catSelect, catInput, opts = {}){
     set(list){ rows.splice(0).forEach(r=>r.el.remove()); list.forEach(s=>addRow(s)); update(); }
   };
 }
-const financeSplits = createSplitEditor(document.getElementById('f-amount'), fCatSelect, fCatInput);
+// タグの候補：カテゴリ c の記録に付いているタグと、家計簿全体のタグ
+function finTagsOf(c){ return fin.all.filter(r=>finCategoryOf(r) === c).flatMap(r=>splitTags(r.tags)); }
+function finAllTags(){ return uniqSorted(financeOpts.tags || []); }
+// 記録の画面のタグの候補を、メインと内訳のカテゴリのタグにする関数を作る（createSplitEditor の onChange から呼ぶ）
+function financeTagSync(picker, catSelect, catInput, splitEditor){
+  return categoryTagSync(picker, ()=>[getHybridValue(catSelect, catInput), ...splitEditor.splits().map(s=>s.category)], finTagsOf, finAllTags);
+}
+const financeSplits = createSplitEditor(document.getElementById('f-amount'), fCatSelect, fCatInput, {onChange:()=>syncFinanceFormTags()});
+const syncFinanceFormTags = financeTagSync(financeTagPicker, fCatSelect, fCatInput, financeSplits);
 document.getElementById('f-splits').append(financeSplits.el);
 
 document.getElementById('finance-form').addEventListener('submit', e=>{
@@ -140,10 +169,10 @@ document.getElementById('finance-form').addEventListener('submit', e=>{
         toast(items.length > 1 ? `${items.length}件に分けて記録しました` : '記録しました');
         e.target.reset();
         document.getElementById('f-date').value = todayStr();
-        setHybridValue(fCatSelect, fCatInput, '');
         setHybridValue(fPaySelect, fPayInput, '');
         financeTagPicker.clear();
         financeSplits.clear();
+        setFinanceFormCategory();
         loadFinanceOptions(); loadFinanceHistory();
       }
       else toast(res.message || '記録に失敗しました');
@@ -164,6 +193,8 @@ function loadFinanceHistory(preloaded){
       if(seq !== fin.seq) return;
       fin.all = data.rows;
       fin.loaded = true;
+      renderFinanceFilterTags();
+      syncFinanceFormTags(); // 記録フォームのタグの候補も、読み込んだ記録のタグに合わせる
       renderFinanceHistory();
     })
     .catch(err=>{
@@ -177,7 +208,9 @@ function loadFinanceHistory(preloaded){
 function renderFinanceHistory(){
   if(!fin.loaded) return;
   const wrap = document.getElementById('finance-list');
-  fin.shown = fin.all.filter(r=>financeFilter.matches(r.tags, r.category));
+  // タブは件数の多いカテゴリから並べる
+  financeFilter.renderCategories(categoryCounts(fin.all.map(finCategoryOf)), fin.all.length);
+  fin.shown = fin.all.filter(r=>financeFilter.matches(r.tags, finCategoryOf(r)));
   fin.monthTotals = {};
   fin.shown.forEach(r=>{
     const key = finMonthKey(finDay(r));
@@ -238,7 +271,8 @@ function tmFinanceView(r){
   setupHybrid(catSelect, catInput, uniqSorted(financeOpts.categories || []));
   setHybridValue(catSelect, catInput, r.category);
   const amount = h('input', {type:'number', value:Number(r.amount) || 0, inputMode:'numeric'});
-  const splitEditor = createSplitEditor(amount, catSelect, catInput);
+  let syncTags = ()=>{}; // タグの候補をカテゴリに合わせる（タグの欄を作ってから入れる）
+  const splitEditor = createSplitEditor(amount, catSelect, catInput, {onChange:()=>syncTags()});
   const paySelect = h('select');
   const payInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しい支払い方法を入力'});
   setupHybrid(paySelect, payInput, uniqSorted(financeOpts.payments || []));
@@ -267,7 +301,7 @@ function tmFinanceView(r){
     splitEditor.el,
     field('支払い方法', paySelect, payInput),
     field('メモ', memo),
-    field('タグ（複数選択可）', chips, tagInput),
+    field('タグ（複数選択可）', chips, tagInput, h('p', {class:'tm-note'}, TAG_LIMIT_NOTE)),
     r.groupId ? h('p', {class:'tm-note'}, '日付と支払い方法を変えると、同じ会計のほかの記録にも反映されます') : '',
     created && !isNaN(created)
       ? h('p', {class:'tm-note'}, `登録日時：${created.toLocaleString('ja-JP', {year:'numeric', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit'})}`)
@@ -279,11 +313,13 @@ function tmFinanceView(r){
   );
   tmFoot.append(save);
 
-  // タグ候補は家計簿全体のタグ。この記録に付いているタグを選択済みにしておく
+  // タグ候補はカテゴリの欄で選んだカテゴリのタグ。この記録に付いているタグを選択済みにしておく
   const picker = createTagPicker('fe-tags-chips', 'fe-tags-input');
   const current = splitTags(r.tags);
   current.forEach(t=>picker.select(t));
-  picker.render(uniqSorted([...(financeOpts.tags || []), ...current]));
+  picker.render(uniqSorted([...finAllTags(), ...current]));
+  syncTags = financeTagSync(picker, catSelect, catInput, splitEditor);
+  syncTags();
 
   save.addEventListener('click', ()=>{
     const values = {
@@ -319,6 +355,7 @@ function fillFinanceForm(r, row){
   financeSplits.update();
   document.getElementById('f-memo').value = r.memo || '';
   financeTagPicker.set(splitTags(r.tags));
+  syncFinanceFormTags();
   flashPicked(row, [r.category, r.memo].filter(Boolean).join('・') || '記録');
   document.getElementById('f-amount').focus({preventScroll:true});
 }

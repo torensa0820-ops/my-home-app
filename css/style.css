@@ -166,6 +166,8 @@ nav.tabbar button[data-tab="chore"].active{background:var(--chore-dim);color:var
 .cat-tabs:empty{display:none;}
 .cat-tabs .chip{flex-shrink:0;background:var(--surface);}
 .cat-tabs .chip.on{background:var(--stock-dim);color:var(--stock);}
+#finance-panel .cat-tabs .chip.on{background:var(--finance-dim);color:var(--finance);}
+.filter-note{margin:-2px 0 8px;}
 .cat-tabs .n{margin-left:5px;font-size:11px;font-weight:700;opacity:.75;}
 /* タグの絞り込み：一覧の上は「絞り込み」ボタン・選択中のタグ・「管理」ボタンの1行 */
 .filter-bar{display:flex;align-items:center;gap:8px;margin:0 0 12px;}

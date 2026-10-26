@@ -156,7 +156,8 @@ function tmImportItem(p){
   setupHybrid(catSelect, catInput, uniqSorted(financeOpts.categories || []));
   setHybridValue(catSelect, catInput, sug.category);
   const amount = h('input', {type:'number', value:Number(p.amount) || 0, inputMode:'numeric'});
-  const splitEditor = createSplitEditor(amount, catSelect, catInput, {memo:sug.fromReceipt});
+  let syncTags = ()=>{}; // タグの候補をカテゴリに合わせる（タグの欄を作ってから入れる）
+  const splitEditor = createSplitEditor(amount, catSelect, catInput, {memo:sug.fromReceipt, onChange:()=>syncTags()});
   // レシートの内訳の案：先頭がメインのカテゴリ（金額は合計の残り）、2件目からを内訳に入れる
   if(sug.items.length > 1) splitEditor.set(sug.items.slice(1));
   const itemsTotal = sug.items.reduce((s, it)=>s + it.amount, 0);
@@ -203,7 +204,7 @@ function tmImportItem(p){
     splitEditor.el,
     field('支払い方法', paySelect, payInput),
     field('メモ', memo),
-    field('タグ（複数選択可）', chips, tagInput),
+    field('タグ（複数選択可）', chips, tagInput, h('p', {class:'tm-note'}, TAG_LIMIT_NOTE)),
     h('label', {class:'tm-check'}, remember,
       h('span', {class:'main'}, `「${p.merchant || 'このお店'}」の分類（カテゴリ・タグ・メモ・支払い方法）を次回の候補にする`)),
     sug.fromRule ? h('p', {class:'tm-note'}, '前回このお店で登録した内容を入れています') : '',
@@ -213,11 +214,13 @@ function tmImportItem(p){
       skipImportButton(p)));
   tmFoot.append(save);
 
-  // タグはお店の候補を選択済みにしておく
+  // タグはお店の候補を選択済みにしておく。候補はカテゴリの欄（と内訳）で選んだカテゴリのタグ
   const picker = createTagPicker('fi-tags-chips', 'fi-tags-input');
   const current = splitTags(sug.tags);
   current.forEach(t=>picker.select(t));
-  picker.render(uniqSorted([...(financeOpts.tags || []), ...current]));
+  picker.render(uniqSorted([...finAllTags(), ...current]));
+  syncTags = financeTagSync(picker, catSelect, catInput, splitEditor);
+  syncTags();
 
   save.addEventListener('click', ()=>{
     const category = getHybridValue(catSelect, catInput);
