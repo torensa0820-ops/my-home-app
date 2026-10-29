@@ -2,7 +2,7 @@
 // Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
-// 各処理は stock.js / finance.js / finance-import.js / receipt.js / tags.js / chore.js にある
+// 各処理は stock.js / finance.js / finance-import.js / recurring.js / receipt.js / tags.js / chore.js にある
 // =========================================================
 
 function doGet(e) {
@@ -17,6 +17,7 @@ function doGet(e) {
       imports: getPendingImports(),
       stockImports: getStockImports(),
       coupons: getCoupons(),
+      recurring: getRecurring(),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());
@@ -31,6 +32,7 @@ function doGet(e) {
   }
   if (p.action === "getStockImports") return jsonOutput(getStockImports());
   if (p.action === "getCoupons") return jsonOutput(getCoupons());
+  if (p.action === "getRecurring") return jsonOutput(getRecurring());
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -68,6 +70,8 @@ function doPost(e) {
       return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
     } else if (data.type === "coupon") {
       couponAction(ss, data);
+    } else if (data.type === "recurring") {
+      recurringAction(ss, data);
     } else if (data.type === "todo") {
       return jsonOutput({ status: "success", task: updateTodo(ss, data) });
     } else if (data.type === "tag") {

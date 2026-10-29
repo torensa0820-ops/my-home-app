@@ -46,6 +46,7 @@ js/                   画面の処理。index.html で上から順に読み込�
   finance.js          家計簿
   finance-chart.js    家計簿のグラフ（手元の全記録から描く）
   finance-import.js   家計簿のカード利用の取り込み（確認待ちの一覧と確認画面。レシートから読んだ内訳の案も入れる）
+  recurring.js        家計簿の定期支出（一覧・登録・編集・削除）
   stock-import.js     在庫の「レシートから」（確認待ちの追加・追加しない、自動追加の取り消し）
   coupon.js           クーポンの一覧（使った・不要）と、レシートから見つかった候補（直してリマインドする・不要）
   receipt.js          レシート・クーポンの撮影（写真を縮めて送る）、最近撮った分と1件の反映の詳細、在庫の判断の読み直し
@@ -63,9 +64,11 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
   chore-rule.js       家事の周期の計算。GAS と画面（index.html から読み込む）の両方で使う
   notify.js           Discord への送信、賞味期限の通知
   finance-import.js   カード利用の取り込み（確認待ちの取得・登録・スキップ、お店ごとの取込ルール）
+  recurring.js        定期支出の保存と、支払いの日になったものを取込待ちに入れる処理
+  recurring-rule.js   定期支出の周期の計算。GAS と画面（index.html から読み込む）の両方で使う
   sale-notify.js      セールチェックの結果（「セールチェック」シート）の通知
   receipt.js          レシート・クーポンの写真の保存、在庫取込・クーポンの一覧と操作、毎朝のクーポンの通知
-gas-mail/             カード利用通知メールの読み取り。通知受け取り専用の Gmail アカウントで動かす別の GAS（くらしログの GAS とは別）
+gas-mail/             カード利用通知メールと Apple の領収書メールの読み取り。通知受け取り専用の Gmail アカウントで動かす別の GAS（くらしログの GAS とは別）
   Code.js             メールを読み、「取込待ち」シートに追加する（10分ごと）
   appsscript.json     GAS の設定
 ```
@@ -109,17 +112,17 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 
 `createdAt`・`payment`・`groupId` の列がなければ、記録の追加・編集のときに自動で末尾に追加される。
 
-### 取込待ち（1行＝カード利用通知の1件）
+### 取込待ち（1行＝カード利用通知などの1件）
 
-`gas-mail/` が追加し、くらしログで確認して登録・スキップする。シートがなければ `gas-mail/` が作る。
+`gas-mail/`（カード利用通知・Apple の領収書）、Claude（レシート）、GAS（定期支出）が追加し、くらしログで確認して登録・スキップする。シートがなければ `gas-mail/` が作る。
 
 | 列 | 内容 |
 | --- | --- |
 | `id` | `mail:` ＋ Gmail のメッセージ ID（1通に複数の利用があれば末尾に `#1`・`#2`） |
-| `source` | 取り込み元（`card-mail`） |
-| `usedAt` | 利用日時（`yyyy/MM/dd HH:mm`。文字列） |
+| `source` | 取り込み元（`card-mail`＝カード利用通知、`apple-receipt`＝Apple の領収書、`receipt`＝レシート、`recurring`＝定期支出） |
+| `usedAt` | 利用日時（`yyyy/MM/dd HH:mm`。文字列）。Apple の領収書と定期支出は時刻なしの `yyyy/MM/dd` |
 | `merchant` | 利用先の店名（NFKC で正規化済み） |
-| `kind` | 取引の種類（`買物` など） |
+| `kind` | 取引の種類（`買物` など）。Apple の領収書は品目（`200 GBのiCloud+(月額)` など。`merchant` にはアプリ名）、定期支出は周期の説明 |
 | `amount` | 金額 |
 | `card` | カード名 |
 | `receivedAt` | メールを受信した日時 |
@@ -136,6 +139,25 @@ gas-mail/             カード利用通知メールの読み取り。通知受�
 - `suggestItems` 〜 `receiptId` の5列は、レシートの読み取りのために末尾に足した列（なければ写真を受け取ったときと `setupReceiptTriggers` で GAS が足す）。値があれば、画面の入力欄の初期値として取込ルールより優先する
 - `gas-mail/` は先頭10列（`id` 〜 `note`）を列の位置で書き込む。末尾に列を足しても壊れないが、先頭10列の順番は変えないこと
 - カード利用がない支払い（PayPay・現金）は、Claude が `source`=`receipt` の行を追加する。`id` は `receipt:レシートのid`、`card`・`kind` は空、`usedAt` に購入日時、`merchant` に店名、`amount` に合計、`receivedAt` に書き込んだ日時を入れる
+- Apple の領収書は品目ごとに1行になる（0円の品目は入れない）
+- 定期支出は `id` が `recurring:定期支出のid:支払いの日（yyyy-MM-dd）`。`suggestItems`・`suggestTags`・`suggestMemo`・`suggestPayment` に定期支出に登録した内容を入れる
+- 画面では、同じ金額で日付が3日以内のほかの確認待ちがあると「確認待ちに同じ金額あり」と出す（カード利用通知と Apple の領収書・定期支出の二重登録を防ぐ）
+
+### 定期支出（1行＝1つの定期支出）
+
+サブスクや保険料など、決まった周期で払うもの。家計簿タブの「定期支出」から登録する。毎朝 7:00（`notifyCouponsAndPending`）と保存したときに、支払いの日になった回を取込待ちに入れる。
+
+| 列 | 内容 |
+| --- | --- |
+| `id` | 定期支出の ID（UUID） |
+| `name` | 名前（取込待ちの `merchant` になる） |
+| `amount` | 金額 |
+| `category`・`tags`・`memo`・`payment` | 登録するときの分類の初期値 |
+| `unit` | `day`（日ごと）・`month`（か月ごと） |
+| `interval` | 何日・何か月ごとか |
+| `start` | 初回（基準）の支払い日（`yyyy-MM-dd`）。か月ごとはこの日と同じ日付（ない月は末日） |
+| `nextDate` | 次に取込待ちに入れる支払いの日（`yyyy-MM-dd`）。保存したときは今日以降で計算し直す |
+| `createdAt`・`updatedAt` | 登録・更新した日時 |
 
 ### 取込ルール（1行＝1店）
 
@@ -271,6 +293,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 | `getReceipts` | 最近14日に撮った分（`recent`。`count` に写真の枚数、`items`・`auto`・`confirm`・`skip` に明細の件数、`coupons` にクーポン・候補の件数）と、今夜読む件数（`unread`。`status` が空か `再読`） |
 | `getReceiptDetail` | 撮影した1件（`id`）の反映の詳細。`receipt`・`items`（レシート明細と、対応する在庫取込の行 `stockImport`）・`otherStockImports`・`finance`（取込待ちの行）・`coupons` |
 | `getStockImports` | 在庫取込の確認待ち（`pending`）と、7日以内の自動追加（`auto`）。どちらも `receiptFiles` 付き |
+| `getRecurring` | 定期支出の一覧（次の支払いの日の近い順）。`getAll` にも `recurring` として入る |
 | `getCoupons` | 未使用（`status` が空）と候補（`status`=`候補`）で、期限を過ぎていないクーポン（期限の近い順。画面で `status` によって分けて表示する）。`getAll` にも `coupons` として入る |
 | `getFinance` | 家計簿の履歴。`offset`・`limit`（`all` で全件）で範囲、`tags`（`,` 区切り）・`mode`（`any` / `all`）でタグ、`categories`（JSON の配列。いずれかに一致）でカテゴリの絞り込み。`monthTotals` に月別合計 |
 
@@ -293,6 +316,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 | `stockImport` | `add` | 確認待ちを在庫に登録する（`id`・`itemName`・`qty`・`category`・`location`・`tags`・`expirationDate`。在庫の登録と同じ処理）。`status` を `added` にする |
 | `stockImport` | `dismiss` | 確認待ちを追加しない（`id`）。`status` を `dismissed` にする |
 | `stockImport` | `undo` | 自動追加を取り消す（`id`）。`stockRowId` のロットの個数を `qty` だけ減らし、`status` を `undone` にする。ロットが見つからなければ個数は変えず、返り値の `message` で知らせる |
+| `recurring` | `save` / `delete` | 定期支出の保存（`id` があれば編集。`name`・`amount`・`category`・`tags`・`memo`・`payment`・`unit`・`interval`・`start`）・削除（`id`）。保存したら、支払いの日になった回をすぐ取込待ちに入れる |
 | `coupon` | `used` / `dismiss` | クーポンを使った（`used`）・不要（`dismissed`）にする（`id`）。`used` は未使用のクーポンだけ、`dismiss` は未使用のクーポンと候補 |
 | `coupon` | `remind` | 候補をクーポンにする（`id`・`title`・`validFrom`・`validUntil`。期間は `yyyy-MM-dd` か空）。内容を保存し、`status` と `notifiedOn` を空にする |
 
@@ -336,11 +360,12 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 2. 通知受け取り専用の Gmail アカウントを作る
 3. 「我が家の総合管理」スプレッドシートを、そのアカウントに**編集者**として共有する
 4. iCloud.com のメールの「ルール」で、差出人が通知メールの差出人（Vpass の通知メールに表示される `webmaster@…` のアドレス）のメールを、専用 Gmail に転送する
+   - App Store・iCloud+ などのサブスクはカードの利用通知が来ないことがあるので、差出人が `no_reply@email.apple.com` のメール（Apple の領収書）も同じく転送するルールを作る
 5. 専用 Gmail のアカウントで https://script.google.com を開いて新しいプロジェクトを作り、`gas-mail/Code.js` の内容を貼り付ける。「プロジェクトの設定」で「appsscript.json マニフェスト ファイルをエディタで表示する」をオンにし、`gas-mail/appsscript.json` の内容に置き換える
 6. 「プロジェクトの設定」→「スクリプト プロパティ」に次を追加する
    - `SPREADSHEET_ID`：スプレッドシートの ID（URL の `/d/` と `/edit` の間）
    - `ALLOWED_FROM`（任意）：転送元の iCloud メールのアドレス。設定すると、このアドレスから届いたメールだけを読む
-7. `debugParseLatest` を実行して、届いている通知メールの読み取り結果をログで確かめる（初回は権限の許可を求められる）
+7. `debugParseLatest` を実行して、届いている通知メールと Apple の領収書の読み取り結果をログで確かめる（初回は権限の許可を求められる）。読み取れないときは `debugDumpLatestBody`・`debugDumpLatestAppleBody` で本文の形を確かめる
 8. `setupTrigger` を一度実行する（`importCardMails` を10分ごとに実行するトリガーが作られる）
 
 読み取ったメールにはラベル `kurashilog-imported` が付く。読み取れなかったメールは、くらしログの確認待ちに「読み取れなかったメール」として出る。

@@ -8,6 +8,7 @@
 //      「レシート」「在庫取込」「取込待ち」「クーポン」シートに書き込む
 //   3. 画面で在庫取込の確認待ち（追加・追加しない）と自動追加の取り消し、家計簿の確認待ち、クーポンの使った・不要を処理する
 //   4. 毎朝 7:00 に notifyCouponsAndPending がクーポンの期限と確認待ちの件数を Discord に通知する
+//      （その前に、支払いの日になった定期支出を取込待ちに入れる。recurring.js）
 // 列は見出し名で探す。シートや列がなければ1行目の見出しを作る（ensureReceiptSheets）
 // =========================================================
 const SHEET_RECEIPT = "レシート";
@@ -497,6 +498,8 @@ function notifyCouponsAndPending() {
   }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    // 支払いの日になった定期支出を取込待ちに入れる（recurring.js）。失敗してもクーポンの通知は続ける
+    try { generateRecurringImports(ss); } catch (err) { Logger.log("定期支出の取り込みに失敗しました：" + err); }
     const notice = buildCouponNotice(ss);
     // 期限を過ぎた未使用のクーポンは、通知の有無にかかわらず expired にする
     notice.expired.forEach(o => receiptWrite(notice.sheet, notice.headers, o._row, { status: "expired" }));

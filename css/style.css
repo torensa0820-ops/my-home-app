@@ -333,6 +333,10 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .import-row .name small{font-size:12px;color:var(--muted);font-weight:500;}
 .import-row .amt{flex-shrink:0;font-weight:700;}
 .import-row.error .name{color:var(--danger);}
+#finance-panel .list-head .text-btn{color:var(--finance);}
+.recurring-every{display:flex;gap:8px;}
+.recurring-every .recurring-interval{width:88px;flex-shrink:0;}
+.recurring-every select{flex:1;min-width:0;}
 .import-info{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.6;word-break:break-all;}
 .import-info .top{display:flex;justify-content:space-between;gap:12px;font-size:16px;font-weight:700;}
 .import-info .sub{font-size:12px;color:var(--muted);}

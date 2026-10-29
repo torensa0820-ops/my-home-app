@@ -42,10 +42,11 @@ getFromGas('action=getAll')
     loadImports(all.imports || {pending:[], rules:{}});
     loadStockImports(all.stockImports || {pending:[], auto:[]});
     loadCoupons(all.coupons || []);
+    loadRecurring(all.recurring || []);
     loadChores(all.tasks);
   })
   .catch(err=>{
     document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>{ reloadList('stock-list', loadStock); loadStockImports(); }));
-    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); loadImports(); loadCoupons(); }));
+    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); loadImports(); loadCoupons(); loadRecurring(); }));
     document.getElementById('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores)));
   });
