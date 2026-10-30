@@ -100,7 +100,7 @@ function tmCapture(){
       btn('終わる（別の1件を撮る）', 'cancel-btn', ()=>{ capture.current = null; tmRender(); }));
   } else {
     tmBody.append(h('p', {class:'tm-note tm-lead'},
-      '写真は Google ドライブに保存し、毎晩 0:00 に Claude が読み取って、在庫・家計簿・クーポンに反映します。反映した内容は翌朝からアプリで確認できます。'));
+      '写真は Google ドライブに保存し、毎晩 0:00 に Claude が読み取って、在庫・クーポンに反映します。反映した内容は翌朝からアプリで確認できます。'));
     RECEIPT_KINDS.forEach(k=>tmBody.append(h('div', {class:'capture-kind'},
       h('div', {class:'capture-label'}, k.label),
       h('div', {class:'capture-pair'},
@@ -145,7 +145,7 @@ function drawReceiptSummary(){
   box.replaceChildren(
     h('h3', {}, `最近撮った分（${RECEIPT_RECENT_LABEL}・${s.recent.length}件）`),
     h('p', {class:'tm-note tm-lead'}, (s.unread ? `まだ読まれていないのは ${s.unread}件です（今夜 0:00 に読みます）。` : 'まだ読まれていない写真はありません。')
-      + 'タップすると、在庫・家計簿・クーポンにどう反映したかを見られます。'),
+      + 'タップすると、在庫・クーポンにどう反映したかを見られます。'),
     ...s.recent.map(r=>{
       const status = String(r.status || '');
       const skip = status === '' ? h('button', {type:'button', class:'row-action', disabled:capture.sending,
@@ -163,7 +163,6 @@ function drawReceiptSummary(){
 const RECEIPT_DECISION_CLS = {自動追加:'auto', 確認:'confirm', 対象外:'skip'};
 // 在庫取込の status → いまの状態
 const STOCK_IMPORT_STATUS = {自動追加:'在庫に足しました', '':'確認待ち（在庫タブの「レシートから」）', added:'在庫に追加しました', dismissed:'「追加しない」にしました', undone:'取り消しました'};
-const FINANCE_IMPORT_STATUS = {'':'確認待ち（家計簿タブで登録してください）', registered:'家計簿に登録済み', skipped:'「登録しない」にしました', error:'読み取れませんでした'};
 const COUPON_STATUS_LABEL = {'':'未使用（通知します）', 候補:'候補（クーポン一覧で確認）', used:'使った', dismissed:'不要', expired:'期限切れ'};
 
 function tmReceiptDetail(r){
@@ -186,7 +185,7 @@ function tmReceiptDetail(r){
 function drawReceiptDetail(d){
   const r = d.receipt;
   const status = String(r.status || '');
-  const section = (title, ...children)=>h('div', {class:'tm-section'}, h('h3', {}, title), children);
+  const section = (title, ...children)=>h('div', {class:'tm-section'}, h('h3', {}, title), children.flat());
   tmBody.append(h('div', {class:'import-info'},
     h('div', {class:'top'}, h('span', {}, r.store || r.kind || 'レシート'), r.total ? h('b', {}, `¥${Number(r.total).toLocaleString()}`) : ''),
     h('div', {class:'sub'}, [r.purchasedAt ? `購入 ${receiptWhen(r.purchasedAt) || r.purchasedAt}` : '', r.payment, `撮影 ${receiptWhen(r.uploadedAt)}`].filter(Boolean).join(' ・ ')),
@@ -194,20 +193,11 @@ function drawReceiptDetail(d){
     photoLinks(r.files)));
   if(r.note) tmBody.append(h('p', {class:'tm-note tm-lead'}, `Claude のメモ：${r.note}`));
   if(status === '' || status === 'skipped' || status === 'error'){
-    if(status === '') tmBody.append(h('p', {class:'tm-note'}, '今夜 0:00 に読み取ります。読み取ったあと、ここに在庫・家計簿・クーポンへの反映が出ます。'));
+    if(status === '') tmBody.append(h('p', {class:'tm-note'}, '今夜 0:00 に読み取ります。読み取ったあと、ここに在庫・クーポンへの反映が出ます。'));
     return;
   }
 
   if(r.kind === 'レシート'){
-    // 家計簿
-    const f = d.finance;
-    tmBody.append(section('家計簿', f
-      ? h('div', {class:'receipt-line'},
-          h('div', {class:'main'}, h('span', {}, f.source === 'receipt' ? 'レシートの支払い（カード以外）' : `カード利用 ${importWhen(f)}`), h('b', {}, `¥${(Number(f.amount) || 0).toLocaleString()}`)),
-          h('div', {class:'sub'}, FINANCE_IMPORT_STATUS[String(f.status || '')] || f.status),
-          suggestDigest(f) ? h('div', {class:'sub'}, `案：${suggestDigest(f)}`) : '')
-      : h('p', {class:'tm-note'}, '確認待ちの行はありません（理由は上の Claude のメモを見てください）')));
-
     // 在庫
     const items = d.items || [];
     const stockBody = [];
@@ -255,14 +245,8 @@ function drawReceiptDetail(d){
   btn.addEventListener('click', ()=>rereadReceipt(r, btn));
   tmBody.append(h('div', {class:'tm-section tm-danger'},
     h('h3', {}, '在庫の判断を読み直す'),
-    h('p', {class:'tm-note'}, '在庫の商品にタグ「ストック」を後から付けたときなどに使います。今夜 0:00 に Claude がこのレシートの在庫の判断だけをやり直します。家計簿・クーポンはそのままで、すでに在庫に足した品目は二重に足しません。'),
+    h('p', {class:'tm-note'}, '在庫の商品にタグ「ストック」を後から付けたときなどに使います。今夜 0:00 に Claude がこのレシートの在庫の判断だけをやり直します。クーポンはそのままで、すでに在庫に足した品目は二重に足しません。'),
     btn));
-}
-// 取込待ちの案（suggestItems）を「食費 ¥4,246 ／ 日用品 ¥547」にする
-function suggestDigest(f){
-  let list = [];
-  try { list = JSON.parse(f.suggestItems || '[]'); } catch(_){}
-  return (Array.isArray(list) ? list : []).map(s=>`${s.category} ¥${(Number(s.amount) || 0).toLocaleString()}`).join(' ／ ');
 }
 
 // 在庫の判断の読み直しを頼む（レシートの status を「再読」にする）

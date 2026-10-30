@@ -160,7 +160,7 @@ function renderChoreList(){
   ];
   groups.forEach(([title, list, empty])=>{
     if(!list.length && !empty) return;
-    wrap.append(h('div', {class:'fin-month'}, h('span', {}, title)));
+    wrap.append(h('div', {class:'chore-month'}, h('span', {}, title)));
     if(!list.length) wrap.append(h('p', {class:'empty-msg small'}, empty));
     list.forEach(({t, rule, due})=>{
       const d = due ? choreDueText(due, !!(rule && rule.time)) : null;

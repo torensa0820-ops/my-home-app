@@ -2,7 +2,7 @@
 // Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
-// 各処理は stock.js / finance.js / finance-import.js / recurring.js / receipt.js / tags.js / chore.js にある
+// 各処理は stock.js / receipt.js / tags.js / chore.js にある
 // =========================================================
 
 function doGet(e) {
@@ -12,19 +12,12 @@ function doGet(e) {
     return jsonOutput({
       stock: getStockRows(),
       tasks: getChoreRows(),
-      financeOptions: getFinanceOptions(),
-      finance: getFinanceRows({ offset: 0, limit: "all" }),
-      imports: getPendingImports(),
       stockImports: getStockImports(),
       coupons: getCoupons(),
-      recurring: getRecurring(),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());
   if (p.action === "getTasks") return jsonOutput(getChoreRows());
-  if (p.action === "getFinanceOptions") return jsonOutput(getFinanceOptions());
-  if (p.action === "getFinance") return jsonOutput(getFinanceRows(p));
-  if (p.action === "getImports") return jsonOutput(getPendingImports());
   if (p.action === "getReceipts") return jsonOutput(getReceiptSummary());
   if (p.action === "getReceiptDetail") {
     try { return jsonOutput(getReceiptDetail(p)); }
@@ -32,7 +25,6 @@ function doGet(e) {
   }
   if (p.action === "getStockImports") return jsonOutput(getStockImports());
   if (p.action === "getCoupons") return jsonOutput(getCoupons());
-  if (p.action === "getRecurring") return jsonOutput(getRecurring());
   return ContentService.createTextOutput("GAS is running.").setMimeType(ContentService.MimeType.TEXT);
 }
 
@@ -50,16 +42,6 @@ function doPost(e) {
       editItem(ss, data);
     } else if (data.type === "stock") {
       updateStock(ss, data);
-    } else if (data.type === "finance" && data.action === "delete") {
-      deleteFinance(ss, data);
-    } else if (data.type === "finance" && data.action === "edit") {
-      editFinance(ss, data);
-    } else if (data.type === "finance" && data.action === "importConfirm") {
-      confirmImport(ss, data);
-    } else if (data.type === "finance" && data.action === "importSkip") {
-      skipImport(ss, data);
-    } else if (data.type === "finance") {
-      addFinance(ss, data);
     } else if (data.type === "receipt" && data.action === "upload") {
       return jsonOutput(Object.assign({ status: "success" }, uploadReceipt(ss, data)));
     } else if (data.type === "receipt" && data.action === "skip") {
@@ -70,8 +52,8 @@ function doPost(e) {
       return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
     } else if (data.type === "coupon") {
       couponAction(ss, data);
-    } else if (data.type === "recurring") {
-      recurringAction(ss, data);
+    } else if (data.type === "finance" || data.type === "recurring") {
+      return jsonOutput({ status: "error", message: "家計簿の機能は削除しました" });
     } else if (data.type === "todo") {
       return jsonOutput({ status: "success", task: updateTodo(ss, data) });
     } else if (data.type === "tag") {

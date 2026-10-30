@@ -3,7 +3,7 @@
 // ---------- タブ切り替え ----------
 const TAB_INFO = {
   stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
-  finance:{title:'家計簿', sub:'記録をタップで編集・削除'},
+  coupon:{title:'クーポン', sub:'使ったら「使った」・不要なら「不要」'},
   chore:{title:'家事ルーティン', sub:'家事名をタップで編集・完了ボタンは長押し'}
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
@@ -37,16 +37,12 @@ document.getElementById('reload-btn').addEventListener('click', e=>{
 getFromGas('action=getAll')
   .then(all=>{
     loadStock(all.stock);
-    loadFinanceOptions(all.financeOptions);
-    loadFinanceHistory(all.finance);
-    loadImports(all.imports || {pending:[], rules:{}});
     loadStockImports(all.stockImports || {pending:[], auto:[]});
     loadCoupons(all.coupons || []);
-    loadRecurring(all.recurring || []);
     loadChores(all.tasks);
   })
   .catch(err=>{
     document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>{ reloadList('stock-list', loadStock); loadStockImports(); }));
-    document.getElementById('finance-list').replaceChildren(loadErrorView(err, ()=>{ loadFinanceOptions(); loadFinanceHistory(); loadImports(); loadCoupons(); loadRecurring(); }));
+    document.getElementById('coupons').replaceChildren(loadErrorView(err, ()=>reloadList('coupons', loadCoupons)));
     document.getElementById('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores)));
   });

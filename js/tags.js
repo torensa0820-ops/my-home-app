@@ -78,7 +78,7 @@ function createTagPicker(chipsId, inputId){
     }
   };
 }
-// 登録・編集画面で、タグの候補を選んでいるカテゴリのタグに絞る関数を作る（在庫・家計簿共通）
+// 登録・編集画面で、タグの候補を選んでいるカテゴリのタグに絞る関数を作る
 // cats()：選んでいるカテゴリの配列（空なら全タグを出す）、tagsOf(c)：カテゴリ c のデータに付いているタグ、allTags()：全タグ
 // ほかのカテゴリにしかないタグは、新規入力欄に入れると付けられる
 const TAG_LIMIT_NOTE = 'カテゴリを選ぶと、そのカテゴリで使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。';
@@ -89,7 +89,7 @@ function categoryTagSync(picker, cats, tagsOf, allTags){
     picker.limit(uniqSorted(cs.flatMap(tagsOf)), 'このカテゴリで使っているタグはまだありません。入力欄に入れて追加できます。');
   };
 }
-// カテゴリが空のデータを出すタブ・候補の名前（在庫・家計簿共通）
+// カテゴリが空のデータを出すタブ・候補の名前
 const UNCATEGORIZED = '未分類';
 // カテゴリごとの件数を、タブの並び順の [{name, count}] にする
 // order にあるカテゴリはその順で先頭に、ほかは件数の多い順（同じなら五十音順）、「未分類」は最後
@@ -255,10 +255,7 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
   };
 }
 
-const TM_LABEL = {stock:'在庫', finance:'家計簿'};
-
 function tmTagCounts(){
-  if(tm.sheet === 'finance') return financeOpts.tagCounts || {};
   const counts = {};
   // 在庫は商品単位で数える（同じ商品のロットは1件）
   groupStock().forEach(g=>splitTags(g.tags).forEach(t=>counts[t] = (counts[t] || 0) + 1));
@@ -274,8 +271,7 @@ function tagOp(payload){
   return postToGas({type:'tag', sheet:tm.sheet, ...payload})
     .then(res=>{
       if(res.status !== 'success') throw new Error(res.message || '処理に失敗しました');
-      // 家計簿は絞り込みの候補と履歴のタグも変わるので、履歴も読み込み直す
-      return (tm.sheet === 'stock' ? loadStock() : Promise.all([loadFinanceOptions(), loadFinanceHistory()])).then(()=>res);
+      return loadStock().then(()=>res);
     })
     .finally(()=>{ tm.busy = false; });
 }
@@ -285,7 +281,7 @@ function hasSeparator(name){
 }
 
 function tmListView(){
-  tmTitle.textContent = `${TM_LABEL[tm.sheet]}のタグ`;
+  tmTitle.textContent = '在庫のタグ';
   const counts = tmTagCounts();
   const tags = uniqSorted(Object.keys(counts));
   const input = h('input', {type:'text', placeholder:'新しいタグ名'});
@@ -373,48 +369,11 @@ function tmAssignView(tag){
       h('div', {class:'main'}, h('div', {class:'t1'}, title), h('div', {class:'t2'}, has ? '付与済み' : sub)));
   };
 
-  if(tm.sheet === 'stock'){
-    const groups = groupStock().sort((a,b)=>a.name.localeCompare(b.name, 'ja'));
-    if(!groups.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
-    groups.forEach(g=>{
-      const tags = splitTags(g.tags);
-      const sub = [stockCategoryOf(g), g.location, tags.join(', ')].filter(Boolean).join(' ・ ');
-      tmBody.append(makeRow(g.name, g.name, g.name, sub, tags.includes(tag)));
-    });
-    return;
-  }
-
-  // 家計簿は新しい順に30件ずつ読み込み、月ごとに見出しを付ける
-  const PAGE = 30;
-  let offset = 0, lastMonth = null;
-  const list = h('div');
-  const status = h('p', {class:'tm-note'}, '読み込み中…');
-  const more = h('button', {type:'button', class:'cancel-btn', onclick:()=>loadMore()});
-  tmBody.append(list);
-  function loadMore(){
-    more.remove();
-    status.textContent = '読み込み中…';
-    tmBody.append(status);
-    getFromGas(`action=getFinance&offset=${offset}&limit=${PAGE}`)
-      .then(data=>{
-        status.remove();
-        data.rows.forEach(r=>{
-          const d = finDay(r);
-          const month = `${d.getFullYear()}年${d.getMonth() + 1}月`;
-          if(month !== lastMonth){ list.append(h('div', {class:'tm-month'}, month)); lastMonth = month; }
-          const tags = splitTags(r.tags);
-          const title = `${d.getMonth() + 1}/${d.getDate()}　${r.category || '—'}　¥${(Number(r.amount) || 0).toLocaleString()}`;
-          const sub = [r.memo, tags.join(', ')].filter(Boolean).join(' ・ ') || 'メモ・タグなし';
-          list.append(makeRow('row' + r.row, {row:r.row, date:r.date}, title, sub, tags.includes(tag)));
-        });
-        offset += data.rows.length;
-        if(!data.total) list.append(h('p', {class:'tm-note'}, '記録がありません'));
-        else if(offset < data.total){
-          more.textContent = `さらに${PAGE}件読み込む（残り${data.total - offset}件）`;
-          tmBody.append(more);
-        }
-      })
-      .catch(err=>{ status.remove(); more.textContent = `読み込みに失敗しました（${errMsg(err)}）。タップで再試行`; tmBody.append(more); });
-  }
-  loadMore();
+  const groups = groupStock().sort((a,b)=>a.name.localeCompare(b.name, 'ja'));
+  if(!groups.length){ tmBody.append(h('p', {class:'tm-note'}, '商品がありません')); return; }
+  groups.forEach(g=>{
+    const tags = splitTags(g.tags);
+    const sub = [stockCategoryOf(g), g.location, tags.join(', ')].filter(Boolean).join(' ・ ');
+    tmBody.append(makeRow(g.name, g.name, g.name, sub, tags.includes(tag)));
+  });
 }

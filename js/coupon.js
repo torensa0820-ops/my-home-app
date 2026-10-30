@@ -1,5 +1,5 @@
 // クーポン：レシートに付いていたクーポン・割引券（夜に Claude が「クーポン」シートに書いたもの）
-// 家計簿タブの上に「クーポン n枚」を出し、一覧で「使った」「不要」を選ぶ。期限の近い順に並べ、近いものを目立たせる
+// クーポンタブに「クーポン n枚」を出し、一覧で「使った」「不要」を選ぶ。期限の近い順に並べ、近いものを目立たせる
 // status=候補：レシートとして撮った写真の中で Claude が見つけたクーポン・キャンペーン・告知など。
 //   一覧の上の「レシートから見つかった候補」で内容を直して「リマインドする」（通常のクーポンになり、翌朝通知される）か「不要」を選ぶ
 // repeat（monthly:9,19,29 ／ weekly:0,6）があるクーポンはくり返しの日の前日・当日に通知される。一覧では期間の代わりに次の日を出す
@@ -14,7 +14,7 @@ function loadCoupons(preloaded){
       couponList = rows || [];
       renderCouponBanner();
     })
-    .catch(err=>toast(`クーポンの読み込みに失敗しました（${errMsg(err)}）`));
+    .catch(err=>document.getElementById('coupons').replaceChildren(loadErrorView(err, ()=>reloadList('coupons', loadCoupons))));
 }
 
 // ---------- くり返し（repeat。GAS の parseCouponRepeat と同じ書き方）----------
@@ -93,13 +93,13 @@ function sortedCoupons(candidate = false){
     .sort((a, b)=>key(a).localeCompare(key(b)));
 }
 
-// 家計簿タブの上に「クーポン n枚」を出す（クーポンも候補もなければ何も出さない）。いちばん期限の近い1枚を書き添える
+// クーポンタブに「クーポン n枚」を出す（クーポンも候補もなければその旨を出す）。いちばん期限の近い1枚を書き添える
 function renderCouponBanner(){
-  const wrap = document.getElementById('finance-coupons');
+  const wrap = document.getElementById('coupons');
   wrap.replaceChildren();
   const list = sortedCoupons();
   const candidates = sortedCoupons(true);
-  if(!list.length && !candidates.length) return;
+  if(!list.length && !candidates.length){ wrap.append(h('p', {class:'empty-msg'}, '使えるクーポンはありません')); return; }
   const usable = list.filter(c=>couponState(c).cls !== 'later');
   const first = usable[0] || list[0];
   const parts = [];
@@ -109,7 +109,7 @@ function renderCouponBanner(){
   }
   if(candidates.length) parts.push(`候補 ${candidates.length}件`);
   wrap.append(h('button', {type:'button', class:'import-banner coupon' + (usable.some(c=>couponState(c).cls) ? ' soon' : ''),
-    onclick:()=>openSheet('finance', tmCouponList)},
+    onclick:()=>openSheet('coupon', tmCouponList)},
     h('span', {class:'dot' + (list.length ? '' : ' quiet')}, String(list.length || candidates.length)),
     h('span', {class:'text'},
       h('b', {}, 'クーポン'),

@@ -7,8 +7,8 @@
   --muted:#AAB1BB; /* 指定の #A7AEB8 では --surface-2 の上で 4.39:1 になるため少し明るくした */
   --stock:#9DCBA4;
   --stock-dim:#3C5244;
-  --finance:#9DBBDF;
-  --finance-dim:#3A4A5E; /* 指定の #3C4C61 では --finance の文字が 4.42:1 になるため少し暗くした */
+  --coupon:#9DBBDF;
+  --coupon-dim:#3A4A5E; /* 指定の #3C4C61 では --coupon の文字が 4.42:1 になるため少し暗くした */
   --chore:#E2BC7A;
   --chore-dim:#57492F;
   --danger:#EE9F94;
@@ -100,12 +100,11 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),
 .chips:not(:empty){margin-bottom:10px;}
 .chip{border:none;background:var(--surface-2);color:var(--muted);border-radius:999px;padding:7px 14px;font-size:13px;font-weight:600;}
 .chip.on{background:var(--stock);color:var(--on-accent);}
-#finance-panel .chip.on,#tm-backdrop[data-sheet="finance"] .chip.on{background:var(--finance);}
+#tm-backdrop[data-sheet="coupon"] .chip.on{background:var(--coupon);}
 .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
 .label-row label{margin:0 !important;}
 .text-btn{background:none;border:none;color:var(--muted);font-size:13px;font-weight:700;padding:4px 2px;}
 .label-row .text-btn{color:var(--stock);}
-#finance-panel .label-row .text-btn{color:var(--finance);}
 
 /* タグ管理シート */
 .sheet.tall{height:85%;display:flex;flex-direction:column;padding-bottom:calc(14px + var(--safe-bottom));}
@@ -131,7 +130,6 @@ select{background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),
 .tm-month:first-child{margin-top:0;}
 .tm-check{display:flex;align-items:center;gap:12px;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:11px 14px;margin-bottom:6px;}
 .tm-check input{width:20px;height:20px;flex-shrink:0;accent-color:var(--stock);}
-#tm-backdrop[data-sheet="finance"] .tm-check input{accent-color:var(--finance);}
 .tm-check.done{opacity:.5;}
 .tm-check .main{flex:1;min-width:0;}
 .tm-check .t1{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -145,7 +143,6 @@ details[open] summary:before{content:"▾ ";}
 .row2 .field{flex:1;}
 .submit-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:16px;font-weight:700;margin-top:4px;color:var(--on-accent);}
 #stock-panel .submit-btn{background:var(--stock);}
-#finance-panel .submit-btn{background:var(--finance);}
 #chore-panel .submit-btn{background:var(--chore);}
 .submit-btn:active{opacity:.8;}
 
@@ -156,7 +153,7 @@ nav.tabbar{position:fixed;left:16px;right:16px;bottom:var(--tabbar-gap);z-index:
 nav.tabbar button{flex:1;height:54px;border:none;border-radius:999px;background:none;color:var(--muted);font-size:10px;font-weight:700;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
 nav.tabbar button svg{width:24px;height:24px;}
 nav.tabbar button[data-tab="stock"].active{background:var(--stock-dim);color:var(--stock);}
-nav.tabbar button[data-tab="finance"].active{background:var(--finance-dim);color:var(--finance);}
+nav.tabbar button[data-tab="coupon"].active{background:var(--coupon-dim);color:var(--coupon);}
 nav.tabbar button[data-tab="chore"].active{background:var(--chore-dim);color:var(--chore);}
 
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
@@ -166,7 +163,6 @@ nav.tabbar button[data-tab="chore"].active{background:var(--chore-dim);color:var
 .cat-tabs:empty{display:none;}
 .cat-tabs .chip{flex-shrink:0;background:var(--surface);}
 .cat-tabs .chip.on{background:var(--stock-dim);color:var(--stock);}
-#finance-panel .cat-tabs .chip.on{background:var(--finance-dim);color:var(--finance);}
 .filter-note{margin:-2px 0 8px;}
 .cat-tabs .n{margin-left:5px;font-size:11px;font-weight:700;opacity:.75;}
 /* タグの絞り込み：一覧の上は「絞り込み」ボタン・選択中のタグ・「管理」ボタンの1行 */
@@ -180,16 +176,14 @@ nav.tabbar button[data-tab="chore"].active{background:var(--chore-dim);color:var
 .filter-status:empty{display:none;}
 .filter-status .clear{margin-left:auto;background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;padding:4px 0;}
 #stock-panel .filter-manage,#stock-panel .filter-open.on{color:var(--stock);}
-#finance-panel .filter-manage,#finance-panel .filter-open.on{color:var(--finance);}
 /* 絞り込みパネル：タグを折り返して並べる */
 .filter-tools{display:flex;flex-direction:column;gap:10px;margin-bottom:14px;}
 .filter-search{width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:16px;appearance:none;}
 .seg{display:flex;background:var(--surface);border-radius:999px;padding:3px;}
 .seg button{flex:1;border:none;background:none;color:var(--muted);border-radius:999px;padding:8px 0;font-size:13px;font-weight:700;}
-.seg button.on{background:var(--finance-dim);color:var(--finance);}
-/* 絞り込みパネルの中（面が --surface）では一段明るくし、在庫タブでは選択中を在庫の色にする */
+.seg button.on{background:var(--stock-dim);color:var(--stock);}
+/* 絞り込みパネルの中（面が --surface）では一段明るくする */
 .compose .seg{background:var(--surface-2);}
-#stock-panel .seg button.on{background:var(--stock-dim);color:var(--stock);}
 .filter-cloud{margin-bottom:16px;}
 .filter-label{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 8px;}
 /* カテゴリのチップはタグと区別できるよう角を小さくする */
@@ -217,36 +211,15 @@ main{padding-bottom:calc(var(--tabbar-h) + 92px + var(--compose-pad));}
 .fab{position:fixed;right:16px;bottom:calc(var(--tabbar-h) + 16px);z-index:4;width:60px;height:60px;border:none;border-radius:50%;padding:0;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;line-height:1;color:var(--on-accent);box-shadow:0 10px 24px rgba(0,0,0,.35);}
 .tab-panel:not(.active) .fab, body[data-compose] .fab{display:none;}
 #stock-panel .fab{background:var(--stock);}
-#finance-panel .fab{background:var(--finance);}
 #chore-panel .fab{background:var(--chore);}
 /* 登録パネルが開いている間、一覧のタップで入力できることを示す */
-body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #finance-panel .fin-row{cursor:copy;}
+body[data-compose="form"] #stock-panel .card-info{cursor:copy;}
 .picked{animation:picked .6s ease-out;}
 @keyframes picked{from{box-shadow:0 0 0 2px var(--text);}to{box-shadow:0 0 0 2px transparent;}}
 
-/* 家計簿の履歴 */
-.fin-month{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;color:var(--muted);margin:18px 2px 8px;}
-.fin-month:first-child{margin-top:0;}
-.fin-month .sum{font-size:13px;color:var(--text);}
-.fin-row{display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:14px;padding:11px 14px;margin-bottom:8px;}
-.fin-date{flex-shrink:0;width:38px;font-size:12px;color:var(--muted);text-align:center;line-height:1.3;}
-.fin-date b{display:block;font-size:16px;color:var(--text);}
-.fin-main{flex:1;min-width:0;}
-.fin-cat{font-size:15px;font-weight:600;}
-.split-badge{display:inline-block;vertical-align:2px;margin-left:6px;padding:1px 6px;background:var(--finance-dim);border-radius:999px;font-size:10px;font-weight:700;color:var(--finance);}
-/* 1回の会計をカテゴリごとに分ける内訳 */
-.split-editor{margin:-4px 0 12px;}
-.split-row{display:grid;grid-template-columns:1fr 96px 40px;gap:8px;align-items:start;margin-bottom:8px;}
-.split-cat{min-width:0;}
-.split-row .lot-remove{height:44px;}
-.split-add{width:100%;border:1px dashed var(--border);border-radius:10px;background:none;color:var(--finance);font-size:13px;font-weight:700;padding:10px;}
-.split-add:active{background:var(--surface-2);}
-.split-preview{background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:8px;}
-.split-preview .later{color:var(--muted);font-size:12px;}
-.split-preview.error{color:var(--danger);}
-.fin-sub{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.fin-amount{flex-shrink:0;font-size:16px;font-weight:700;}
-.fin-row{cursor:pointer;}
+/* 家事の月の見出し */
+.chore-month{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;font-weight:700;color:var(--muted);margin:18px 2px 8px;}
+.chore-month:first-child{margin-top:0;}
 .tm-danger{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);}
 .list-head .section-title{margin:0;}
 .edit-toggle{background:var(--surface);border:none;color:var(--muted);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;}
@@ -272,57 +245,9 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 #toast{position:fixed;z-index:20;left:50%;bottom:calc(var(--tabbar-h) + 28px + var(--compose-pad));transform:translateX(-50%) translateY(20px);background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:10px 18px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;white-space:nowrap;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-/* 家計簿：履歴とグラフの切り替え */
-.view-seg{flex:1;max-width:220px;}
-/* 家計簿のグラフ */
-.fc-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;}
-.fc-stat{background:var(--surface);border-radius:18px;padding:12px 14px;min-width:0;}
-.fc-stat-main{grid-column:1 / -1;}
-.fc-stat-label{font-size:12px;color:var(--muted);}
-.fc-stat-value{font-size:20px;font-weight:700;margin-top:4px;}
-.fc-stat-value.big{font-size:30px;}
-.fc-stat-sub{font-size:12px;color:var(--muted);margin-top:2px;}
-.fc-stat-sub.up{color:var(--danger);}
-.fc-stat-sub.down{color:var(--stock);}
-.fc-card{background:var(--surface);border-radius:18px;padding:14px 16px;margin-bottom:10px;}
-.fc-title{font-size:14px;font-weight:700;}
-.fc-hint{font-size:12px;color:var(--muted);margin-top:2px;}
-.fc-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:10px 0 4px;font-size:12px;color:var(--muted);}
-.fc-key{display:inline-flex;align-items:center;gap:6px;}
-.fc-key i,.fc-tip-row i,.fc-bar-name i{display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0;}
-.fc-plot{position:relative;}
-.fc-svg{display:block;overflow:visible;}
-.fc-grid{stroke:var(--border);stroke-width:1;}
-.fc-base{stroke:#5B636E;stroke-width:1;}
-.fc-tick{fill:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;}
-.fc-month{fill:var(--muted);font-size:11px;}
-.fc-month.on{fill:var(--text);font-weight:700;}
-.fc-val{fill:var(--text);font-size:11px;font-weight:700;}
-.fc-col{cursor:pointer;outline:none;}
-.fc-hit{fill:transparent;}
-.fc-col.on .fc-hit{fill:rgba(255,255,255,.045);}
-.fc-col:hover .fc-hit,.fc-col:focus-visible .fc-hit{fill:rgba(255,255,255,.07);}
-.fc-tip{position:absolute;top:0;z-index:2;pointer-events:none;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted);box-shadow:0 6px 16px rgba(0,0,0,.25);white-space:nowrap;}
-.fc-tip b{color:var(--text);}
-.fc-tip-head{margin-bottom:4px;}
-.fc-tip-row{display:flex;align-items:center;gap:6px;}
-.fc-tip-row i{width:10px;height:3px;border-radius:2px;}
-.fc-bar-row{margin-top:12px;}
-.fc-bar-head{display:flex;justify-content:space-between;gap:10px;font-size:13px;}
-.fc-bar-name{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.fc-bar-val{flex-shrink:0;color:var(--muted);font-size:12px;}
-.fc-bar-val b{color:var(--text);font-size:13px;}
-.fc-bar-track{height:8px;margin-top:6px;}
-.fc-bar-fill{height:100%;border-radius:0 4px 4px 0;}
-.fc-table{background:var(--surface);border:none;border-radius:18px;padding:0 16px;margin:0 0 10px;}
-.fc-table table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px;}
-.fc-table th{text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:6px 0;border-bottom:1px solid var(--border);}
-.fc-table td{padding:8px 0;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
-.fc-table th:not(:first-child),.fc-table td:not(:first-child){text-align:right;}
-
-/* 家計簿：カード利用の取り込み */
-.import-banner{width:100%;display:flex;align-items:center;gap:12px;background:var(--finance-dim);border:none;border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--text);text-align:left;}
-.import-banner .dot{flex-shrink:0;min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:var(--finance);color:var(--on-accent);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+/* 取り込み・クーポンのバナーと一覧の行 */
+.import-banner{width:100%;display:flex;align-items:center;gap:12px;background:var(--coupon-dim);border:none;border-radius:14px;padding:12px 14px;margin-bottom:12px;color:var(--text);text-align:left;}
+.import-banner .dot{flex-shrink:0;min-width:28px;height:28px;padding:0 8px;border-radius:999px;background:var(--coupon);color:var(--on-accent);font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;}
 .import-banner .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
 .import-banner .text b{font-size:15px;}
 .import-banner .text span{font-size:12px;color:var(--muted);}
@@ -332,27 +257,16 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .import-row .name span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .import-row .name small{font-size:12px;color:var(--muted);font-weight:500;}
 .import-row .amt{flex-shrink:0;font-weight:700;}
-.import-row.error .name{color:var(--danger);}
-#finance-panel .list-head .text-btn{color:var(--finance);}
-.recurring-every{display:flex;gap:8px;}
-.recurring-every .recurring-interval{width:88px;flex-shrink:0;}
-.recurring-every select{flex:1;min-width:0;}
 .import-info{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:14px;line-height:1.6;word-break:break-all;}
 .import-info .top{display:flex;justify-content:space-between;gap:12px;font-size:16px;font-weight:700;}
 .import-info .sub{font-size:12px;color:var(--muted);}
-.import-dup{background:var(--danger-dim);border-radius:12px;padding:12px 14px;margin-bottom:14px;font-size:13px;line-height:1.6;}
-.import-dup b{color:var(--danger);}
-.import-dup p{margin:4px 0 8px;}
-.import-dup .dup-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;}
 
 /* ヘッダーの右上のボタン（撮影・最新版の読み込み） */
 .app-actions{display:flex;gap:8px;}
 
-/* 内訳ごとのメモ（レシートの取り込み） */
-.split-memo{grid-column:1 / -1;margin-top:-2px;}
 /* レシート・クーポンの写真へのリンク */
 .photo-links{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:13px;}
-.photo-links a{color:var(--finance);font-weight:700;text-decoration:none;}
+.photo-links a{color:var(--coupon);font-weight:700;text-decoration:none;}
 .photo-links a::after{content:" ↗";}
 /* 一覧の行の中の小さなボタン（取り消す・不要） */
 .row-action{flex-shrink:0;border:1px solid var(--border);border-radius:10px;background:none;color:var(--text);font-size:13px;font-weight:700;padding:8px 12px;}
@@ -376,7 +290,7 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .coupon-badge{flex-shrink:0;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:700;background:var(--bg);color:var(--muted);}
 .coupon-card.soon .coupon-badge{background:var(--chore-dim);color:var(--chore);}
 .coupon-card.urgent .coupon-badge{background:var(--danger-dim);color:var(--danger);}
-.coupon-card.later .coupon-badge{background:var(--finance-dim);color:var(--finance);}
+.coupon-card.later .coupon-badge{background:var(--coupon-dim);color:var(--coupon);}
 .coupon-title{font-size:16px;font-weight:700;margin-top:4px;}
 .coupon-detail{font-size:13px;margin-top:2px;line-height:1.5;}
 .coupon-period{font-size:12px;color:var(--muted);margin-top:4px;}
@@ -392,19 +306,19 @@ body[data-compose="form"] #stock-panel .card-info, body[data-compose="form"] #fi
 .capture-pair > *{flex:1;margin-top:0;}
 .capture-main{padding:13px;}
 .capture-kind .capture-pair{margin-bottom:0;}
-.capture-status{background:var(--finance-dim);color:var(--finance);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:700;}
+.capture-status{background:var(--coupon-dim);color:var(--coupon);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:13px;font-weight:700;}
 .capture-summary{margin-top:20px;}
 /* クーポンの候補（内容と期間をその場で直す） */
 .tm-subhead{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;}
 .coupon-card.candidate{border-style:dashed;}
-.coupon-card.candidate .coupon-badge{background:var(--finance-dim);color:var(--finance);}
+.coupon-card.candidate .coupon-badge{background:var(--coupon-dim);color:var(--coupon);}
 .coupon-field{margin:8px 0 6px;}
 .coupon-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
 .coupon-dates .field{margin-bottom:0;min-width:0;}
 /* クーポンのくり返しの入力（毎月は日付、毎週は曜日のチップ） */
 .repeat-input{margin-top:8px;}
 .repeat-weeks .chip{min-width:40px;}
-/* 撮影した1件の詳細（在庫・家計簿・クーポンへの反映） */
+/* 撮影した1件の詳細（在庫・クーポンへの反映） */
 .receipt-row{cursor:pointer;}
 .receipt-line{background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:8px;font-size:14px;line-height:1.5;}
 .receipt-line .main{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:600;}

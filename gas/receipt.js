@@ -5,10 +5,9 @@
 //   1. 画面で撮った写真を uploadReceipt でドライブ（スクリプトプロパティ RECEIPT_FOLDER_ID のフォルダ）に保存し、
 //      「レシート」シートに1行追加する（長いレシートは「続きを撮る」で同じ行に写真を足す）
 //   2. 毎晩 0:00 に Claude のスケジュールタスク（アプリの外）が status が空の行の写真を読み、
-//      「レシート」「在庫取込」「取込待ち」「クーポン」シートに書き込む
-//   3. 画面で在庫取込の確認待ち（追加・追加しない）と自動追加の取り消し、家計簿の確認待ち、クーポンの使った・不要を処理する
+//      「レシート」「在庫取込」「クーポン」シートに書き込む
+//   3. 画面で在庫取込の確認待ち（追加・追加しない）と自動追加の取り消し、クーポンの使った・不要を処理する
 //   4. 毎朝 7:00 に notifyCouponsAndPending がクーポンの期限と確認待ちの件数を Discord に通知する
-//      （その前に、支払いの日になった定期支出を取込待ちに入れる。recurring.js）
 // 列は見出し名で探す。シートや列がなければ1行目の見出しを作る（ensureReceiptSheets）
 // =========================================================
 const SHEET_RECEIPT = "レシート";
@@ -20,9 +19,6 @@ const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", 
 // レシート明細：レシートの全品目と、在庫についての判断（decision：自動追加 / 確認 / 対象外）と理由。Claude が書く
 const RECEIPT_ITEM_HEADERS = ["id", "receiptId", "itemName", "qty", "price", "matchedStock", "decision", "reason", "stockImportId", "createdAt", "updatedAt"];
 const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt", "repeat"];
-// 取込待ち：gas-mail/ が作る列（列の位置で書き込むので順番を変えない）と、レシートの読み取りで足す列（末尾に足す）
-const IMPORT_BASE_HEADERS = ["id", "source", "usedAt", "merchant", "kind", "amount", "card", "receivedAt", "status", "note"];
-const IMPORT_RECEIPT_HEADERS = ["suggestItems", "suggestTags", "suggestMemo", "suggestPayment", "receiptId"];
 const COUPON_DATE_COLUMNS = ["validFrom", "validUntil", "notifiedOn"]; // yyyy-MM-dd の文字列で持つ列
 const RECEIPT_MAX_BYTES = 5 * 1024 * 1024; // 受け取る写真1枚の上限
 const RECEIPT_REREAD = "再読"; // レシートの status。アプリで「在庫の判断を読み直す」を押したもの（今夜 Claude が在庫の判断だけやり直す）
@@ -63,7 +59,6 @@ function ensureReceiptSheets(ss) {
   receiptSheet(ss, SHEET_STOCK_IMPORT, STOCK_IMPORT_HEADERS);
   receiptSheet(ss, SHEET_RECEIPT_ITEMS, RECEIPT_ITEM_HEADERS);
   receiptSheet(ss, SHEET_COUPON, COUPON_HEADERS, COUPON_DATE_COLUMNS);
-  receiptSheet(ss, SHEET_IMPORT, IMPORT_BASE_HEADERS.concat(IMPORT_RECEIPT_HEADERS), ["usedAt"]);
   return receiptSheet(ss, SHEET_RECEIPT, RECEIPT_HEADERS);
 }
 
@@ -120,7 +115,7 @@ function receiptNow() {
   return Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss");
 }
 
-// レシートの id → 写真のファイル ID の配列（取込待ち・在庫取込から写真を開くリンクに使う）
+// レシートの id → 写真のファイル ID の配列（在庫取込から写真を開くリンクに使う）
 function receiptFileMap(ss) {
   const map = {};
   receiptRead(ss.getSheetByName(SHEET_RECEIPT)).rows.forEach(o => { map[String(o.id)] = receiptFileIds(o.fileIds); });
@@ -229,7 +224,6 @@ function getReceiptSummary() {
 // ---- 撮影した1件の詳細：何がどこに反映されたか ----
 // receipt：レシートの行（files に写真のファイル ID の配列）
 // items：レシート明細（品目ごとの判断）。stockImport に対応する在庫取込の行（あれば）
-// finance：家計簿の確認待ち（取込待ちの行。importId か receiptId で探す）。なければ null
 // coupons：このレシートから作ったクーポン・候補
 function getReceiptDetail(p) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -246,21 +240,17 @@ function getReceiptDetail(p) {
       if (imp) delete imports[String(o.stockImportId)];
       return Object.assign(receiptOut(o), { stockImport: imp ? receiptOut(imp) : null });
     });
-  const importId = String(found.importId ?? "");
-  const fin = receiptRead(ss.getSheetByName(SHEET_IMPORT)).rows
-    .find(o => (importId && String(o.id) === importId) || String(o.receiptId ?? "") === id);
   return {
     receipt: Object.assign(receiptOut(found), { files: receiptFileIds(found.fileIds) }),
     items: items,
     // 明細に結びついていない在庫取込（明細の記録を始める前に読んだレシートなど）
     otherStockImports: Object.keys(imports).map(k => receiptOut(imports[k])),
-    finance: fin ? receiptOut(fin) : null,
     coupons: receiptRead(ss.getSheetByName(SHEET_COUPON)).rows.filter(o => String(o.receiptId) === id).map(receiptOut),
   };
 }
 
 // 在庫の判断を読み直す（読み取り済みのレシートだけ。status を「再読」にし、今夜 Claude が在庫の判断だけをやり直す）
-// ストックタグを後から付けた品目などを拾うため。家計簿・クーポン・セール品目は書き直さない
+// ストックタグを後から付けた品目などを拾うため。クーポン・セール品目は書き直さない
 function rereadReceipt(ss, data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -498,8 +488,6 @@ function notifyCouponsAndPending() {
   }
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    // 支払いの日になった定期支出を取込待ちに入れる（recurring.js）。失敗してもクーポンの通知は続ける
-    try { generateRecurringImports(ss); } catch (err) { Logger.log("定期支出の取り込みに失敗しました：" + err); }
     const notice = buildCouponNotice(ss);
     // 期限を過ぎた未使用のクーポンは、通知の有無にかかわらず expired にする
     notice.expired.forEach(o => receiptWrite(notice.sheet, notice.headers, o._row, { status: "expired" }));
@@ -617,15 +605,13 @@ function couponDays(from, to) {
   return Math.round((Date.parse(to + "T00:00:00Z") - Date.parse(from + "T00:00:00Z")) / 86400000);
 }
 
-// 「確認待ち：家計簿 n件・在庫 n件・クーポン候補 n件」（0件の項目は書かない。すべて0件なら空）
+// 「確認待ち：在庫 n件・クーポン候補 n件」（0件の項目は書かない。すべて0件なら空）
 // クーポン候補は期限を過ぎていないものだけ数える（過ぎたものは同じ通知で expired にする）
 function pendingCountsLine(ss, today) {
-  const finance = receiptRead(ss.getSheetByName(SHEET_IMPORT)).rows
-    .filter(o => ["", "error"].indexOf(String(o.status ?? "")) !== -1).length;
   const stock = receiptRead(ss.getSheetByName(SHEET_STOCK_IMPORT)).rows
     .filter(o => String(o.kind ?? "") === "確認" && String(o.status ?? "") === "").length;
   const candidates = receiptRead(ss.getSheetByName(SHEET_COUPON)).rows
     .filter(o => String(o.status ?? "") === COUPON_CANDIDATE && !couponExpired(o, today)).length;
-  const parts = [finance ? `家計簿 ${finance}件` : "", stock ? `在庫 ${stock}件` : "", candidates ? `クーポン候補 ${candidates}件` : ""].filter(Boolean);
+  const parts = [stock ? `在庫 ${stock}件` : "", candidates ? `クーポン候補 ${candidates}件` : ""].filter(Boolean);
   return parts.length ? "確認待ち：" + parts.join("・") : "";
 }

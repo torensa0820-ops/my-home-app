@@ -96,9 +96,6 @@ function setupHybrid(selectEl, inputEl, presetValues){
 function getHybridValue(selectEl, inputEl){
   return normText(selectEl.value === '__new__' ? inputEl.value : selectEl.value);
 }
-function escapeHtml(s){
-  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
 
 // 一覧をタップしてフォームに入力したことを、カードの枠とトーストで知らせる
 function flashPicked(el, label){

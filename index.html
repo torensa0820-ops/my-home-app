@@ -80,53 +80,12 @@
       </div>
     </section>
 
-    <!-- ===== 家計簿タブ ===== -->
-    <section id="finance-panel" class="tab-panel">
+    <!-- ===== クーポンタブ ===== -->
+    <section id="coupon-panel" class="tab-panel">
       <div class="list-head">
-        <div class="seg view-seg" id="finance-view" role="tablist">
-          <button type="button" data-view="list" class="on">履歴</button>
-          <button type="button" data-view="chart">グラフ</button>
-        </div>
-        <button type="button" class="text-btn" id="recurring-open">定期支出</button>
+        <div class="section-title">クーポン</div>
       </div>
-      <div class="cat-tabs" id="finance-cats" role="tablist" aria-label="カテゴリ"></div>
-      <div class="filter-bar" id="finance-filter"></div>
-      <div id="finance-imports"></div>
-      <div id="finance-coupons"></div>
-      <div id="finance-list"><p class="empty-msg">読み込み中…</p></div>
-      <div id="finance-chart" hidden></div>
-
-      <button type="button" class="fab" data-compose="finance" aria-label="記録">＋</button>
-      <div class="compose" data-kind="form" id="finance-compose" role="dialog" aria-labelledby="finance-compose-title">
-        <div class="compose-grip" aria-hidden="true"><span></span></div>
-        <div class="compose-head">
-          <h2 id="finance-compose-title">支出を記録する</h2>
-          <button type="button" class="text-btn compose-close">閉じる</button>
-        </div>
-        <p class="compose-hint">履歴をタップすると、カテゴリ・支払い方法・メモ・タグを入力できます</p>
-        <div class="compose-body">
-          <form id="finance-form">
-            <div class="field"><label>カテゴリ</label>
-              <select id="f-category-select" class="hybrid-select"></select>
-              <input type="text" id="f-category-input" class="hybrid-input" placeholder="新しいカテゴリを入力">
-            </div>
-            <div class="field"><label>日付</label><input type="date" id="f-date" required></div>
-            <div class="field"><label>金額（円）</label><input type="number" id="f-amount" required inputmode="numeric" placeholder="850"></div>
-            <div id="f-splits"></div>
-            <div class="field"><label>支払い方法</label>
-              <select id="f-payment-select" class="hybrid-select"></select>
-              <input type="text" id="f-payment-input" class="hybrid-input" placeholder="新しい支払い方法を入力">
-            </div>
-            <div class="field"><label>メモ</label><input type="text" id="f-memo" placeholder="例：スーパー"></div>
-            <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="finance">管理</button></div>
-              <div id="f-tags-chips" class="chips"></div>
-              <input type="text" id="f-tags-input" placeholder="新しいタグを入力して改行で追加">
-              <p class="form-note">カテゴリを選ぶと、そのカテゴリ（内訳を分けたときは内訳のカテゴリも）で使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。</p>
-            </div>
-            <button type="submit" class="submit-btn">記録する</button>
-          </form>
-        </div>
-      </div>
+      <div id="coupons"><p class="empty-msg">読み込み中…</p></div>
     </section>
 
     <!-- ===== 家事タブ ===== -->
@@ -157,7 +116,7 @@
 
   <nav class="tabbar">
     <button data-tab="stock" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>在庫</button>
-    <button data-tab="finance"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/></svg>家計簿</button>
+    <button data-tab="coupon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h15A1.5 1.5 0 0 1 21 8.5V10a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15.5V14a2 2 0 0 0 0-4z"/><path d="M15 7v2M15 11v2M15 15v2"/></svg>クーポン</button>
     <button data-tab="chore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></svg>家事</button>
   </nav>
 </div>
@@ -185,15 +144,10 @@
 <div id="toast"></div>
 
 <script src="gas/chore-rule.js"></script>
-<script src="gas/recurring-rule.js"></script>
 <script src="js/common.js"></script>
 <script src="js/panels.js"></script>
 <script src="js/tags.js"></script>
 <script src="js/stock.js"></script>
-<script src="js/finance.js"></script>
-<script src="js/finance-chart.js"></script>
-<script src="js/finance-import.js"></script>
-<script src="js/recurring.js"></script>
 <script src="js/stock-import.js"></script>
 <script src="js/coupon.js"></script>
 <script src="js/receipt.js"></script>
