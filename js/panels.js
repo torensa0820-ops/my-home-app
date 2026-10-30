@@ -85,8 +85,8 @@ function makeHoldButton(label, onDone){
 }
 
 // ---------- 編集用のシート ----------
-// タグ管理・商品の編集・家事の編集・クーポンの一覧で共通に使う、画面の大部分を覆うシート
-// tm.sheet はどのデータの画面か（stock / coupon / chore）。タグ管理と色分けに使う
+// タグ管理・商品の編集・家事の編集で共通に使う、画面の大部分を覆うシート
+// tm.sheet はどのデータの画面か（stock / chore）。タグ管理と色分けに使う
 // tm.busy の間（保存・削除の通信中）は閉じられないようにする
 const tm = {sheet:null, stack:[], busy:false};
 const tmBackdrop = document.getElementById('tm-backdrop');
