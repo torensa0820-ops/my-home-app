@@ -38,6 +38,8 @@ function doPost(e) {
       deleteStock(ss, data);
     } else if (data.type === "stock" && data.action === "bump") {
       bumpStock(ss, data);
+    } else if (data.type === "stock" && data.action === "setBuyFlag") {
+      setBuyFlag(ss, data);
     } else if (data.type === "stock" && data.action === "editItem") {
       editItem(ss, data);
     } else if (data.type === "stock") {

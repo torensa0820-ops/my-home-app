@@ -107,6 +107,8 @@ function categoryCounts(cats, order = []){
 // opts.tabs = {id, storageKey}：id の要素にカテゴリのタブ（すべて・各カテゴリ）を出す。タブを押すとそのカテゴリだけを選び、
 // パネルではカテゴリを複数選べる（いずれかを含む）。選んだカテゴリは storageKey で端末に覚えておく
 // 条件は「選んだカテゴリのいずれか」かつ「タグの条件」
+// opts.tabs.special = {label, storageKey}：「すべて」の隣に、カテゴリとは別の一覧に切り替えるタブを足す。選んでいる間はカテゴリ・タグの条件を外し、
+// 絞り込みのバーを隠す（一覧の出し分けは呼び出し側が special() を見て行う）。選んだことは storageKey で端末に覚えておく
 function createFilterBar(barId, sheet, onChange, opts = {}){
   const bar = document.getElementById(barId);
   const section = bar.closest('.tab-panel');
@@ -114,11 +116,14 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
   const status = h('div', {class:'filter-status'});
   bar.after(status);
   const selected = new Set();
-  const selectedCats = new Set(loadCats());
+  const special = opts.tabs ? opts.tabs.special : null;
+  let specialOn = loadSpecial();
+  const selectedCats = new Set(specialOn ? [] : loadCats());
   let mode = 'any';
   let tags = [];
   let categories = []; // [{name, count}]（タブの並び順）
   let total = 0;       // 「すべて」の件数
+  let specialCount = 0; // opts.tabs.special のタブの件数
   const clearAll = ()=>{ selected.clear(); selectedCats.clear(); changed(); };
   // 「絞り込みを解除」：タグを外す。カテゴリを複数選んでいたら、それも外して「すべて」に戻す（1つならタブはそのまま）
   const clearFilter = ()=>{ selected.clear(); if(selectedCats.size > 1) selectedCats.clear(); changed(); };
@@ -130,9 +135,16 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
       return Array.isArray(v) ? v.map(String) : [];
     } catch(_){ return []; }
   }
+  function loadSpecial(){
+    if(!special) return false;
+    try { return localStorage.getItem(special.storageKey) === '1'; } catch(_){ return false; }
+  }
   function saveCats(){
     if(!opts.tabs) return;
-    try { localStorage.setItem(opts.tabs.storageKey, JSON.stringify([...selectedCats])); } catch(_){}
+    try {
+      localStorage.setItem(opts.tabs.storageKey, JSON.stringify([...selectedCats]));
+      if(special) localStorage.setItem(special.storageKey, specialOn ? '1' : '');
+    } catch(_){}
   }
   // 一覧の上に出す条件の数。タブで見えている1つのカテゴリは数えない
   const condCount = ()=>selected.size + (selectedCats.size > 1 ? selectedCats.size : 0);
@@ -184,9 +196,18 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
     tabsWrap.replaceChildren();
     if(!categories.length) return;
     const tab = (label, n, on, onclick)=>h('button', {type:'button', class:'chip' + (on ? ' on' : ''), onclick}, label, h('span', {class:'n'}, String(n)));
-    tabsWrap.append(tab('すべて', total, !selectedCats.size, ()=>{ if(selectedCats.size){ selectedCats.clear(); changed(); } }));
+    tabsWrap.append(tab('すべて', total, !selectedCats.size && !specialOn, ()=>{ if(selectedCats.size || specialOn){ selectedCats.clear(); specialOn = false; changed(); } }));
+    if(special) tabsWrap.append(tab(special.label, specialCount, specialOn, ()=>{
+      if(specialOn) return;
+      specialOn = true;
+      selected.clear();
+      selectedCats.clear();
+      if(openPanelKind() === 'filter') closeCompose(); // 絞り込みのパネルは、このタブでは使わない
+      changed();
+    }));
     categories.forEach(({name, count})=>tabsWrap.append(tab(name, count, selectedCats.has(name), ()=>{
       if(selectedCats.size === 1 && selectedCats.has(name)) return;
+      specialOn = false;
       selectedCats.clear();
       selectedCats.add(name);
       changed();
@@ -198,6 +219,7 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
   }
   // ---- 一覧の上のバー ----
   function drawBar(){
+    bar.hidden = status.hidden = specialOn;
     bar.innerHTML = '';
     const count = condCount();
     const open = h('button', {type:'button', class:'filter-open' + (count ? ' on' : ''), onclick:()=>openCompose('filter')},
@@ -228,10 +250,11 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
       if(selected.size !== before) onChange();
     },
     // カテゴリのタブとパネルの候補を描き直す（opts.tabs のときだけ使う）
-    // list：[{name, count}]（この順にタブを並べる）、all：「すべて」の件数。無くなったカテゴリは選択から外す
-    renderCategories(list, all){
+    // list：[{name, count}]（この順にタブを並べる）、all：「すべて」の件数、specialN：opts.tabs.special のタブの件数。無くなったカテゴリは選択から外す
+    renderCategories(list, all, specialN = 0){
       categories = list;
       total = all;
+      specialCount = specialN;
       const names = list.map(c=>c.name);
       const before = selectedCats.size;
       [...selectedCats].forEach(c=>{ if(!names.includes(c)) selectedCats.delete(c); });
@@ -242,6 +265,8 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
     active(){ return selected.size > 0 || selectedCats.size > 0; },
     // 選んでいるカテゴリ（「すべて」なら空）
     categories(){ return [...selectedCats]; },
+    // opts.tabs.special のタブを選んでいるか
+    special(){ return specialOn; },
     matchesCategory,
     // 絞り込みの条件に合うか
     matches(tagStr, category){
