@@ -27,6 +27,30 @@ const BUY_TAB = '買う物';
 let stockSheetColumns = []; // 在庫シートの列名。reorderAt・buyFlag の列がない古いシートでは、その機能を画面に出さない
 const buyUnchecked = new Set(); // 買う物の一覧でチェックを外した商品名（一覧を描き直しても残す）
 let buyListOpen = false;        // 買う物の一覧を表示中か（タブを開き直したら全部チェック済みに戻す）
+const BUY_BRAND_KEY = 'kurashilog.stockBuyBrand';
+let buyWithBrand = loadBuyBrand(); // 「ブランドも含める」（オンならコピーに商品名全体を使う）
+
+function loadBuyBrand(){
+  try { return localStorage.getItem(BUY_BRAND_KEY) === '1'; } catch(_){ return false; }
+}
+function saveBuyBrand(){
+  try { localStorage.setItem(BUY_BRAND_KEY, buyWithBrand ? '1' : ''); } catch(_){}
+}
+// コピーする品名：商品名のかっこ以降を除く（「シャンプー(PANTENE)」→「シャンプー」）。何も残らなければ商品名のまま
+function buyCopyName(name){
+  return name.replace(/\s*[(（].*$/, '').trim() || name;
+}
+// 買う物の並び：カテゴリ（タブと同じ順で、ほかのカテゴリは五十音順、未分類は最後）→ 収納場所（空は最後）→ 商品名
+function sortBuyItems(items){
+  const catRank = c=>c === UNCATEGORIZED ? STOCK_CATEGORIES.length + 1 : STOCK_CATEGORIES.includes(c) ? STOCK_CATEGORIES.indexOf(c) : STOCK_CATEGORIES.length;
+  const text = (a, b)=>a.localeCompare(b, 'ja');
+  return [...items].sort((a, b)=>{
+    const ca = stockCategoryOf(a), cb = stockCategoryOf(b);
+    return catRank(ca) - catRank(cb) || text(ca, cb)
+      || !a.location - !b.location || text(String(a.location), String(b.location))
+      || text(a.name, b.name);
+  });
+}
 
 // 買う目安を数値に直す。0 以上の整数でないもの（空・文字・小数・負の数）は「目安なし」の ''（GAS と同じ）
 function parseReorderAt(v){
@@ -66,10 +90,12 @@ function makeBuyButton(g){
     toggleBuyFlag(g);
   }}, g.buyFlag ? 'メモに追加済み' : '買い物メモに追加');
 }
-// 買う物の一覧：チェックした商品名を1行に1品目でコピーする（iPhone のショートカットで分割してリマインダーに入れる）
+// 買う物の一覧：チェックした品名を1行に1品目でコピーする（iPhone のショートカットで分割してリマインダーに入れる）
 function renderBuyList(wrap, items){
   wrap.innerHTML = '';
   if(!items.length){ wrap.innerHTML = '<p class="empty-msg">いま買う物はありません</p>'; return; }
+  const brand = h('input', {type:'checkbox', role:'switch', checked:buyWithBrand, onchange:()=>{ buyWithBrand = brand.checked; saveBuyBrand(); }});
+  wrap.append(h('label', {class:'buy-switch'}, 'ブランドも含める', brand));
   items.forEach(g=>{
     const cb = h('input', {type:'checkbox', checked:!buyUnchecked.has(g.name), onchange:()=>{
       if(cb.checked) buyUnchecked.delete(g.name); else buyUnchecked.add(g.name);
@@ -79,8 +105,10 @@ function renderBuyList(wrap, items){
   });
   const fallback = h('div');
   wrap.append(h('button', {type:'button', class:'submit-btn', onclick:()=>{
-    const names = items.map(g=>g.name).filter(name=>!buyUnchecked.has(name));
-    if(!names.length){ toast('コピーする物を選んでください'); return; }
+    const checked = items.map(g=>g.name).filter(name=>!buyUnchecked.has(name));
+    if(!checked.length){ toast('コピーする物を選んでください'); return; }
+    // 品名だけのときは、同じ品名を1行にまとめる
+    const names = buyWithBrand ? checked : [...new Set(checked.map(buyCopyName))];
     copyBuyNames(names, fallback);
   }}, '選んだ物をコピー'), fallback);
 }
@@ -142,7 +170,7 @@ function expInfo(lot){
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
   const all = groupStock();
-  const buyItems = all.filter(isBuyItem);
+  const buyItems = sortBuyItems(all.filter(isBuyItem));
   stockFilter.renderCategories(categoryCounts(all.map(stockCategoryOf), STOCK_CATEGORIES), all.length, buyItems.length);
   if(!all.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
   // 買う物のタブはチェック付きの一覧。整理モードでは、買う物だけを削除ボタン付きのカードで出す
