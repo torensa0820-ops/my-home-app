@@ -86,13 +86,18 @@ function parseExpirationDate(raw) {
 }
 
 // Discord Webhookへメッセージを送信（channel で送り先を選ぶ。省略すると DISCORD_WEBHOOK_URL）
-// 429（レート制限）の場合は待ってから再送し、最終的に失敗したらエラーを投げる
 function sendDiscordMessage(content, channel) {
+  sendDiscordPayload({ content: content }, channel);
+}
+
+// Discord Webhookへ送る（payload は { content, embeds } など Discord の形のまま）
+// 429（レート制限）の場合は待ってから再送し、最終的に失敗したらエラーを投げる
+function sendDiscordPayload(payload, channel) {
   const MAX_RETRIES = 3;
   const options = {
     method: "post",
     contentType: "application/json",
-    payload: JSON.stringify({ content: content }),
+    payload: JSON.stringify(payload),
     muteHttpExceptions: true
   };
   const url = getDiscordWebhookUrl(channel);
