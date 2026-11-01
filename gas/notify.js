@@ -112,6 +112,7 @@ function sendDiscordPayload(payload, channel) {
     }
 
     if (code !== 429 || attempt === MAX_RETRIES) {
+      Logger.log(`Discordの応答（HTTP ${code}）: ${res.getContentText()}`);
       throw new Error(`Discordへの送信に失敗しました（HTTP ${code}）: ${res.getContentText().slice(0, 200)}`);
     }
 
