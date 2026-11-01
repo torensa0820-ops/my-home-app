@@ -12,7 +12,10 @@ const WX_PLACE = { name: "鎌ケ谷市", lat: 35.7767, lon: 140.0008 };
 const WX_JMA_OFFICE = "120000";      // 千葉県（気象庁の予報・警報のファイル）
 const WX_JMA_CLASS10 = "120010";     // 千葉県北西部（天気・降水確率）
 const WX_JMA_CITY = "1222400";       // 鎌ケ谷市（警報・注意報）
+const WX_JMA_TEMP_POINT = "千葉";     // 気象庁の予報の気温の地点（Open-Meteo が読めないときに使う）
 const WX_MORNING_TIME = "05:05";     // 朝の通知（5:00 の気象庁の予報が出たあと）
+const WX_MORNING_GIVEUP = "05:45";   // Open-Meteo が読めないとき、この時刻まで5分ごとに読み直してから送る
+const WX_PREFETCH_FROM = "04:00";    // この時刻から朝の通知までの間に Open-Meteo を先に読んでおく
 const WX_TRAIN_WATCH = ["05:20", "08:00"]; // この間、電車の運行情報が変わったら追加で送る
 const WX_EVENING_TIME = "21:00";     // 翌日の注意（何かあるときだけ）
 const WX_AWAY_HOURS = [7, 19];       // 洗濯物を外に出しておく時間（家を出てから帰るまで）
@@ -76,9 +79,17 @@ function weatherTick() {
     const today = wxFmt(now, "yyyy-MM-dd");
     const hm = wxFmt(now, "HH:mm");
 
+    // 朝の通知の前に Open-Meteo を読んでおく（読めたら保存。朝に読めなかったときに使う）
+    if (hm >= WX_PREFETCH_FROM && hm < WX_MORNING_TIME && !wxCachedOpenMeteo(today)) {
+      try { wxOpenMeteoWithCache(today); } catch (e) { Logger.log(`Open-Meteo の先読みに失敗：${e}`); }
+    }
     if (hm >= WX_MORNING_TIME && props.getProperty("WX_MORNING_DATE") !== today) {
       // 朝の時刻を大きく過ぎていたら（トリガーの停止明けなど）送らない
-      if (hm < WX_TRAIN_WATCH[1]) sendMorningWeather();
+      if (hm < WX_TRAIN_WATCH[1]) {
+        // Open-Meteo が読めないうちは、WX_MORNING_GIVEUP まで送らずに次の回で読み直す
+        const sent = sendMorningWeather({ waitForOpenMeteo: hm < WX_MORNING_GIVEUP });
+        if (!sent) return;
+      }
       props.setProperty("WX_MORNING_DATE", today);
       return;
     }
@@ -118,12 +129,18 @@ function debugWeatherPreview() {
 // 送信
 // =========================================================
 
-function sendMorningWeather() {
+// 送ったら true。opts.waitForOpenMeteo のとき、Open-Meteo が読めなければ送らずに false
+function sendMorningWeather(opts) {
   const now = new Date();
   const d = collectWeatherData(now);
+  if (opts && opts.waitForOpenMeteo && !d.om) {
+    Logger.log("Open-Meteo が読めないので、朝の通知は次の回に読み直してから送ります。");
+    return false;
+  }
   sendDiscordPayload(buildMorningPayload(d, now), "WEATHER");
   // 電車の見張りの基準にする
   if (d.trains) PropertiesService.getScriptProperties().setProperty("WX_TRAIN_SIG", wxTrainSignature(d.trains));
+  return true;
 }
 
 // 電車の運行情報が朝の通知（または前回の追加通知）から変わったら送る
@@ -157,9 +174,14 @@ function sendEveningAlert() {
 function collectWeatherData(now) {
   const d = { errors: [] };
   const tryGet = (label, fn) => {
-    try { return fn(); } catch (e) { d.errors.push(label); Logger.log(`${label}の取得に失敗：${e}`); return null; }
+    try { return fn(); } catch (e) {
+      const code = String(e).match(/HTTP \d+/);
+      d.errors.push(code ? `${label}・${code[0]}` : label);
+      Logger.log(`${label}の取得に失敗：${e}`);
+      return null;
+    }
   };
-  d.om = tryGet("天気（Open-Meteo）", fetchOpenMeteo);
+  d.om = tryGet("天気（Open-Meteo）", () => wxOpenMeteoWithCache(wxFmt(now, "yyyy-MM-dd")));
   d.jma = tryGet("気象庁の予報", fetchJmaForecast);
   d.warnings = tryGet("警報・注意報", fetchJmaWarnings);
   d.typhoons = tryGet("台風情報", () => fetchTyphoons(now));
@@ -185,7 +207,33 @@ function fetchOpenMeteo() {
     "daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,uv_index_max,precipitation_sum,wind_gusts_10m_max",
     "timezone=Asia%2FTokyo", "past_days=1", "forecast_days=2", "wind_speed_unit=ms",
   ].join("&");
-  return parseOpenMeteo(JSON.parse(wxFetchText("https://api.open-meteo.com/v1/forecast?" + q)));
+  const url = "https://api.open-meteo.com/v1/forecast?" + q;
+  // 混んでいる・回数制限（429）などで失敗することがあるので、少し待って2回まで読み直す
+  let last;
+  for (let i = 0; i < 3; i++) {
+    if (i) Utilities.sleep(i * 4000);
+    try { return JSON.parse(wxFetchText(url)); } catch (e) { last = e; Logger.log(`Open-Meteo ${i + 1}回目：${e}`); }
+  }
+  throw last;
+}
+
+// Open-Meteo を読み、読めたら今日の分として保存する。読めなければ、今日の朝に保存した分を使う
+function wxOpenMeteoWithCache(today) {
+  const cache = CacheService.getScriptCache();
+  try {
+    const raw = fetchOpenMeteo();
+    try { cache.put("WX_OM_" + today, JSON.stringify(raw), 6 * 3600); } catch (e) { /* 大きすぎるときは保存しない */ }
+    return parseOpenMeteo(raw);
+  } catch (e) {
+    const saved = wxCachedOpenMeteo(today);
+    if (saved) { Logger.log(`Open-Meteo が読めないので、先に読んだ分を使います：${e}`); return parseOpenMeteo(saved); }
+    throw e;
+  }
+}
+
+function wxCachedOpenMeteo(today) {
+  const s = CacheService.getScriptCache().get("WX_OM_" + today);
+  return s ? JSON.parse(s) : null;
 }
 
 // 日付（yyyy-MM-dd）ごとに、時（0〜23）→ 値 の形にする
@@ -234,6 +282,19 @@ function parseJmaForecast(j, areaCode) {
     if (p.pops[i] === "" || p.pops[i] == null) return;
     out.pops.push({ date: t.slice(0, 10), from: Number(t.slice(11, 13)), to: Number(t.slice(11, 13)) + 6, pop: Number(p.pops[i]) });
   });
+  // 千葉の気温（00時の値が朝の最低、09時の値が日中の最高）。Open-Meteo が読めないときに使う
+  out.temps = {};
+  const tArea = ts[2] && ts[2].areas.find(a => a.area.name === WX_JMA_TEMP_POINT);
+  if (tArea) {
+    ts[2].timeDefines.forEach((t, i) => {
+      const v = tArea.temps[i];
+      if (v === "" || v == null) return;
+      const day = out.temps[t.slice(0, 10)] = out.temps[t.slice(0, 10)] || {};
+      if (t.slice(11, 13) === "00") day.min = Number(v); else day.max = Number(v);
+    });
+    // 朝5時の発表では今日の最低気温が出ないことがあるので、そのときは最低を使わない
+    Object.values(out.temps).forEach(x => { if (x.min != null && x.max != null && x.min >= x.max) delete x.min; });
+  }
   return out;
 }
 
@@ -561,7 +622,7 @@ function wxJmaRainWhen(jma, date) {
 // 洗濯：家を出てから帰るまで（WX_AWAY_HOURS）外に干しておけるか
 function judgeLaundry(d, date, pollen) {
   const day = d.om && d.om[date];
-  if (!day) return null;
+  if (!day) return judgeLaundryJma(d, date, pollen);
   const [from, to] = WX_AWAY_HOURS;
   const hours = wxHours(day, from, to);
   const pop = Math.max(wxMax(hours.map(x => x.pop).filter(v => v != null)) ?? 0, wxJmaPop(d.jma, date, from, to) ?? 0);
@@ -623,9 +684,24 @@ function judgePollen(d, date) {
 }
 
 // 気温と服装のひとこと
+// Open-Meteo が読めないとき：気象庁の6時間ごとの降水確率だけで洗濯を決める
+function judgeLaundryJma(d, date, pollen) {
+  const pop = wxJmaPop(d.jma, date, WX_AWAY_HOURS[0], WX_AWAY_HOURS[1]);
+  if (pop == null) return null;
+  if (pop >= 50) return { mark: "✕", text: `👕 洗濯：**部屋干し**（帰るまでの降水確率${pop}%）`, short: "部屋干し" };
+  if (pop >= 30) return { mark: "△", text: `👕 洗濯：部屋干しがおすすめ（帰るまでの降水確率${pop}%）`, short: "部屋干し推奨" };
+  if (pollen && pollen.level >= 2) return { mark: "△", text: "👕 洗濯：部屋干しがおすすめ（花粉が多い）", short: "部屋干し推奨" };
+  return { mark: "○", text: `👕 洗濯：外干し○（降水確率${pop}%。湿度・風は分からず）`, short: "外干し○" };
+}
+
 function judgeTemp(d, date) {
   const day = d.om && d.om[date];
-  if (!day) return null;
+  if (!day) {
+    // Open-Meteo が読めないとき：気象庁の千葉の予想気温
+    const t = d.jma && d.jma.temps && d.jma.temps[date];
+    if (!t || t.max == null) return null;
+    return `🌡 最高**${t.max}℃**` + (t.min != null ? `／最低${t.min}℃` : "") + `（${WX_JMA_TEMP_POINT}の予想）`;
+  }
   const y = d.om[wxShiftDate(date, -1)];
   const diff = y && y.max != null ? Math.round(day.max - y.max) : null;
   const commute = wxHours(day, WX_COMMUTE_HOURS[0], WX_COMMUTE_HOURS[1] + 1).map(x => x.temp);
@@ -709,7 +785,8 @@ function buildMorningPayload(d, now) {
   const title = `${wxIcon(jmaDay && jmaDay.code)} ${wxFmt(now, "M/d")}(${wxWeekday(now)}) ${jmaDay ? jmaDay.text : "天気"}`;
   const summary = [
     `${wxFmt(now, "M/d")}`,
-    om ? `${Math.round(om.max)}/${Math.round(om.min)}℃` : null,
+    om ? `${Math.round(om.max)}/${Math.round(om.min)}℃`
+      : (d.jma && d.jma.temps && d.jma.temps[date] && d.jma.temps[date].max != null ? `最高${d.jma.temps[date].max}℃` : null),
     umbrella.short,
     laundry ? laundry.short : null,
     warn.some(w => w.level >= 30) ? "⚠️警報" : null,
@@ -722,7 +799,7 @@ function buildMorningPayload(d, now) {
       title: wxShorten(title, 250),
       description: wxShorten(lines.join("\n"), 4000),
       color: color,
-      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo・各鉄道会社の情報` },
+      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
     }],
   };
 }
@@ -792,7 +869,7 @@ function buildEveningPayload(d, now) {
       title: `🌙 明日 ${wxFmt(new Date(tomorrow + "T12:00:00+09:00"), "M/d")}(${wxWeekday(new Date(tomorrow + "T12:00:00+09:00"))}) の注意`,
       description: wxShorten(items.join("\n"), 4000),
       color: WX_COLOR.danger,
-      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo・各鉄道会社の情報` },
+      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
     }],
   };
 }
