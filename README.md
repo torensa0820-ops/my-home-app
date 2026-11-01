@@ -261,7 +261,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
    - `setupChoreTrigger` を一度実行する（`checkChores` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）
    - `checkExpirationAndNotifyDiscord` を1日1回実行する時間主導型トリガーを作る
    - `setupSaleCheckTrigger` を一度実行する（`notifySaleCheck` を1時間ごとに実行するトリガーが作られる。何度実行しても重複しない）
-   - `setupWeatherTrigger` を一度実行する（`weatherTick` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）。朝 5:05 に天気の通知、5:20〜8:00 は電車の運行情報が変わったときだけ追加の通知、21:00 に明日の注意（あるときだけ）を送る。時刻・場所・路線は `gas/weather-notify.js` の先頭の設定で変える
+   - `setupWeatherTrigger` を一度実行する（`weatherTick` を5分ごとに実行するトリガーが作られる。何度実行しても重複しない）。朝 5:05 に天気の通知、21:00 に明日の注意（あるときだけ）を送る。電車の運行情報は `WX_TRAIN_ENABLED` を true にしたときだけ入れる（今は false。乗換案内アプリで見る）。時刻・場所・路線は `gas/weather-notify.js` の先頭の設定で変える
    - `setupReceiptTriggers` を一度実行する（`notifyCouponsAndPending` を毎朝 7:00 に実行するトリガーが作られる。何度実行しても重複しない）。あわせて「レシート」「在庫取込」「クーポン」シートを用意し、写真の保存先のフォルダを作る。初回はドライブの権限の許可を求められる
 4. Web アプリとしてデプロイし、URL を `js/common.js` の `GAS_URL` に入れる
 5. 在庫のカテゴリをタグから分けるときは `migrateStockCategory` を一度実行する（在庫シートをバックアップとして複製してから、`category` 列を足し、`STOCK_CATEGORIES` にあるタグを `category` に移して `tags` から外す。在庫取込シートにも `category` 列を足す。何度実行しても結果は同じ）

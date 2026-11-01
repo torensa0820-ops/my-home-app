@@ -21,6 +21,9 @@ const WX_MENTION = "";               // 先頭に付けるメンション（"@ev
 const WX_TYPHOON_KM = 600;           // 台風の予報円の中心がこの距離まで近づく見込みなら知らせる
 const WX_TYPHOON_HOURS = 72;         // 何時間先までの台風の予報を見るか
 
+// 電車の運行情報を通知に入れるか（false：入れない。乗換案内アプリで見る。true にすると下の路線を読む）
+const WX_TRAIN_ENABLED = false;
+
 // 電車：使う路線。kind ごとに読み方が違う（wxTrainFetchers）
 const WX_TRAINS = [
   { name: "総武快速線", kind: "jr", jrName: "総武快速線" },
@@ -79,7 +82,7 @@ function weatherTick() {
       props.setProperty("WX_MORNING_DATE", today);
       return;
     }
-    if (hm >= WX_TRAIN_WATCH[0] && hm < WX_TRAIN_WATCH[1] && props.getProperty("WX_MORNING_DATE") === today) {
+    if (WX_TRAIN_ENABLED && hm >= WX_TRAIN_WATCH[0] && hm < WX_TRAIN_WATCH[1] && props.getProperty("WX_MORNING_DATE") === today) {
       watchTrains();
     }
     if (hm >= WX_EVENING_TIME && props.getProperty("WX_EVENING_DATE") !== today) {
@@ -160,8 +163,8 @@ function collectWeatherData(now) {
   d.jma = tryGet("気象庁の予報", fetchJmaForecast);
   d.warnings = tryGet("警報・注意報", fetchJmaWarnings);
   d.typhoons = tryGet("台風情報", () => fetchTyphoons(now));
-  d.trains = tryGet("運行情報", fetchTrainStatus);
-  d.jrNotices = tryGet("JRのお知らせ", fetchJrNotices);
+  d.trains = WX_TRAIN_ENABLED ? tryGet("運行情報", fetchTrainStatus) : null;
+  d.jrNotices = WX_TRAIN_ENABLED ? tryGet("JRのお知らせ", fetchJrNotices) : null;
   d.chores = tryGet("家事", () => readTodayChores(now));
   d.expiring = tryGet("賞味期限", () => readExpiringStock(now));
   return d;
@@ -725,6 +728,7 @@ function buildMorningPayload(d, now) {
 }
 
 function wxTrainBlock(d) {
+  if (!WX_TRAIN_ENABLED) return { lines: [], bad: false, allOk: false };
   const lines = [];
   if (!d.trains) return { lines: ["🚃 電車：運行情報を取得できませんでした"], bad: false, allOk: false };
   const bad = d.trains.filter(t => !t.error && !t.ok);
