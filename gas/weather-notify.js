@@ -291,8 +291,8 @@ function wxDistanceKm(lat1, lon1, lat2, lon2) {
 // ---- 電車 ----
 
 // 各社の公式の運行情報ページを読み、路線ごとに { name, ok, status, detail, error } を返す
-function fetchTrainStatus() {
-  const urls = {
+function wxTrainUrls() {
+  return {
     jr: "https://traininfo.jreast.co.jp/train_info/kanto.aspx",
     tobu: "https://www.tobu.co.jp/file/trainop/trainop.xml?dt=" + Date.now(),
     hokuso: "https://www.hokuso-railway.co.jp/data/train_info/emgc.js?" + Date.now(),
@@ -300,24 +300,69 @@ function fetchTrainStatus() {
     toei: "https://www.kotsu.metro.tokyo.jp/subway/",
     keikyu: "https://unkou.keikyu.co.jp/",
   };
+}
+
+// ブラウザから読むときと同じような名乗り（GAS の既定のままだと断るサイトがあるため）
+const WX_BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "ja,en;q=0.8",
+};
+
+// 各社の公式の運行情報ページを読み、路線ごとに { name, ok, status, detail, error } を返す
+function fetchTrainStatus() {
+  const urls = wxTrainUrls();
   const kinds = [...new Set(WX_TRAINS.map(t => t.kind))];
-  const responses = UrlFetchApp.fetchAll(kinds.map(k => ({ url: urls[k], muteHttpExceptions: true, followRedirects: true })));
-  const pages = {};
-  kinds.forEach((k, i) => {
-    const res = responses[i];
-    pages[k] = res.getResponseCode() === 200 ? res.getContentText("UTF-8") : null;
-  });
+  const pages = wxFetchPages(kinds.map(k => urls[k]));
+  const byKind = {};
+  kinds.forEach((k, i) => byKind[k] = pages[i]);
   return WX_TRAINS.map(t => {
-    const page = pages[t.kind];
+    const page = byKind[t.kind];
     if (!page) return { name: t.name, error: true };
     try {
       const r = wxTrainParsers[t.kind](page, t);
+      if (!r) Logger.log(`${t.name}：ページは読めたが、運行情報の場所が見つかりませんでした`);
       return r ? Object.assign({ name: t.name }, r) : { name: t.name, error: true };
     } catch (e) {
       Logger.log(`${t.name}の運行情報を読めませんでした：${e}`);
       return { name: t.name, error: true };
     }
   });
+}
+
+// まとめて読み、200 以外だったものはブラウザに近い名乗りで1回だけ読み直す。読めなければ null
+function wxFetchPages(urlList) {
+  const req = (url, browser) => ({ url: url, muteHttpExceptions: true, followRedirects: true, headers: browser ? WX_BROWSER_HEADERS : {} });
+  const first = UrlFetchApp.fetchAll(urlList.map(u => req(u, false)));
+  const out = first.map(r => r.getResponseCode() === 200 ? r.getContentText("UTF-8") : null);
+  const retry = urlList.map((u, i) => out[i] == null ? i : -1).filter(i => i >= 0);
+  if (retry.length) {
+    const second = UrlFetchApp.fetchAll(retry.map(i => req(urlList[i], true)));
+    retry.forEach((i, j) => {
+      const code = second[j].getResponseCode();
+      if (code === 200) out[i] = second[j].getContentText("UTF-8");
+      else Logger.log(`読めませんでした（1回目 HTTP ${first[i].getResponseCode()}・2回目 HTTP ${code}）：${urlList[i]}`);
+    });
+  }
+  return out;
+}
+
+// 【デバッグ用】各社のページを GAS から読んだ結果（応答コード・長さ・目印の有無・先頭）をログに出す
+function debugTrainFetch() {
+  const marks = { jr: "traininfo-routes__name", tobu: "<line>", hokuso: "emgc_info", keisei: "jp_txt", toei: "infoAsakusa", keikyu: "info-block_text" };
+  const urls = wxTrainUrls();
+  Object.keys(urls).forEach(k => {
+    [false, true].forEach(browser => {
+      try {
+        const r = UrlFetchApp.fetch(urls[k], { muteHttpExceptions: true, followRedirects: true, headers: browser ? WX_BROWSER_HEADERS : {} });
+        const t = r.getContentText("UTF-8");
+        Logger.log(`${k}（${browser ? "ブラウザ風" : "既定"}）：HTTP ${r.getResponseCode()}・${t.length}文字・目印${t.indexOf(marks[k]) >= 0 ? "あり" : "なし"}\n${t.slice(0, 300).replace(/\s+/g, " ")}`);
+      } catch (e) {
+        Logger.log(`${k}（${browser ? "ブラウザ風" : "既定"}）：エラー ${e}`);
+      }
+    });
+  });
+  Logger.log(JSON.stringify(fetchTrainStatus(), null, 1));
 }
 
 const wxTrainParsers = {
