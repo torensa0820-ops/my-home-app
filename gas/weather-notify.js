@@ -28,7 +28,7 @@ const WX_TRAINS = [
   { name: "アーバンパークライン", kind: "tobu", tobuName: "東武アーバンパークライン" },
   { name: "北総線", kind: "hokuso" },
   { name: "京成線", kind: "keisei" },
-  { name: "都営浅草線", kind: "toei", toeiClass: "infoAsakusa" },
+  { name: "都営浅草線", kind: "toei", odptRailway: "odpt.Railway:Toei.Asakusa" },
   { name: "京急線", kind: "keikyu" },
 ];
 
@@ -297,9 +297,17 @@ function wxTrainUrls() {
     tobu: "https://www.tobu.co.jp/file/trainop/trainop.xml?dt=" + Date.now(),
     hokuso: "https://www.hokuso-railway.co.jp/data/train_info/emgc.js?" + Date.now(),
     keisei: "https://www.keisei.co.jp/traininfo/index.php?lang=ja",
-    toei: "https://www.kotsu.metro.tokyo.jp/subway/",
-    keikyu: "https://unkou.keikyu.co.jp/",
+    toei: wxOdptUrl("odpt.Operator:Toei"),
+    keikyu: "https://www.keikyu.co.jp/",
   };
+}
+
+// 公共交通オープンデータセンター（ODPT）の運行情報 API。キーはスクリプトプロパティ ODPT_CONSUMER_KEY
+// （都営の公式ページは GAS からだとロボット確認の画面になり読めないため）
+function wxOdptUrl(operator) {
+  const key = PropertiesService.getScriptProperties().getProperty("ODPT_CONSUMER_KEY");
+  if (!key) return null;
+  return `https://api.odpt.org/api/v4/odpt:TrainInformation?odpt:operator=${encodeURIComponent(operator)}&acl:consumerKey=${encodeURIComponent(key)}`;
 }
 
 // ブラウザから読むときと同じような名乗り（GAS の既定のままだと断るサイトがあるため）
@@ -332,6 +340,15 @@ function fetchTrainStatus() {
 
 // まとめて読み、200 以外だったものはブラウザに近い名乗りで1回だけ読み直す。読めなければ null
 function wxFetchPages(urlList) {
+  const idx = urlList.map((u, i) => u ? i : -1).filter(i => i >= 0);
+  const out = urlList.map(() => null);
+  if (!idx.length) return out;
+  const got = wxFetchPagesSub(idx.map(i => urlList[i]));
+  idx.forEach((i, j) => out[i] = got[j]);
+  return out;
+}
+
+function wxFetchPagesSub(urlList) {
   const req = (url, browser) => ({ url: url, muteHttpExceptions: true, followRedirects: true, headers: browser ? WX_BROWSER_HEADERS : {} });
   const first = UrlFetchApp.fetchAll(urlList.map(u => req(u, false)));
   const out = first.map(r => r.getResponseCode() === 200 ? r.getContentText("UTF-8") : null);
@@ -341,7 +358,7 @@ function wxFetchPages(urlList) {
     retry.forEach((i, j) => {
       const code = second[j].getResponseCode();
       if (code === 200) out[i] = second[j].getContentText("UTF-8");
-      else Logger.log(`読めませんでした（1回目 HTTP ${first[i].getResponseCode()}・2回目 HTTP ${code}）：${urlList[i]}`);
+      else Logger.log(`読めませんでした（1回目 HTTP ${first[i].getResponseCode()}・2回目 HTTP ${code}）：${urlList[i].replace(/consumerKey=[^&]+/, "consumerKey=***")}`);
     });
   }
   return out;
@@ -349,9 +366,10 @@ function wxFetchPages(urlList) {
 
 // 【デバッグ用】各社のページを GAS から読んだ結果（応答コード・長さ・目印の有無・先頭）をログに出す
 function debugTrainFetch() {
-  const marks = { jr: "traininfo-routes__name", tobu: "<line>", hokuso: "emgc_info", keisei: "jp_txt", toei: "infoAsakusa", keikyu: "info-block_text" };
+  const marks = { jr: "traininfo-routes__name", tobu: "<line>", hokuso: "emgc_info", keisei: "jp_txt", toei: "Toei.Asakusa", keikyu: "info-block_text" };
   const urls = wxTrainUrls();
   Object.keys(urls).forEach(k => {
+    if (!urls[k]) { Logger.log(`${k}：URL がありません（都営はスクリプトプロパティ ODPT_CONSUMER_KEY が必要）`); return; }
     [false, true].forEach(browser => {
       try {
         const r = UrlFetchApp.fetch(urls[k], { muteHttpExceptions: true, followRedirects: true, headers: browser ? WX_BROWSER_HEADERS : {} });
@@ -414,15 +432,18 @@ const wxTrainParsers = {
     const ok = cls === "0" || (/平常/.test(title + text) && cls == null);
     return { ok: ok, status: ok ? "平常運転" : (title || wxStatusWord(text)), detail: ok ? "" : text };
   },
-  // 都営：<dl class="infoAsakusa"><dt>浅草線</dt><dd>平常運行</dd>
-  toei: (html, t) => {
-    const m = html.match(new RegExp(`<dl class="${t.toeiClass}">[\\s\\S]*?<dd>([\\s\\S]*?)<\\/dd>`));
-    if (!m) return null;
-    const text = wxStripTags(m[1]);
-    const ok = /平常/.test(text);
-    return { ok: ok, status: ok ? "平常運転" : text, detail: "" };
+  // 都営：ODPT の TrainInformation（JSON の配列）。平常でないときは trainInformationStatus が入る
+  toei: (json, t) => {
+    const list = JSON.parse(json);
+    const it = list.find(x => x["odpt:railway"] === t.odptRailway);
+    if (!it) return null;
+    const ja = v => (v && (v.ja || v["ja"])) || "";
+    const text = wxStripTags(ja(it["odpt:trainInformationText"]));
+    const status = wxStripTags(ja(it["odpt:trainInformationStatus"]));
+    const ok = !status && /平常/.test(text);
+    return { ok: ok, status: ok ? "平常運転" : (status || wxStatusWord(text)), detail: ok ? "" : text };
   },
-  // 京急：<p class="info-block_text"> の文
+  // 京急：トップページ（www.keikyu.co.jp）の <p class="info-block_text"> の文（unkou.keikyu.co.jp は GAS から読めない）
   keikyu: (html) => {
     const m = html.match(/class="info-block_text">([\s\S]*?)<\/p>/);
     if (!m) return null;
