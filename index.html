@@ -85,36 +85,16 @@
       <div id="coupons"><p class="empty-msg">読み込み中…</p></div>
     </section>
 
-    <!-- ===== 家事タブ ===== -->
-    <section id="chore-panel" class="tab-panel">
-      <div class="list-head">
-        <div class="section-title">家事の予定</div>
-      </div>
-      <div id="chore-list"><p class="empty-msg">読み込み中…</p></div>
-
-      <button type="button" class="fab" data-compose="chore" aria-label="登録">＋</button>
-      <div class="compose" data-kind="form" id="chore-compose" role="dialog" aria-labelledby="chore-compose-title">
-        <div class="compose-grip" aria-hidden="true"><span></span></div>
-        <div class="compose-head">
-          <h2 id="chore-compose-title">新しい家事を登録する</h2>
-          <button type="button" class="text-btn compose-close">閉じる</button>
-        </div>
-        <div class="compose-body">
-          <form id="chore-form">
-            <div class="field"><label>家事名</label><input type="text" id="c-name" required placeholder="例：お風呂掃除"></div>
-            <div id="c-rule"></div>
-            <p class="form-note">時刻を指定しない家事は、その日の朝8:00にまとめて通知します。期限切れの家事も毎朝8:00に再通知します。</p>
-            <button type="submit" class="submit-btn">この家事を登録</button>
-          </form>
-        </div>
-      </div>
+    <!-- ===== やることタブ ===== -->
+    <section id="todo-panel" class="tab-panel">
+      <div id="todo-view"><p class="empty-msg">読み込み中…</p></div>
     </section>
   </main>
 
   <nav class="tabbar">
     <button data-tab="stock" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>在庫</button>
     <button data-tab="coupon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h15A1.5 1.5 0 0 1 21 8.5V10a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15.5V14a2 2 0 0 0 0-4z"/><path d="M15 7v2M15 11v2M15 15v2"/></svg>クーポン</button>
-    <button data-tab="chore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></svg>家事</button>
+    <button data-tab="todo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></svg>やること</button>
   </nav>
 </div>
 <div id="sheet-backdrop">
@@ -148,7 +128,8 @@
 <script src="js/stock-import.js"></script>
 <script src="js/coupon.js"></script>
 <script src="js/receipt.js"></script>
-<script src="js/chore.js"></script>
+<script src="js/rule-editor.js"></script>
+<script src="js/reminder.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

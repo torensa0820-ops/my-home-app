@@ -5,7 +5,6 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbzCsng8oDxwQnSnUlxz1m3A
 /* ▲▲▲ 例: https://script.google.com/macros/s/xxxxx/exec ▲▲▲ */
 
 let stockCache = [];
-let choreCache = [];
 
 function toast(msg){
   const el = document.getElementById('toast');

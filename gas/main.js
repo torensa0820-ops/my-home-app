@@ -2,7 +2,7 @@
 // Webアプリの入口：画面（GitHub Pages）からのリクエストを振り分ける
 //   doGet  … データの取得（action で種類を指定）
 //   doPost … データの書き込み（type と action で種類を指定）
-// 各処理は stock.js / receipt.js / tags.js / chore.js にある
+// 各処理は stock.js / receipt.js / tags.js / reminder.js にある
 // =========================================================
 
 function doGet(e) {
@@ -11,13 +11,13 @@ function doGet(e) {
   if (p.action === "getAll") {
     return jsonOutput({
       stock: getStockRows(),
-      tasks: getChoreRows(),
+      reminders: getReminders(),
       stockImports: getStockImports(),
       coupons: getCoupons(),
     });
   }
   if (p.action === "getStock") return jsonOutput(getStockRows());
-  if (p.action === "getTasks") return jsonOutput(getChoreRows());
+  if (p.action === "getReminders") return jsonOutput(getReminders());
   if (p.action === "getReceipts") return jsonOutput(getReceiptSummary());
   if (p.action === "getReceiptDetail") {
     try { return jsonOutput(getReceiptDetail(p)); }
@@ -51,19 +51,28 @@ function doPost(e) {
     } else if (data.type === "receipt" && data.action === "reread") {
       rereadReceipt(ss, data);
     } else if (data.type === "stockImport") {
-      return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
+      const message = stockImportAction(ss, data);
+      syncStockRemindersSafe(ss);
+      return jsonOutput({ status: "success", message: message });
     } else if (data.type === "coupon") {
       couponAction(ss, data);
     } else if (data.type === "finance" || data.type === "recurring") {
       return jsonOutput({ status: "error", message: "家計簿の機能は削除しました" });
     } else if (data.type === "todo") {
-      return jsonOutput({ status: "success", task: updateTodo(ss, data) });
+      // 家事タブのころの画面（キャッシュに残った古い画面）から「家事」シートに書かないようにする
+      return jsonOutput({ status: "error", message: "家事は「やること」タブに移りました。右上のボタンで最新版を読み込んでください" });
+    } else if (data.type === "reminder") {
+      return jsonOutput({ status: "success", item: reminderAction(ss, data) });
+    } else if (data.type === "reminderList") {
+      return jsonOutput({ status: "success", list: reminderListAction(ss, data) });
     } else if (data.type === "tag") {
       return jsonOutput({ status: "success", count: manageTags(ss, data) });
     } else {
       return jsonOutput({ status: "error", message: "type が不正です: " + data.type });
     }
 
+    // 在庫が変わったら、買い物リストにすぐ反映する（在庫が「買う物」になった・でなくなった）
+    if (data.type === "stock") syncStockRemindersSafe(ss);
     return jsonOutput({ status: "success" });
   } catch (err) {
     return jsonOutput({ status: "error", message: err.toString() });

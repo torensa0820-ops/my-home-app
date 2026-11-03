@@ -4,10 +4,11 @@
 const TAB_INFO = {
   stock:{title:'在庫管理', sub:'商品名をタップで編集・＋−で数量を更新'},
   coupon:{title:'クーポン', sub:'使ったら「使った」・不要なら「不要」'},
-  chore:{title:'家事ルーティン', sub:'家事名をタップで編集・完了ボタンは長押し'}
+  todo:TODO_INFO
 };
 document.querySelectorAll('nav.tabbar button').forEach(btn=>{
   btn.addEventListener('click', ()=>{
+    const again = btn.classList.contains('active');
     if(stockEditMode) setStockEditMode(false);
     closeCompose();
     document.querySelectorAll('nav.tabbar button').forEach(b=>b.classList.remove('active'));
@@ -17,6 +18,7 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
     document.getElementById(tab + '-panel').classList.add('active');
     document.getElementById('page-title').textContent = TAB_INFO[tab].title;
     document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
+    if(tab === 'todo') todoTabShown(again);
   });
 });
 
@@ -39,10 +41,10 @@ getFromGas('action=getAll')
     loadStock(all.stock);
     loadStockImports(all.stockImports || {pending:[], auto:[]});
     loadCoupons(all.coupons || []);
-    loadChores(all.tasks);
+    loadReminders(all.reminders);
   })
   .catch(err=>{
     document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>{ reloadList('stock-list', loadStock); loadStockImports(); }));
     document.getElementById('coupons').replaceChildren(loadErrorView(err, ()=>reloadList('coupons', loadCoupons)));
-    document.getElementById('chore-list').replaceChildren(loadErrorView(err, ()=>reloadList('chore-list', loadChores)));
+    document.getElementById('todo-view').replaceChildren(loadErrorView(err, ()=>reloadList('todo-view', loadReminders)));
   });

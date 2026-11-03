@@ -22,35 +22,10 @@ function groupStock(){
 }
 
 // ---------- 買う物 ----------
-const BUY_FLAG = '買う'; // buyFlag 列の値（買い物メモの印。GAS と同じ）
-const BUY_TAB = '買う物';
+// 買う物になった商品は、GAS が「やること」タブの買い物リストに行を作る（gas/reminder.js の syncStockReminders）
+const BUY_FLAG = '買う'; // buyFlag 列の値（「買い物リストに入れる」の印。GAS と同じ）
+const BUY_BADGE = '買う物';
 let stockSheetColumns = []; // 在庫シートの列名。reorderAt・buyFlag の列がない古いシートでは、その機能を画面に出さない
-const buyUnchecked = new Set(); // 買う物の一覧でチェックを外した商品名（一覧を描き直しても残す）
-let buyListOpen = false;        // 買う物の一覧を表示中か（タブを開き直したら全部チェック済みに戻す）
-const BUY_BRAND_KEY = 'kurashilog.stockBuyBrand';
-let buyWithBrand = loadBuyBrand(); // 「ブランドも含める」（オンならコピーに商品名全体を使う）
-
-function loadBuyBrand(){
-  try { return localStorage.getItem(BUY_BRAND_KEY) === '1'; } catch(_){ return false; }
-}
-function saveBuyBrand(){
-  try { localStorage.setItem(BUY_BRAND_KEY, buyWithBrand ? '1' : ''); } catch(_){}
-}
-// コピーする品名：商品名のかっこ以降を除く（「シャンプー(PANTENE)」→「シャンプー」）。何も残らなければ商品名のまま
-function buyCopyName(name){
-  return name.replace(/\s*[(（].*$/, '').trim() || name;
-}
-// 買う物の並び：カテゴリ（タブと同じ順で、ほかのカテゴリは五十音順、未分類は最後）→ 収納場所（空は最後）→ 商品名
-function sortBuyItems(items){
-  const catRank = c=>c === UNCATEGORIZED ? STOCK_CATEGORIES.length + 1 : STOCK_CATEGORIES.includes(c) ? STOCK_CATEGORIES.indexOf(c) : STOCK_CATEGORIES.length;
-  const text = (a, b)=>a.localeCompare(b, 'ja');
-  return [...items].sort((a, b)=>{
-    const ca = stockCategoryOf(a), cb = stockCategoryOf(b);
-    return catRank(ca) - catRank(cb) || text(ca, cb)
-      || !a.location - !b.location || text(String(a.location), String(b.location))
-      || text(a.name, b.name);
-  });
-}
 
 // 買う目安を数値に直す。0 以上の整数でないもの（空・文字・小数・負の数）は「目安なし」の ''（GAS と同じ）
 function parseReorderAt(v){
@@ -63,16 +38,16 @@ function buyReason(g){
   if(g.modelNumber) return '';
   const total = stockTotal(g);
   if(g.reorderAt !== '') return total <= g.reorderAt ? `残り ${total} 個（目安 ${g.reorderAt}）` : '';
-  if(g.buyFlag) return 'メモに追加';
+  if(g.buyFlag) return '買い物リストに入れた';
   if(total === 0 && splitTags(g.tags).includes('ストック')) return '切らしている';
   return '';
 }
 function isBuyItem(g){ return buyReason(g) !== ''; }
-// 「買い物メモに追加」を出すか。個数が1個でも、開けたばかりか残りわずかかは数字で分からないので手で印を付ける
+// 「買い物リストに入れる」を出すか。個数が1個でも、開けたばかりか残りわずかかは数字で分からないので手で印を付ける
 function canMemoBuy(g){
   return stockSheetColumns.includes('buyFlag') && stockTotal(g) === 1 && g.reorderAt === '' && !g.modelNumber && !stockEditMode;
 }
-// 買い物メモの印を付ける・外す。画面はすぐに切り替え、失敗したら元に戻す
+// 買い物リストに入れる・外す（buyFlag の印。GAS が買い物リストの行を作る・自動で完了にする）。画面はすぐに切り替え、失敗したら元に戻す
 function toggleBuyFlag(g){
   const prev = g.lots.map(l=>l.buyFlag);
   const undo = ()=>{ g.lots.forEach((l,i)=>{ l.buyFlag = prev[i]; }); renderStockList(); };
@@ -80,51 +55,19 @@ function toggleBuyFlag(g){
   g.lots.forEach(l=>{ l.buyFlag = on ? BUY_FLAG : ''; });
   renderStockList();
   postToGas({type:'stock', action:'setBuyFlag', target:g.name, value:on})
-    .then(res=>{ if(res.status !== 'success'){ undo(); toast(res.message || '更新に失敗しました'); } })
+    .then(res=>{
+      if(res.status !== 'success'){ undo(); toast(res.message || '更新に失敗しました'); return; }
+      toast(on ? '買い物リストに入れました' : '買い物リストから外しました');
+      loadReminders();
+    })
     // 時間切れでも GAS 側では更新済みのことがあるため、一覧を読み込み直して実際の状態に合わせる
-    .catch(err=>{ undo(); toast(errMsg(err)); loadStock(); });
+    .catch(err=>{ undo(); toast(errMsg(err)); loadStock(); loadReminders(); });
 }
 function makeBuyButton(g){
   return h('button', {type:'button', class:'buy-btn' + (g.buyFlag ? ' on' : ''), 'aria-pressed':String(g.buyFlag), onclick:e=>{
     e.stopPropagation(); // カードのタップ（商品の編集）を開かない
     toggleBuyFlag(g);
-  }}, g.buyFlag ? 'メモに追加済み' : '買い物メモに追加');
-}
-// 買う物の一覧：チェックした品名を1行に1品目でコピーする（iPhone のショートカットで分割してリマインダーに入れる）
-function renderBuyList(wrap, items){
-  wrap.innerHTML = '';
-  if(!items.length){ wrap.innerHTML = '<p class="empty-msg">いま買う物はありません</p>'; return; }
-  const brand = h('input', {type:'checkbox', role:'switch', checked:buyWithBrand, onchange:()=>{ buyWithBrand = brand.checked; saveBuyBrand(); }});
-  wrap.append(h('label', {class:'buy-switch'}, 'ブランドも含める', brand));
-  items.forEach(g=>{
-    const cb = h('input', {type:'checkbox', checked:!buyUnchecked.has(g.name), onchange:()=>{
-      if(cb.checked) buyUnchecked.delete(g.name); else buyUnchecked.add(g.name);
-    }});
-    wrap.append(h('label', {class:'tm-check'}, cb,
-      h('div', {class:'main'}, h('div', {class:'t1'}, g.name), h('div', {class:'t2'}, buyReason(g)))));
-  });
-  const fallback = h('div');
-  wrap.append(h('button', {type:'button', class:'submit-btn', onclick:()=>{
-    const checked = items.map(g=>g.name).filter(name=>!buyUnchecked.has(name));
-    if(!checked.length){ toast('コピーする物を選んでください'); return; }
-    // 品名だけのときは、同じ品名を1行にまとめる
-    const names = buyWithBrand ? checked : [...new Set(checked.map(buyCopyName))];
-    copyBuyNames(names, fallback);
-  }}, '選んだ物をコピー'), fallback);
-}
-// クリップボードに入れる。失敗したら、テキストを選択できる形で表示する
-async function copyBuyNames(names, fallback){
-  const text = names.join('\n');
-  fallback.replaceChildren();
-  try {
-    await navigator.clipboard.writeText(text);
-    toast(`${names.length}件コピーしました`);
-  } catch(_) {
-    const area = h('textarea', {class:'buy-copy', rows:names.length, value:text});
-    fallback.append(h('p', {class:'form-note'}, 'コピーできませんでした。下の文字を選択してコピーしてください。'), area);
-    area.focus();
-    area.setSelectionRange(0, text.length);
-  }
+  }}, g.buyFlag ? '買い物リストに入れ済み' : '買い物リストに入れる');
 }
 
 // ---------- カテゴリ ----------
@@ -170,22 +113,12 @@ function expInfo(lot){
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
   const all = groupStock();
-  const buyItems = sortBuyItems(all.filter(isBuyItem));
-  stockFilter.renderCategories(categoryCounts(all.map(stockCategoryOf), STOCK_CATEGORIES), all.length, buyItems.length);
+  stockFilter.renderCategories(categoryCounts(all.map(stockCategoryOf), STOCK_CATEGORIES), all.length);
   if(!all.length){ wrap.innerHTML = '<p class="empty-msg">まだ登録された商品がありません</p>'; return; }
-  // 買う物のタブはチェック付きの一覧。整理モードでは、買う物だけを削除ボタン付きのカードで出す
-  const buyTab = stockFilter.special();
-  if(buyTab && !stockEditMode){
-    if(!buyListOpen) buyUnchecked.clear();
-    buyListOpen = true;
-    renderBuyList(wrap, buyItems);
-    return;
-  }
-  buyListOpen = false;
   wrap.innerHTML = '';
   // カテゴリを1つに絞っていなければ、カードにカテゴリも出す
   const showAll = stockFilter.categories().length !== 1;
-  const groups = buyTab ? buyItems : all.filter(g=>stockFilter.matches(g.tags, stockCategoryOf(g)));
+  const groups = all.filter(g=>stockFilter.matches(g.tags, stockCategoryOf(g)));
   if(stockFilter.active()) stockFilter.setCount(`${groups.length}件`);
   if(!groups.length){ wrap.innerHTML = '<p class="empty-msg">該当する商品がありません</p>'; return; }
   groups.forEach(g=>{
@@ -198,7 +131,7 @@ function renderStockList(){
     if(exp && exp.label) meta.append(h('span', {class:'exp ' + exp.cls}, exp.label), text ? ' ・ ' : '');
     meta.append(text || (exp && exp.label ? '' : '—'));
     const info = h('div', {class:'card-info'},
-      h('div', {class:'card-name-row'}, h('div', {class:'card-name'}, g.name), isBuyItem(g) ? h('span', {class:'buy-badge'}, BUY_TAB) : ''),
+      h('div', {class:'card-name-row'}, h('div', {class:'card-name'}, g.name), isBuyItem(g) ? h('span', {class:'buy-badge'}, BUY_BADGE) : ''),
       meta, canMemoBuy(g) ? makeBuyButton(g) : '');
     const card = h('div', {class:'card' + (single ? '' : ' multi')});
 
@@ -226,12 +159,12 @@ function renderStockList(){
   });
 }
 // ロットの個数を＋−するボタン（idで更新）
-// 個数で「買い物メモに追加」やバッジ・タブの件数が変わるので、そのたびに一覧を描き直す
+// 個数で「買い物リストに入れる」やバッジ・タブの件数が変わるので、そのたびに一覧を描き直す
 function makeStepper(lot){
   const count = h('span', {class:'count'}, String(lot.stock ?? 0));
   const bump = delta=>{
     const prev = Number(lot.stock) || 0;
-    // 増えたら GAS 側で買い物メモの印が外れるので、画面でも同じ商品の全ロットから外す
+    // 増えたら GAS 側で buyFlag の印が外れるので、画面でも同じ商品の全ロットから外す
     const sameItem = stockCache.filter(r=>String(r.itemName) === String(lot.itemName));
     const prevFlags = sameItem.map(l=>l.buyFlag);
     const set = (v, flags)=>{
@@ -329,7 +262,7 @@ const stockFilter = createFilterBar('stock-filter', 'stock', ()=>{
   renderStockFilterTags();
   renderStockList();
   if(!isComposing()) setStockFormCategory();
-}, {tabs:{id:'stock-cats', storageKey:'kurashilog.stockCats', special:{label:BUY_TAB, storageKey:'kurashilog.stockBuyTab'}}});
+}, {tabs:{id:'stock-cats', storageKey:'kurashilog.stockCats'}});
 
 stockFilter.render([]);
 
@@ -433,7 +366,7 @@ function tmItemView(g){
       h('p', {class:'tm-note'}, 'タグ「ストック」を付けると、撮ったレシートにあれば夜に自動で個数を足します。')),
     field('型番', model),
     hasReorder ? field('買う目安', reorder,
-      h('p', {class:'tm-note'}, '合計がこの個数以下になったら「買う物」に出します。天然水など本数で判断できる物に入れてください。空欄なら、残り1個のときに「買い物メモに追加」を押して判断します。')) : '',
+      h('p', {class:'tm-note'}, '合計がこの個数以下になったら「買う物」にし、やることタブの買い物リストに入れます。天然水など本数で判断できる物に入れてください。空欄なら、残り1個のときに「買い物リストに入れる」を押して判断します。')) : '',
     h('div', {class:'field'},
       h('div', {class:'lot-edit lot-head'}, h('label', {}, '賞味期限'), h('label', {}, '個数'), h('span')),
       lotList,

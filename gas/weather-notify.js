@@ -537,19 +537,18 @@ function wxTrainLine(t) {
 
 // ---- くらしログ ----
 
-// 今日やる家事（期限切れを含む）
+// 今日やる家事（期限切れを含む）：「リマインダー」の家事のリスト（表示中のもの）の、まだ終わっていない行
 function readTodayChores(now) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_CHORE);
-  const values = sheet.getDataRange().getValues();
-  const h = values[0];
-  const iName = h.indexOf("taskName"), iDue = h.indexOf("nextDue");
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const choreLists = new Set(reminderActiveLists(ss).filter(l => String(l.kind) === "家事").map(l => String(l.id)));
   const tomorrow = new Date(choreDayStart(now).getTime() + 86400000);
-  return values.slice(1)
-    .filter(r => r[iName] && r[iDue] instanceof Date && r[iDue] < tomorrow)
-    .sort((a, b) => a[iDue] - b[iDue])
-    .map(r => {
-      const late = choreDiffDays(now, r[iDue]);
-      return { name: String(r[iName]), late: late > 0 ? late : 0 };
+  return receiptRead(ss.getSheetByName(SHEET_REMINDER)).rows
+    .filter(o => choreLists.has(String(o.listId)) && String(o.status ?? "") === "" && normText(o.title)
+      && o.nextDue instanceof Date && o.nextDue < tomorrow)
+    .sort((a, b) => a.nextDue - b.nextDue)
+    .map(o => {
+      const late = choreDiffDays(now, o.nextDue);
+      return { name: normText(o.title), late: late > 0 ? late : 0 };
     });
 }
 
