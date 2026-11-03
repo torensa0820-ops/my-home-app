@@ -2,8 +2,9 @@
 // データは GAS の getReminders（起動時は getAll にまとめて取得）。タブを開くたびに読み込み直す（5分ごとの処理や在庫の変更で行が増えるため）
 // 完了・取り消しはすぐ画面に反映し、失敗したら元に戻して読み込み直す
 // 周期の入力欄は js/rule-editor.js、周期の計算は gas/chore-rule.js（GAS と共通）
+// リストの画面は js/nav-stack.js でリストのカードの上に重ねる（右から入り、「‹ リスト」か左端からのスワイプで戻る）
 
-const todo = {lists:[], items:[], sale:{items:{}, verdicts:{}}, listId:null, draft:'', doneOpen:false};
+const todo = {lists:[], items:[], sale:{items:{}, verdicts:{}}, listId:null, draft:'', doneOpen:false, loaded:false};
 const TODO_KINDS = ['家事', '買い物'];
 const TODO_ASSIGNEES = ['本人', '彼女'];
 const TODO_COLORS = ['#E2BC7A', '#9DCBA4', '#9DBBDF', '#EE9F94', '#C9A6E4']; // リストの色の候補（空なら --chore）
@@ -18,15 +19,70 @@ function loadReminders(preloaded){
       todo.lists = d.lists || [];
       todo.items = d.items || [];
       todo.sale = d.sale || {items:{}, verdicts:{}};
+      todo.loaded = true;
       renderTodo();
     })
-    .catch(err=>{ document.getElementById('todo-view').replaceChildren(loadErrorView(err, ()=>reloadList('todo-view', loadReminders))); });
+    .catch(todoShowLoadError);
+}
+// 読み込みに失敗したとき。表示中のデータがあれば残してトーストだけ出す（タブを開くたびの読み込み直しなど）
+function todoShowLoadError(err){
+  if(todo.loaded){ toast(errMsg(err)); return; }
+  todoGridPage.replaceChildren(loadErrorView(err, ()=>{
+    todoGridPage.replaceChildren(h('p', {class:'empty-msg'}, '読み込み中…'));
+    loadReminders();
+  }));
 }
 // タブを開いたとき（main.js から呼ぶ）。開いているタブをもう一度押したら、リストのカードに戻る
 function todoTabShown(again){
-  if(again) todo.listId = null;
+  if(again && todoStack.depth() > 1) todoStack.pop();
   renderTodo();
   loadReminders();
+}
+
+// ---------- 画面の重ね方 ----------
+// 下はリストのカード、上は開いているリスト（開いていなければ null）
+const todoGridPage = h('div', {}, h('p', {class:'empty-msg'}, '読み込み中…'));
+let todoListPage = null;
+const todoStack = createNavStack(document.getElementById('todo-view'), todoGridPage, {
+  onProgress:todoHeaderProgress,
+  onPop:()=>{ todo.listId = null; todoListPage = null; renderTodo(); },
+});
+// リストを開く（右から入れる）
+function todoOpenList(list){
+  if(todoStack.busy() || todoStack.depth() > 1) return;
+  todo.listId = list.id;
+  todo.draft = '';
+  todo.doneOpen = false;
+  todoListPage = h('div', {class:'todo-list-page'}, todoListView(list));
+  todoStack.push(todoListPage);
+}
+// ヘッダーの題名と説明（list が null ならリストのカードの画面）
+function todoHeaderText(list){
+  return list ? [list.name, '丸で完了・名前で編集・左端から右へスワイプで戻る'] : [TODO_INFO.title, TODO_INFO.sub];
+}
+function todoSetHeader(list){
+  if(!todoTabActive()) return;
+  const [title, sub] = todoHeaderText(list);
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-sub').textContent = sub;
+}
+// 画面が動いている間のヘッダー（p：0＝リストの画面 〜 1＝リストのカードの画面）
+// スワイプ中は半分を境に題名を入れ替え、入れ替わる所で薄くする。ボタンなどでの動き（dur あり）は入れ替えてふわっと出す
+function todoHeaderProgress(p, dur){
+  if(!todoTabActive()) return;
+  const els = [document.getElementById('page-title'), document.getElementById('page-sub')];
+  const list = todo.listId ? todoListOf(todo.listId) : null;
+  todoSetHeader(p > 0.5 ? null : list);
+  els.forEach(el=>{
+    if(dur){
+      el.style.opacity = '';
+      el.classList.remove('title-fade');
+      void el.offsetWidth; // アニメーションを最初からやり直す
+      el.classList.add('title-fade');
+    } else {
+      el.style.opacity = String(Math.min(1, Math.abs(1 - 2 * p) * 1.5));
+    }
+  });
 }
 
 // ---------- 小さな関数 ----------
@@ -97,18 +153,25 @@ function todoTabActive(){
   const b = document.querySelector('nav.tabbar button.active');
   return !!b && b.dataset.tab === 'todo';
 }
+// リストのカードと、開いているリストの画面を描き直す。画面が動いている間は、動き終わってから描く
 function renderTodo(){
-  const view = document.getElementById('todo-view');
-  const list = todo.listId ? todoListOf(todo.listId) : null;
-  if(!list) todo.listId = null;
-  if(todoTabActive()){
-    document.getElementById('page-title').textContent = list ? list.name : TODO_INFO.title;
-    document.getElementById('page-sub').textContent = list ? '丸のタップで完了・名前をタップで編集' : TODO_INFO.sub;
+  if(todoStack.busy()){
+    if(!renderTodo.waiting){
+      renderTodo.waiting = true;
+      todoStack.whenIdle(()=>{ renderTodo.waiting = false; renderTodo(); });
+    }
+    return;
   }
-  // 追加の入力欄に入力中なら、描き直した後も続けて入力できるようにする
-  const typing = document.activeElement && document.activeElement.classList.contains('todo-add-input');
-  view.replaceChildren(...(list ? todoListView(list) : todoGridView()));
-  if(typing){ const input = view.querySelector('.todo-add-input'); if(input) input.focus(); }
+  const list = todo.listId ? todoListOf(todo.listId) : null;
+  if(todo.listId && !list){ todoStack.pop(); return; } // 開いていたリストがなくなった（onPop で描き直す）
+  todoSetHeader(list);
+  todoGridPage.replaceChildren(...todoGridView());
+  if(list && todoListPage){
+    // 追加の入力欄に入力中なら、描き直した後も続けて入力できるようにする
+    const typing = document.activeElement && document.activeElement.classList.contains('todo-add-input');
+    todoListPage.replaceChildren(...todoListView(list));
+    if(typing){ const input = todoListPage.querySelector('.todo-add-input'); if(input) input.focus(); }
+  }
 }
 
 // リストのカード（2列）
@@ -124,13 +187,7 @@ function todoListCard(list){
   const items = todoItemsOf(list);
   const open = items.filter(todoIsOpen);
   const hint = list.kind === '買い物' ? todoShopHint(list) : todoChoreHint(open, items);
-  return h('button', {type:'button', class:'todo-card' + (open.length ? '' : ' empty'), style:list.color ? `--list:${list.color}` : '', onclick:()=>{
-    todo.listId = list.id;
-    todo.draft = '';
-    todo.doneOpen = false;
-    renderTodo();
-    document.querySelector('main').scrollTop = 0;
-  }},
+  return h('button', {type:'button', class:'todo-card' + (open.length ? '' : ' empty'), style:list.color ? `--list:${list.color}` : '', onclick:()=>todoOpenList(list)},
     h('div', {class:'todo-card-name'}, list.name),
     h('div', {class:'todo-card-count'}, String(open.length), h('small', {}, '件')),
     h('div', {class:'todo-card-hint'}, hint || ' '));
@@ -165,7 +222,7 @@ function todoShopHint(list){
 // リストの中
 function todoListView(list){
   const shop = list.kind === '買い物';
-  const back = h('button', {type:'button', class:'todo-back', onclick:()=>{ todo.listId = null; renderTodo(); }}, '‹ リスト');
+  const back = h('button', {type:'button', class:'todo-back', onclick:()=>todoStack.pop()}, '‹ リスト');
   const input = h('input', {type:'text', class:'todo-add-input', placeholder:shop ? '品目を追加（例：牛乳）' : 'やることを追加', value:todo.draft,
     enterKeyHint:'enter', oninput:e=>{ todo.draft = e.target.value; }});
   const add = h('form', {class:'todo-add', onsubmit:e=>{ e.preventDefault(); todoQuickAdd(list, input); }},

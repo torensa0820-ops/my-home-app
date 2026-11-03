@@ -46,5 +46,5 @@ getFromGas('action=getAll')
   .catch(err=>{
     document.getElementById('stock-list').replaceChildren(loadErrorView(err, ()=>{ reloadList('stock-list', loadStock); loadStockImports(); }));
     document.getElementById('coupons').replaceChildren(loadErrorView(err, ()=>reloadList('coupons', loadCoupons)));
-    document.getElementById('todo-view').replaceChildren(loadErrorView(err, ()=>reloadList('todo-view', loadReminders)));
+    todoShowLoadError(err);
   });

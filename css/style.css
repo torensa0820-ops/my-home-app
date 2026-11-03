@@ -375,3 +375,18 @@ form.todo-add{display:flex;gap:8px;background:none;border:none;border-radius:0;p
 #tm-backdrop .chip.todo-color.on{box-shadow:0 0 0 2px var(--text);background:var(--swatch,var(--surface-2));color:var(--text);}
 .tm-pair{display:flex;gap:8px;}
 .tm-pair > *{flex:1;margin-top:0;padding:13px;}
+
+/* 画面を積む部品（js/nav-stack.js）。やることタブは画面の大きさに固定し、重ねた画面がそれぞれスクロールする */
+main{position:relative;}
+main:has(#todo-panel.active){overflow:hidden;}
+#todo-panel.active{position:absolute;inset:0;}
+.nav-stack{position:absolute;inset:0;overflow:hidden;}
+.nav-page{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--bg);padding:16px 16px calc(var(--tabbar-h) + 80px);will-change:transform;}
+.nav-front{box-shadow:-10px 0 24px rgba(0,0,0,.35);}
+.nav-shade{position:absolute;inset:0;background:rgba(0,0,0,.35);pointer-events:none;}
+/* 画面を動かしている間、後ろの画面は押せないようにする */
+.nav-open .nav-page:not(.nav-front){pointer-events:none;}
+/* ヘッダーの題名の入れ替え */
+.title-fade{animation:title-fade .25s ease-out;}
+@keyframes title-fade{from{opacity:0;transform:translateX(6px);}to{opacity:1;transform:none;}}
+@media (prefers-reduced-motion: reduce){.title-fade{animation:none;}}
