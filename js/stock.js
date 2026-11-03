@@ -194,7 +194,7 @@ function setStockEditMode(on){
   editToggle.textContent = on ? '完了' : '整理';
   editToggle.classList.toggle('on', on);
   if(document.querySelector('nav.tabbar button.active').dataset.tab === 'stock'){
-    document.getElementById('page-sub').textContent = on ? '不要になった商品を削除' : TAB_INFO.stock.sub;
+    pageHead.set(TAB_INFO.stock.title, on ? '不要になった商品を削除' : TAB_INFO.stock.sub);
   }
   renderStockList();
 }

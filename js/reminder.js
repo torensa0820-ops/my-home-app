@@ -62,27 +62,14 @@ function todoHeaderText(list){
 }
 function todoSetHeader(list){
   if(!todoTabActive()) return;
-  const [title, sub] = todoHeaderText(list);
-  document.getElementById('page-title').textContent = title;
-  document.getElementById('page-sub').textContent = sub;
+  pageHead.set(...todoHeaderText(list));
 }
 // 画面が動いている間のヘッダー（p：0＝リストの画面 〜 1＝リストのカードの画面）
-// スワイプ中は半分を境に題名を入れ替え、入れ替わる所で薄くする。ボタンなどでの動き（dur あり）は入れ替えてふわっと出す
+// リストの題名とカードの画面の題名を、画面と同じ p・同じ長さで横にスライドさせて入れ替える
 function todoHeaderProgress(p, dur){
   if(!todoTabActive()) return;
-  const els = [document.getElementById('page-title'), document.getElementById('page-sub')];
   const list = todo.listId ? todoListOf(todo.listId) : null;
-  todoSetHeader(p > 0.5 ? null : list);
-  els.forEach(el=>{
-    if(dur){
-      el.style.opacity = '';
-      el.classList.remove('title-fade');
-      void el.offsetWidth; // アニメーションを最初からやり直す
-      el.classList.add('title-fade');
-    } else {
-      el.style.opacity = String(Math.min(1, Math.abs(1 - 2 * p) * 1.5));
-    }
-  });
+  pageHead.track(todoHeaderText(list), todoHeaderText(null), p, dur);
 }
 
 // ---------- 小さな関数 ----------

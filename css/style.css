@@ -391,7 +391,8 @@ main:has(#todo-panel.active){overflow:hidden;}
 .nav-shade{position:absolute;inset:0;background:rgba(0,0,0,.35);pointer-events:none;}
 /* 画面を動かしている間、後ろの画面は押せないようにする */
 .nav-open .nav-page:not(.nav-front){pointer-events:none;}
-/* ヘッダーの題名の入れ替え */
-.title-fade{animation:title-fade .25s ease-out;}
-@keyframes title-fade{from{opacity:0;transform:translateX(6px);}to{opacity:1;transform:none;}}
-@media (prefers-reduced-motion: reduce){.title-fade{animation:none;}}
+/* 題名の入れ替え（js/motion.js の createTitleSwap）。2枚の層を同じ場所に重ね、入れ替えていないときは2枚目を出さない */
+.swap{display:grid;}
+.swap > *{grid-area:1/1;min-width:0;}
+.swap:not(.swapping) > :last-child{display:none;}
+header{overflow:hidden;} /* 横にずれた題名で画面が横にスクロールしないようにする */

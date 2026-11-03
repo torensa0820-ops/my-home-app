@@ -16,8 +16,7 @@ document.querySelectorAll('nav.tabbar button').forEach(btn=>{
     btn.classList.add('active');
     const tab = btn.dataset.tab;
     document.getElementById(tab + '-panel').classList.add('active');
-    document.getElementById('page-title').textContent = TAB_INFO[tab].title;
-    document.getElementById('page-sub').textContent = TAB_INFO[tab].sub;
+    pageHead.set(TAB_INFO[tab].title, TAB_INFO[tab].sub);
     if(tab === 'todo') todoTabShown(again);
   });
 });
