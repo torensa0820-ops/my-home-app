@@ -111,14 +111,7 @@ function setHybridValue(selectEl, inputEl, v){
   else { selectEl.value = '__new__'; inputEl.style.display = 'block'; inputEl.value = v; }
 }
 
-// 保存する文字列をそろえる（英数字・記号は半角、カタカナは全角。Unicode の NFKC 正規化。GAS 側と同じ）
-function normText(s){
-  return String(s ?? '').normalize('NFKC').trim();
-}
-// タグ文字列を正規化した配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
-function splitTags(s){
-  return normText(s).split(/[,，、]/).map(normText).filter(Boolean);
-}
+// 文字列の正規化（normText）とタグの分解（splitTags）は gas/shared.js（GAS と共通）
 // 重複と空欄を除いて五十音順に並べる
 function uniqSorted(values){
   return [...new Set(values.map(v=>String(v ?? '').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
@@ -138,6 +131,8 @@ function h(tag, props = {}, ...children){
   children.flat().forEach(c=>{ if(c != null && c !== false) el.append(c); });
   return el;
 }
+// 見出し付きの入力欄（編集シートやフォームの1項目）
+function field(label, ...inputs){ return h('div', {class:'field'}, h('label', {}, label), inputs); }
 function errMsg(err){
   const m = err && err.message;
   return !m || m === 'Failed to fetch' || m === 'Load failed' ? '通信エラー' : m.replace(/^Error:\s*/, '');

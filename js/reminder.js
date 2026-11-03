@@ -146,15 +146,12 @@ function todoQtyText(qty){
   const q = normText(qty);
   return !q ? '' : /^\d+$/.test(q) ? `×${q}` : q;
 }
-// 店名の合わせ方（GAS の reminderStoreKey と同じ）：NFKC・英字は小文字・空白と「・」を除く。リストの store は「,」区切りで別名を書ける
-function todoStoreKey(s){ return normText(s).toLowerCase().replace(/[\s・]/g, ''); }
-function todoStoreAliases(list){ return String(list.store || '').split(/[,，、]/).map(todoStoreKey).filter(Boolean); }
-// その店の、いま使えるクーポン（未使用で、使える期間内）
+// その店の、いま使えるクーポン（未使用で、使える期間内）。店名の合わせ方は gas/shared.js の storeKey（GAS と共通）
 function todoStoreCoupons(list){
-  const aliases = todoStoreAliases(list);
+  const aliases = storeAliases(list.store);
   if(!aliases.length) return [];
   return couponList.filter(c=>{
-    if(String(c.status || '') !== '' || !aliases.includes(todoStoreKey(c.store))) return false;
+    if(String(c.status || '') !== '' || !aliases.includes(storeKey(c.store))) return false;
     const from = toDateInputValue(c.validFrom), until = toDateInputValue(c.validUntil);
     return (!from || daysFromToday(from) <= 0) && (!until || daysFromToday(until) >= 0);
   });
@@ -454,7 +451,7 @@ function tmTodoAskStockView(i, list){
   const qty = h('input', {type:'number', min:'1', step:'1', inputMode:'numeric', value:String(parseInt(normText(i.qty), 10) || 1)});
   tmBody.append(
     h('p', {class:'tm-lead'}, `「${i.title}」を完了にします。在庫の「${name}」に足しますか？`),
-    h('div', {class:'field'}, h('label', {}, '足す個数'), qty),
+    field('足す個数', qty),
     h('p', {class:'tm-note'}, '在庫の登録と同じく、賞味期限なしの分に足します。レシートを撮る物は、夜の自動追加と二重にならないよう「足さずに完了」を選んでください。'));
   tmFoot.append(h('div', {class:'tm-pair'},
     h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeSheet(); todoComplete(i, null); }}, '足さずに完了'),
@@ -470,7 +467,6 @@ function tmTodoAskStockView(i, list){
 // i：編集する行（追加なら null）、list：入れるリスト
 function tmTodoItemView(i, list){
   tmTitle.textContent = i ? '編集' : '追加';
-  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const title = h('input', {type:'text', value:i ? i.title : todo.draft});
   const qty = h('input', {type:'text', value:i ? (i.qty ?? '') : '', placeholder:'例：2 ／ 2袋'});
   const memo = h('input', {type:'text', value:i ? (i.memo || '') : ''});
@@ -615,9 +611,9 @@ function tmTodoListEditView(l){
   const shop = todoShopFields(l);
   const active = h('input', {type:'checkbox', checked:!!l.active});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
-  tmBody.append(todoField('名前', name),
-    todoField('カテゴリ', catSel, h('p', {class:'tm-note'}, `移せるのは${todoTypeLabel(l.kind)}のカテゴリだけです。`)),
-    l.kind === '買い物' ? shop.el : '', todoField('色', colors),
+  tmBody.append(field('名前', name),
+    field('カテゴリ', catSel, h('p', {class:'tm-note'}, `移せるのは${todoTypeLabel(l.kind)}のカテゴリだけです。`)),
+    l.kind === '買い物' ? shop.el : '', field('色', colors),
     h('label', {class:'check'}, active, 'カードを表示する（外すと非表示。品目はシートに残ります）'));
   tmFoot.append(save);
   save.addEventListener('click', ()=>{
@@ -642,7 +638,6 @@ function tmTodoListEditView(l){
 }
 
 // リストの編集と追加で共通の部品
-function todoField(label, ...inputs){ return h('div', {class:'field'}, h('label', {}, label), inputs); }
 // 色の候補（onPick に選んだ色を渡す。空は色なし）
 function todoColorChips(color, onPick){
   const wrap = h('div', {class:'chips'}, ['', ...TODO_COLORS].map(c=>h('button', {type:'button', class:'chip todo-color' + (c === color ? ' on' : ''),
@@ -657,7 +652,7 @@ function todoShopFields(l){
   const store = h('input', {type:'text', value:l.store || '', placeholder:'例：DAISO,ダイソー'});
   const askStock = h('input', {type:'checkbox', checked:!!l.askStock});
   const el = h('div', {},
-    todoField('店', store, h('p', {class:'tm-note'}, 'クーポンの店名や、在庫の品目を入れる店の判断に使います。呼び方が違うときは「,」で区切って並べます（先頭の名前がクーポンの店名と合うように）。空なら、店が決まらない在庫の品目の行き先になります。')),
+    field('店', store, h('p', {class:'tm-note'}, 'クーポンの店名や、在庫の品目を入れる店の判断に使います。呼び方が違うときは「,」で区切って並べます（先頭の名前がクーポンの店名と合うように）。空なら、店が決まらない在庫の品目の行き先になります。')),
     h('label', {class:'check'}, askStock, 'チェックしたときに在庫に足すか聞く'));
   return {el, store, askStock};
 }
@@ -875,6 +870,6 @@ function todoFillCompose(){
         toast(`「${list.name}」を作りました`);
       })
       .catch(err=>{ toast(errMsg(err)); submit.disabled = false; submit.textContent = 'このリストを作る'; });
-  }}, todoField('名前', name), todoField('カテゴリ', catSel, newCat), shop.el, todoField('色', colors), submit);
+  }}, field('名前', name), field('カテゴリ', catSel, newCat), shop.el, field('色', colors), submit);
   todoComposeBody.replaceChildren(form);
 }

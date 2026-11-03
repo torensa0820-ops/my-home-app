@@ -23,24 +23,15 @@ function groupStock(){
 
 // ---------- 買う物 ----------
 // 買う物になった商品は、GAS が「やること」タブの買い物リストに行を作る（gas/reminder.js の syncStockReminders）
-const BUY_FLAG = '買う'; // buyFlag 列の値（「買い物リストに入れる」の印。GAS と同じ）
+// 印の値（BUY_FLAG）・買う目安の読み方（parseReorderAt）・買う物の判定（stockBuyReason）は gas/shared.js（GAS と共通）
 const BUY_BADGE = '買う物';
 let stockSheetColumns = []; // 在庫シートの列名。reorderAt・buyFlag の列がない古いシートでは、その機能を画面に出さない
 
-// 買う目安を数値に直す。0 以上の整数でないもの（空・文字・小数・負の数）は「目安なし」の ''（GAS と同じ）
-function parseReorderAt(v){
-  const s = normText(v);
-  return /^\d+$/.test(s) ? Number(s) : '';
-}
 function stockTotal(g){ return g.lots.reduce((s,l)=>s + (Number(l.stock) || 0), 0); }
 // なぜ買う物なのかの説明。買う物でなければ ''
 function buyReason(g){
-  if(g.modelNumber) return '';
-  const total = stockTotal(g);
-  if(g.reorderAt !== '') return total <= g.reorderAt ? `残り ${total} 個（目安 ${g.reorderAt}）` : '';
-  if(g.buyFlag) return '買い物リストに入れた';
-  if(total === 0 && splitTags(g.tags).includes('ストック')) return '切らしている';
-  return '';
+  return stockBuyReason({total:stockTotal(g), reorderAt:g.reorderAt, buyFlag:g.buyFlag,
+    stockTag:splitTags(g.tags).includes('ストック'), model:!!g.modelNumber});
 }
 function isBuyItem(g){ return buyReason(g) !== ''; }
 // 「買い物リストに入れる」を出すか。個数が1個でも、開けたばかりか残りわずかかは数字で分からないので手で印を付ける
@@ -71,7 +62,7 @@ function makeBuyButton(g){
 }
 
 // ---------- カテゴリ ----------
-// タブはこの順に並べ（GAS の STOCK_CATEGORIES と同じ）、ほかのカテゴリは件数の多い順で後ろに足す
+// タブはこの順に並べ、ほかのカテゴリは件数の多い順で後ろに足す
 // カテゴリが空の商品は「未分類」に出す。タブと絞り込みは stockFilter（js/tags.js の createFilterBar）が持つ
 const STOCK_CATEGORIES = ['食品', '日用品', '医薬品', '家具・家電', '住宅設備', 'PC周辺機器'];
 
@@ -106,9 +97,8 @@ function stockTagSync(picker, catSelect, catInput){
 function expInfo(lot){
   const exp = toDateInputValue(lot.expirationDate);
   if(!exp) return {label:'', cls:''};
-  const today = new Date(); today.setHours(0,0,0,0);
-  const days = Math.round((new Date(exp + 'T00:00:00') - today) / 86400000);
-  return {label:`期限 ${Number(exp.slice(5,7))}/${Number(exp.slice(8,10))}`, cls: days < 0 ? 'expired' : days <= 3 ? 'soon' : ''};
+  const days = daysFromToday(exp);
+  return {label:`期限 ${mdLabel(exp)}`, cls: days < 0 ? 'expired' : days <= 3 ? 'soon' : ''};
 }
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
@@ -160,34 +150,57 @@ function renderStockList(){
 }
 // ロットの個数を＋−するボタン（idで更新）
 // 個数で「買い物リストに入れる」やバッジ・タブの件数が変わるので、そのたびに一覧を描き直す
+// 続けて押したときは、最後に押してから BUMP_WAIT_MS 待ち、足した数をまとめて1回で送る（GAS の呼び出しを減らす）
+const BUMP_WAIT_MS = 600;
+const pendingBumps = new Map(); // ロットの id → {delta：まだ送っていない数, timer}
+const bumpsInFlight = new Set(); // 送っている途中の書き込み
 function makeStepper(lot){
   const count = rollNumber(h('span', {class:'count'}), 'lot:' + lot.id, Number(lot.stock) || 0);
   const bump = delta=>{
-    const prev = Number(lot.stock) || 0;
+    lot.stock = (Number(lot.stock) || 0) + delta;
     // 増えたら GAS 側で buyFlag の印が外れるので、画面でも同じ商品の全ロットから外す
-    const sameItem = stockCache.filter(r=>String(r.itemName) === String(lot.itemName));
-    const prevFlags = sameItem.map(l=>l.buyFlag);
-    const set = (v, flags)=>{
-      lot.stock = v;
-      sameItem.forEach((l,i)=>{ l.buyFlag = flags[i]; });
-      renderStockList();
-    };
-    set(prev + delta, delta > 0 ? sameItem.map(()=>'') : prevFlags);
-    postToGas({type:'stock', action:'bump', id:lot.id, value:delta})
-      .then(res=>{ if(res.status !== 'success'){ set(prev, prevFlags); toast(res.message || '更新に失敗しました'); } })
-      // 時間切れでも GAS 側では更新済みのことがあるため、一覧を読み込み直して実際の個数に合わせる
-      .catch(err=>{ set(prev, prevFlags); toast(errMsg(err)); loadStock(); });
+    if(delta > 0) stockCache.forEach(r=>{ if(String(r.itemName) === String(lot.itemName)) r.buyFlag = ''; });
+    renderStockList();
+    const p = pendingBumps.get(lot.id) || {delta:0};
+    p.delta += delta;
+    clearTimeout(p.timer);
+    p.timer = setTimeout(()=>sendBump(lot.id), BUMP_WAIT_MS);
+    pendingBumps.set(lot.id, p);
   };
   return h('div', {class:'stepper'},
     h('button', {type:'button', onclick:()=>bump(-1)}, '−'), count, h('button', {type:'button', onclick:()=>bump(1)}, '＋'));
 }
+// まとめた数を送る
+function sendBump(id){
+  const p = pendingBumps.get(id);
+  pendingBumps.delete(id);
+  if(!p) return Promise.resolve();
+  clearTimeout(p.timer);
+  if(!p.delta) return Promise.resolve(); // ＋と−で打ち消した
+  const req = postToGas({type:'stock', action:'bump', id, value:p.delta})
+    .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '更新に失敗しました'); })
+    // 失敗したら一覧を読み込み直して実際の個数に合わせる（時間切れでも GAS 側では更新済みのことがある）
+    .catch(err=>{ toast(errMsg(err)); setTimeout(()=>loadStock()); })
+    .finally(()=>bumpsInFlight.delete(req));
+  bumpsInFlight.add(req);
+  return req;
+}
+// 待っている分をすぐに送り、送っている途中のものと合わせて終わるのを待つ
+// （一覧を読み込み直す前に呼ぶ。先に読むと、まだ書いていない古い個数で画面を描き直してしまう）
+function flushBumps(){
+  [...pendingBumps.keys()].forEach(sendBump);
+  return Promise.all([...bumpsInFlight]);
+}
+// アプリを閉じる・ほかのアプリに切り替えるときは、待たずに送る
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) flushBumps(); });
+
 // 削除は「整理モード → 削除ボタン → 確認シートで長押し」の3段階にして誤操作を防ぐ
 let stockEditMode = false;
-let deleteTarget = null;
 
 const editToggle = document.getElementById('stock-edit-toggle');
-const sheetBackdrop = document.getElementById('sheet-backdrop');
-const holdBtn = document.getElementById('hold-delete-btn');
+const deleteBackdrop = document.getElementById('sheet-backdrop');
+const deleteSheet = document.getElementById('delete-sheet');
+let deleteBtn = null; // 確認シートの長押しボタン（削除の通信中は disabled。その間はシートを閉じない）
 
 function setStockEditMode(on){
   stockEditMode = on;
@@ -202,63 +215,35 @@ editToggle.addEventListener('click', ()=>setStockEditMode(!stockEditMode));
 
 // 削除は商品単位（その商品の全ロット）。1つのロットだけ消すときは編集画面から
 function openDeleteSheet(g){
-  deleteTarget = g;
-  document.getElementById('sheet-item-name').textContent = g.name;
-  const stock = g.lots.reduce((s,l)=>s + (Number(l.stock) || 0), 0);
-  const lotsNote = g.lots.length > 1 ? `賞味期限の異なる${g.lots.length}件をすべて削除します。` : '';
-  document.getElementById('sheet-stock-warn').textContent = (stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '') + lotsNote;
-  holdBtn.disabled = false;
-  holdBtn.querySelector('span').textContent = '長押しで削除';
-  sheetBackdrop.classList.add('show');
-}
-function closeDeleteSheet(){
-  cancelHold();
-  deleteTarget = null;
-  sheetBackdrop.classList.remove('show');
-}
-document.getElementById('sheet-cancel-btn').addEventListener('click', closeDeleteSheet);
-sheetBackdrop.addEventListener('click', e=>{ if(e.target === sheetBackdrop && !holdBtn.disabled) closeDeleteSheet(); });
-
-function startHold(e){
-  if(holdBtn.disabled || !deleteTarget) return;
-  e.preventDefault();
-  holdBtn.classList.add('holding');
-  clearTimeout(startHold._t);
-  startHold._t = setTimeout(executeDelete, HOLD_MS);
-}
-function cancelHold(){
-  clearTimeout(startHold._t);
-  holdBtn.classList.remove('holding');
-}
-holdBtn.addEventListener('pointerdown', startHold);
-['pointerup','pointerleave','pointercancel'].forEach(ev=>holdBtn.addEventListener(ev, cancelHold));
-holdBtn.addEventListener('contextmenu', e=>e.preventDefault());
-
-function executeDelete(){
-  const g = deleteTarget;
-  if(!g) return;
-  holdBtn.disabled = true;
-  holdBtn.querySelector('span').textContent = '削除中…';
-  postToGas({type:'stock', action:'delete', target:g.name})
-    .then(res=>{
-      if(res.status === 'success'){
+  const stock = stockTotal(g);
+  const warn = (stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '') + (g.lots.length > 1 ? `賞味期限の異なる${g.lots.length}件をすべて削除します。` : '');
+  deleteBtn = makeHoldButton('長押しで削除', reset=>{
+    postToGas({type:'stock', action:'delete', target:g.name})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '削除に失敗しました');
         stockCache = stockCache.filter(r=>String(r.itemName) !== g.name);
-        closeDeleteSheet();
+        deleteBackdrop.classList.remove('show');
         renderStockList();
         toast(`「${g.name}」を削除しました`);
-      } else {
-        cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
-        toast(res.message || '削除に失敗しました');
-      }
-    })
-    .catch(err=>{
-      cancelHold(); holdBtn.disabled = false; holdBtn.querySelector('span').textContent = '長押しで削除';
-      toast(errMsg(err));
-    });
+      })
+      .catch(err=>{ toast(errMsg(err)); reset(); });
+  });
+  deleteSheet.replaceChildren(
+    h('h2', {id:'sheet-title'}, '在庫管理から削除'),
+    h('div', {class:'sheet-name'}, g.name),
+    warn ? h('p', {class:'warn'}, warn) : '',
+    h('p', {}, 'スプレッドシートからこの商品の行が削除されます。元に戻すことはできません。'),
+    deleteBtn,
+    h('button', {type:'button', class:'cancel-btn', onclick:closeDeleteSheet}, 'キャンセル'));
+  deleteBackdrop.classList.add('show');
 }
+function closeDeleteSheet(){
+  if(!deleteBtn.disabled) deleteBackdrop.classList.remove('show');
+}
+deleteBackdrop.addEventListener('click', e=>{ if(e.target === deleteBackdrop) closeDeleteSheet(); });
 
 // カテゴリやタグを選び直したら、タグの候補・一覧・登録フォームのカテゴリを合わせる
-const stockFilter = createFilterBar('stock-filter', 'stock', ()=>{
+const stockFilter = createFilterBar('stock-filter', ()=>{
   renderStockFilterTags();
   renderStockList();
   if(!isComposing()) setStockFormCategory();
@@ -269,9 +254,9 @@ stockFilter.render([]);
 const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 const syncStockFormTags = stockTagSync(stockTagPicker, document.getElementById('s-category-select'), document.getElementById('s-category-input'));
 
-// preloaded：起動時にまとめて取得したデータ（あれば通信しない）
+// preloaded：起動時にまとめて取得したデータ（あれば通信しない）。読み込み直す前に、＋−のまだ送っていない分を送る
 function loadStock(preloaded){
-  return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getStock'))
+  return (preloaded ? Promise.resolve(preloaded) : flushBumps().then(()=>getFromGas('action=getStock')))
     .then(rows=>{
       stockCache = rows;
       stockSheetColumns = Object.keys(rows[0] || {});
@@ -320,7 +305,6 @@ function openItemEditor(g){ openSheet('stock', tmItemView, g); }
 // 商品の編集：商品情報（全ロット共通）と、賞味期限ごとの個数（ロット）をまとめて保存する
 function tmItemView(g){
   tmTitle.textContent = '商品を編集';
-  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const name = h('input', {type:'text', value:g.name});
   const catSelect = h('select');
   const catInput = h('input', {type:'text', class:'hybrid-input', placeholder:'新しいカテゴリを入力'});

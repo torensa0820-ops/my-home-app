@@ -124,9 +124,3 @@ function sendDiscordPayload(payload, channel) {
     Utilities.sleep(waitMs);
   }
 }
-
-// 【デバッグ用】強制的にDiscordへテスト通知を送る関数
-function debugForceDiscordNotify() {
-  // ※もしエラーが出る場合は、スクリプトプロパティ DISCORD_WEBHOOK_URL が正しく設定されているか確認してください
-  sendDiscordMessage("@everyone \n🔔 【テスト成功！】GASからDiscordへの通信が100%成功しました。アプリは正常に動いています！");
-}

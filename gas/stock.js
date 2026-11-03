@@ -1,11 +1,9 @@
 // =========================================================
 // 在庫：1行＝1ロット（同じ商品でも賞味期限ごとに別の行）
 // カテゴリ・収納場所・タグ・型番・買う目安・買い物メモの印は商品単位の情報として、同じ商品名の全ロットで揃える
+// 買い物メモの印（BUY_FLAG）・買う目安（parseReorderAt）・買う物の判定は shared.js（画面と共通）
 // =========================================================
 const SHEET_STOCK = "在庫";
-const BUY_FLAG = "買う"; // buyFlag 列の値（買い物メモの印）
-// 在庫のカテゴリ。移行（migrateStockCategory）でタグからカテゴリに移すもの。画面のタブも同じ順に並べる（js/stock.js）
-const STOCK_CATEGORIES = ["食品", "日用品", "医薬品", "家具・家電", "住宅設備", "PC周辺機器"];
 const STOCK_UNCATEGORIZED = "未分類"; // 画面で category が空の商品を出すタブの名前
 
 // ---- 在庫の一覧（1行＝1ロット。画面で商品ごとにまとめる）----
@@ -15,10 +13,22 @@ function getStockRows() {
   return rows;
 }
 
-// 買う目安を数値に直す。0 以上の整数でないもの（空・文字・小数・負の数）は「目安なし」の ""
-function parseReorderAt(v) {
-  const s = normText(v);
-  return /^\d+$/.test(s) ? Number(s) : "";
+// ---- 画面からの在庫の操作（doPost から呼ぶ）----
+// 「読む → 足す → 書く」の途中にほかの書き込みが入ると個数が消える（＋を続けて押したときなど）ので、ロックの中で行う
+// 在庫が変わったら、買い物リストにもすぐ反映する（在庫が「買う物」になった・でなくなった）
+function stockAction(ss, data) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    if (data.action === "delete") deleteStock(ss, data);
+    else if (data.action === "bump") bumpStock(ss, data);
+    else if (data.action === "setBuyFlag") setBuyFlag(ss, data);
+    else if (data.action === "editItem") editItem(ss, data);
+    else updateStock(ss, data);
+    syncStockRemindersSafe(ss);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function stockColumns(headers) {
@@ -49,7 +59,7 @@ function itemLotRows(values, col, name) {
 // 買い物メモの印を外す（個数が増えたとき）。buyFlag の列がないシートでは何もしない
 function clearBuyFlag(sheet, col, values, lots) {
   if (col.buyFlag === -1) return;
-  lots.filter(i => values[i][col.buyFlag] !== "").forEach(i => sheet.getRange(i + 1, col.buyFlag + 1).setValue(""));
+  setSameValue(sheet, lots.filter(i => values[i][col.buyFlag] !== "").map(i => [i + 1, col.buyFlag + 1]), "");
 }
 
 // カテゴリを正規化する（「未分類」は空として保存する）
@@ -122,7 +132,7 @@ function updateStock(ss, data) {
   // 商品情報の指定があれば、同じ商品名の既存ロットすべてに反映する
   Object.keys(info).forEach(key => {
     if (!info[key] || col[key] === -1) return;
-    lots.forEach(i => sheet.getRange(i + 1, col[key] + 1).setValue(info[key]));
+    setSameValue(sheet, lots.map(i => [i + 1, col[key] + 1]), info[key]);
   });
 }
 
@@ -152,11 +162,8 @@ function setBuyFlag(ss, data) {
   if (col.buyFlag === -1) throw new Error("在庫シートに buyFlag の列がありません。");
   const lots = itemLotRows(values, col, normText(data.target));
   if (!lots.length) throw new Error(`「${data.target}」が在庫に見つかりませんでした。`);
-  const now = new Date();
-  lots.forEach(i => {
-    sheet.getRange(i + 1, col.buyFlag + 1).setValue(data.value === true ? BUY_FLAG : "");
-    sheet.getRange(i + 1, col.lastUpdated + 1).setValue(now);
-  });
+  setSameValue(sheet, lots.map(i => [i + 1, col.buyFlag + 1]), data.value === true ? BUY_FLAG : "");
+  setSameValue(sheet, lots.map(i => [i + 1, col.lastUpdated + 1]), new Date());
 }
 
 // ---- 商品の削除（商品名で指定し、その商品の全ロットを削除）----
@@ -188,9 +195,7 @@ function editItem(ss, data) {
   if (!name) throw new Error("商品名が空です。");
   const oldName = normText(data.oldName);
   const info = itemInfo(data);
-  // カテゴリ欄のない古い画面からの保存では、カテゴリを空で上書きしない
-  if (data.category === undefined) delete info.category;
-  // 買う目安も同じく、送られてこなければ上書きしない
+  // 買う目安は、送られてこなければ（reorderAt の列がないシート）上書きしない
   if (data.reorderAt !== undefined) {
     info.reorderAt = parseReorderAt(data.reorderAt);
     if (info.reorderAt === "" && normText(data.reorderAt) !== "") throw new Error("買う目安は0以上の整数で入れてください。");
@@ -246,10 +251,8 @@ function editItem(ss, data) {
   });
 
   // 新しいロットを追加
-  // （古い画面からの保存でカテゴリが送られないときは、既存のロットのカテゴリを引き継ぐ）
+  // 買う目安と買い物メモの印が送られないときは、既存のロットから引き継ぐ（古いロットを消して新しいロットに移しても残るように）
   const newInfo = Object.assign({}, info);
-  if (newInfo.category === undefined && col.category !== -1) newInfo.category = values[itemRows[0]][col.category];
-  // 買う目安と買い物メモの印も同じ。古いロットを消して新しいロットに移しても残るようにする
   if (newInfo.reorderAt === undefined) newInfo.reorderAt = values[itemRows[0]][col.reorderAt];
   if (newInfo.buyFlag === undefined) newInfo.buyFlag = values[itemRows[0]][col.buyFlag];
   lots.filter(l => l.id === undefined || l.id === "").forEach(l => {
@@ -267,39 +270,4 @@ function editItem(ss, data) {
   itemRows.filter(i => deleteIds.has(String(values[i][col.id])))
     .sort((a, b) => b - a)
     .forEach(i => sheet.deleteRow(i + 1));
-}
-
-// ---- カテゴリの移行（タグからカテゴリを分ける。GAS のエディタから一度だけ実行する）----
-// 1. 在庫シートを「在庫_バックアップ_yyyyMMdd_HHmm」として複製する
-// 2. category 列がなければ tags 列の右に足す。在庫取込シートにも category 列を足す
-// 3. 各行の tags のうち STOCK_CATEGORIES にあるタグを category に移し、tags から外す
-//    （category が入っている行は category を変えず、同じ名前のタグだけ外す）
-// 何度実行しても結果は同じ
-function migrateStockCategory() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_STOCK);
-  const backup = `${SHEET_STOCK}_バックアップ_${Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyyMMdd_HHmm")}`;
-  sheet.copyTo(ss).setName(backup);
-
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  if (headers.indexOf("category") === -1) {
-    const tagsCol = headers.indexOf("tags") + 1;
-    sheet.insertColumnAfter(tagsCol);
-    sheet.getRange(1, tagsCol + 1).setValue("category");
-  }
-  receiptSheet(ss, SHEET_STOCK_IMPORT, STOCK_IMPORT_HEADERS);
-
-  const values = sheet.getDataRange().getValues();
-  const col = stockColumns(values[0]);
-  let changed = 0;
-  for (let i = 1; i < values.length; i++) {
-    const tags = splitTags(values[i][col.tags]);
-    const found = STOCK_CATEGORIES.filter(c => tags.includes(c));
-    if (!found.length) continue;
-    const category = normCategory(values[i][col.category]) || found[0];
-    sheet.getRange(i + 1, col.category + 1).setValue(category);
-    sheet.getRange(i + 1, col.tags + 1).setValue(tags.filter(t => t !== category).join(","));
-    changed++;
-  }
-  Logger.log(`カテゴリを移した行：${changed}行（バックアップ：${backup}）`);
 }

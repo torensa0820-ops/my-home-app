@@ -34,16 +34,8 @@ function doPost(e) {
     const data = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-    if (data.type === "stock" && data.action === "delete") {
-      deleteStock(ss, data);
-    } else if (data.type === "stock" && data.action === "bump") {
-      bumpStock(ss, data);
-    } else if (data.type === "stock" && data.action === "setBuyFlag") {
-      setBuyFlag(ss, data);
-    } else if (data.type === "stock" && data.action === "editItem") {
-      editItem(ss, data);
-    } else if (data.type === "stock") {
-      updateStock(ss, data);
+    if (data.type === "stock") {
+      stockAction(ss, data);
     } else if (data.type === "receipt" && data.action === "upload") {
       return jsonOutput(Object.assign({ status: "success" }, uploadReceipt(ss, data)));
     } else if (data.type === "receipt" && data.action === "skip") {
@@ -51,16 +43,9 @@ function doPost(e) {
     } else if (data.type === "receipt" && data.action === "reread") {
       rereadReceipt(ss, data);
     } else if (data.type === "stockImport") {
-      const message = stockImportAction(ss, data);
-      syncStockRemindersSafe(ss);
-      return jsonOutput({ status: "success", message: message });
+      return jsonOutput({ status: "success", message: stockImportAction(ss, data) });
     } else if (data.type === "coupon") {
       couponAction(ss, data);
-    } else if (data.type === "finance" || data.type === "recurring") {
-      return jsonOutput({ status: "error", message: "家計簿の機能は削除しました" });
-    } else if (data.type === "todo") {
-      // 家事タブのころの画面（キャッシュに残った古い画面）から「家事」シートに書かないようにする
-      return jsonOutput({ status: "error", message: "家事は「やること」タブに移りました。右上のボタンで最新版を読み込んでください" });
     } else if (data.type === "reminder") {
       return jsonOutput({ status: "success", item: reminderAction(ss, data) });
     } else if (data.type === "reminderList") {
@@ -72,9 +57,6 @@ function doPost(e) {
     } else {
       return jsonOutput({ status: "error", message: "type が不正です: " + data.type });
     }
-
-    // 在庫が変わったら、買い物リストにすぐ反映する（在庫が「買う物」になった・でなくなった）
-    if (data.type === "stock") syncStockRemindersSafe(ss);
     return jsonOutput({ status: "success" });
   } catch (err) {
     return jsonOutput({ status: "error", message: err.toString() });
@@ -100,16 +82,20 @@ function sheetToObjects(sheetName, keyColumn) {
     });
 }
 
-// 保存する文字列をそろえる（英数字・記号は半角、カタカナは全角。Unicode の NFKC 正規化）
-// 日付・時刻・数値・id・rule（JSON）には使わない
-function normText(s) {
-  return String(s ?? '').normalize('NFKC').trim();
+// 同じ値を、いくつかのセルにまとめて書く（cells：[[行, 列], ...]。行・列は1から）
+// 1セルずつ setValue すると1回ごとに時間がかかるので、RangeList で1回の書き込みにする
+function setSameValue(sheet, cells, value) {
+  if (cells.length) sheet.getRangeList(cells.map(([row, col]) => a1Notation(row, col))).setValue(value);
 }
 
-// タグ文字列を正規化した配列に分解（「,」のほか全角の「，」「、」も区切りとして扱う）
-function splitTags(s) {
-  return normText(s).split(/[,，、]/).map(normText).filter(Boolean);
+// 行・列の番号（1から）を "B12" のような書き方にする
+function a1Notation(row, col) {
+  let letters = "";
+  for (let n = col; n > 0; n = Math.floor((n - 1) / 26)) letters = String.fromCharCode(65 + (n - 1) % 26) + letters;
+  return letters + row;
 }
+
+// 文字列の正規化（normText）とタグの分解（splitTags）は shared.js（画面と共通）
 
 // タグ文字列を正規化し、「,」（半角・空白なし）でつなぎ直す
 function normTags(s) {

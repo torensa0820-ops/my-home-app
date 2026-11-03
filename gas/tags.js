@@ -6,7 +6,6 @@
 // action: "rename"（名称変更。既存タグ名なら統合）/ "delete"（全行から外す）/ "assign"（指定行に付与）
 // 戻り値：変更した行数
 function manageTags(ss, data) {
-  if (data.sheet !== "stock") throw new Error("sheet が不正です: " + data.sheet);
   const tag = normText(data.tag);
   if (!tag) throw new Error("タグ名が空です。");
 

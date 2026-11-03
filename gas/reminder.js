@@ -11,7 +11,6 @@
 const SHEET_REMINDER_CATEGORY = "リマインダーカテゴリ";
 const SHEET_REMINDER_LIST = "リマインダーリスト";
 const SHEET_REMINDER = "リマインダー";
-const SHEET_CHORE = "家事"; // 以前の家事のシート。記録として残し、移行（setupReminders）で読むだけ
 const REMINDER_CATEGORY_HEADERS = ["id", "name", "type", "sortOrder", "createdAt"];
 const REMINDER_LIST_HEADERS = ["id", "name", "kind", "store", "color", "sortOrder", "askStock", "active", "createdAt", "categoryId"];
 const REMINDER_HEADERS = ["id", "listId", "title", "qty", "memo", "assignee", "rule", "cycle", "nextDue", "lastDone", "notifiedFor",
@@ -304,7 +303,7 @@ function reminderListAction(ss, data) {
     const kind = String(category.type);
     if (found && String(found.kind) !== kind) throw new Error("種類の違うカテゴリには移せません。");
     const values = {
-      name: name, kind: kind, categoryId: category.id, store: kind === "買い物" ? reminderStoreInput(data.store) : "",
+      name: name, kind: kind, categoryId: category.id, store: kind === "買い物" ? normTags(data.store) : "",
       color: color, askStock: kind === "買い物" && data.askStock === true,
     };
 
@@ -374,7 +373,7 @@ function reminderCategoryAction(ss, data) {
       const targets = lists.rows.filter(o => ids.indexOf(String(o.id)) !== -1);
       const wrong = targets.find(o => String(o.kind) !== String(found.type));
       if (wrong) throw new Error(`「${wrong.name}」は種類が違うので移せません。`);
-      targets.forEach(o => receiptWrite(listSheet, lists.headers, o._row, { categoryId: found.id }));
+      receiptWriteColumn(listSheet, lists.headers, targets.map(o => o._row), "categoryId", found.id);
       return null;
     }
     throw new Error("action が不正です: " + data.action);
@@ -399,26 +398,14 @@ function reminderAddCategory(ss, c) {
   return row;
 }
 
-// 店名（「,」区切りで別名も書ける）を正規化してつなぎ直す
-function reminderStoreInput(v) {
-  return normText(v).split(/[,，、]/).map(normText).filter(Boolean).join(",");
-}
-
 // ---- 店名の合わせ方 ----
-// NFKC で正規化し、英字を小文字にし、空白と「・」を除いて比べる。リストの store は「,」区切りで別名を書ける（DAISO,ダイソー）
-function reminderStoreKey(s) {
-  return normText(s).toLowerCase().replace(/[\s・]/g, "");
-}
-
-function reminderStoreAliases(list) {
-  return String(list.store ?? "").split(/[,，、]/).map(reminderStoreKey).filter(Boolean);
-}
+// 合わせ方（storeKey・storeAliases）は shared.js（画面と共通）。リストの store は「,」区切りで別名を書ける（DAISO,ダイソー）
 
 // その店の買い物リスト（なければ null）
 function reminderListForStore(lists, store) {
-  const key = reminderStoreKey(store);
+  const key = storeKey(store);
   if (!key) return null;
-  return lists.find(l => String(l.kind) === "買い物" && reminderStoreAliases(l).indexOf(key) !== -1) || null;
+  return lists.find(l => String(l.kind) === "買い物" && storeAliases(l.store).indexOf(key) !== -1) || null;
 }
 
 // ---- 在庫とのつながり ----
@@ -442,14 +429,6 @@ function stockSummary(ss) {
   return items;
 }
 
-// 「買う物」か（画面の js/stock.js の buyReason と同じ判定）
-// 型番のある商品は対象外。reorderAt があれば合計 ≤ reorderAt、なければ buyFlag が「買う」か、タグ「ストック」があって合計 0
-function isStockBuy(g) {
-  if (g.model) return false;
-  if (g.reorderAt !== "") return g.total <= g.reorderAt;
-  return g.buyFlag || (g.stockTag && g.total === 0);
-}
-
 function stockItemNames(ss) {
   return new Set(Object.keys(stockSummary(ss)));
 }
@@ -462,7 +441,7 @@ function syncStockReminders(ss) {
   const sheet = ss.getSheetByName(SHEET_REMINDER);
   if (!sheet || !ss.getSheetByName(SHEET_REMINDER_LIST)) return; // setupReminders の前
   const summary = stockSummary(ss);
-  const buy = new Set(Object.keys(summary).filter(name => isStockBuy(summary[name])));
+  const buy = new Set(Object.keys(summary).filter(name => stockBuyReason(summary[name]) !== ""));
   const t = receiptRead(sheet);
   const now = new Date();
   const open = new Set();
@@ -498,16 +477,13 @@ function syncStockReminders(ss) {
   });
 }
 
-// アプリから在庫を変えたあとに呼ぶ。失敗しても在庫の操作は成功として返す（5分ごとの処理でもう一度合わせる）
+// アプリから在庫を変えたあとに、在庫を書いたのと同じロックの中で呼ぶ（ロックは呼び出し側で取る）
+// 失敗しても在庫の操作は成功として返す（5分ごとの処理でもう一度合わせる）
 function syncStockRemindersSafe(ss) {
-  const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(20000);
     syncStockReminders(ss);
   } catch (e) {
     Logger.log("買い物リストへの反映に失敗：" + e);
-  } finally {
-    lock.releaseLock();
   }
 }
 
@@ -553,18 +529,17 @@ function receiptLastStores(ss) {
   return out;
 }
 
-// ---- セットアップ・移行 ----
+// ---- セットアップ ----
 
 // 【一度だけ実行】やることタブの用意（何度実行しても重複しない）
 // 1. 「リマインダーリスト」「リマインダー」シートを作り、足りない列を足す
 // 2. 最初のリスト（REMINDER_DEFAULT_LISTS）のうち、同じ name のリストがないものを作る
-// 3. 「家事」シートの行を家事のリストに移す（id をそのまま使い、同じ id の行があれば飛ばす）
-// 4. checkChores のトリガーを消し、checkReminders を5分ごとに実行するトリガーを作る
-// 5. 今の在庫から買い物リストの行を作る
+// 3. checkReminders を5分ごとに実行するトリガーを作る（作り直しても重複しない）
+// 4. 今の在庫から買い物リストの行を作る
 function setupReminders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const listSheet = receiptSheet(ss, SHEET_REMINDER_LIST, REMINDER_LIST_HEADERS);
-  const sheet = receiptSheet(ss, SHEET_REMINDER, REMINDER_HEADERS);
+  receiptSheet(ss, SHEET_REMINDER, REMINDER_HEADERS);
   const now = new Date();
 
   const lists = receiptRead(listSheet).rows;
@@ -579,27 +554,13 @@ function setupReminders() {
     addedLists++;
   });
 
-  const choreList = lists.find(o => normText(o.name) === "家事");
-  const ids = new Set(receiptRead(sheet).rows.map(o => String(o.id)));
-  let moved = 0;
-  receiptRead(ss.getSheetByName(SHEET_CHORE)).rows.forEach(o => {
-    if (!normText(o.taskName) || ids.has(String(o.id))) return;
-    const rule = choreParseRule(o.rule);
-    receiptAppend(sheet, {
-      id: o.id, listId: choreList.id, title: normText(o.taskName), rule: rule ? JSON.stringify(rule) : "",
-      cycle: rule ? choreLabel(rule) : "", nextDue: o.nextDue, lastDone: o.lastDone, notifiedFor: o.notifiedFor,
-      status: "", source: REMINDER_SOURCE_MANUAL, createdAt: now, updatedAt: now,
-    });
-    moved++;
-  });
-
   ScriptApp.getProjectTriggers()
-    .filter(t => ["checkChores", "checkReminders"].indexOf(t.getHandlerFunction()) !== -1)
+    .filter(t => t.getHandlerFunction() === "checkReminders")
     .forEach(t => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger("checkReminders").timeBased().everyMinutes(5).create();
 
   syncStockReminders(ss);
-  Logger.log(`リストを${addedLists}件作り、家事を${moved}件移しました。checkReminders を5分ごとに実行するトリガーを作成しました。`);
+  Logger.log(`リストを${addedLists}件作りました。checkReminders を5分ごとに実行するトリガーを作成しました。`);
 }
 
 // 【一度だけ実行】やることのカテゴリの用意（何度実行しても重複しない）
@@ -627,40 +588,4 @@ function setupReminderCategories() {
     moved++;
   });
   Logger.log(`カテゴリを${added}件作り、リストを${moved}件カテゴリに入れました。`);
-}
-
-// 【一度だけ実行】「セール品目」に packUnit の列を足し、空の行にパックの単位の案を入れる（入っている行は変えない）
-// packUnit は1回に買う上限（maxPack ÷ unitQty）の単位。まとめ売りのパックで買う品目だけに入れ、
-// ふだん1個ずつ買う品目（詰め替え1袋・米1袋など）は空にしておく（セールでまとめ売りを買うときに必要なら単位を入れてよい）
-// あわせて、ティッシュの1回に買う上限を2パック（10箱。maxPack=2500組）にする。何度実行しても結果は同じ
-function fillSalePackUnits() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_SALE_ITEMS);
-  if (!sheet) throw new Error(`シート「${SHEET_SALE_ITEMS}」が見つかりません。`);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
-  if (headers.indexOf("packUnit") === -1) {
-    sheet.getRange(1, headers.length + 1).setValue("packUnit");
-    headers.push("packUnit");
-  }
-  const proposals = {
-    "トイレットペーパー": "袋", "ティッシュ": "パック", "キッチンペーパー": "袋", "ナプキン(ソフィ 超熟睡 330)": "パック",
-    "デオドラント(エージーデオ24 プレミアム 無香料)": "セット", "麦茶(やさしい麦茶 680ml)": "箱", "ミネラルウォーター": "箱",
-  };
-  const t = receiptRead(sheet);
-  let filled = 0;
-  t.rows.forEach(o => {
-    const unit = proposals[normText(o.itemName)];
-    if (!unit || normText(o.packUnit)) return;
-    receiptWrite(sheet, headers, o._row, { packUnit: unit });
-    filled++;
-  });
-  Logger.log(`packUnit を${filled}行に入れました。`);
-
-  // ティッシュ：5箱入り×2パック（1箱250組で2,500組）まで。note の「15箱まで」も合わせる
-  const tissue = t.rows.find(o => normText(o.itemName) === "ティッシュ");
-  if (tissue) {
-    const note = String(tissue.note ?? "").replace("1回に買うのは15箱まで", "1回に買うのは2パック(10箱)まで");
-    receiptWrite(sheet, headers, tissue._row, { maxPack: 2500, note: note });
-    Logger.log("ティッシュの maxPack を 2500（2パック・10箱）にしました。");
-  }
 }

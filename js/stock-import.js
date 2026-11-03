@@ -101,7 +101,6 @@ function undoStockImport(it, btn){
 // ---------- 確認待ちの1件を直して追加する ----------
 function tmStockImportItem(it){
   tmTitle.textContent = '在庫に追加';
-  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const name = h('input', {type:'text', value:it.itemName || ''});
   const qty = h('input', {type:'number', value:Number(it.qty) || 1, inputMode:'numeric'});
   const catSelect = h('select');

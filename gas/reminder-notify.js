@@ -40,11 +40,6 @@ function checkReminders() {
   }
 }
 
-// 以前の家事のトリガー（checkChores）が残っていても動くようにする。setupReminders でこのトリガーは消える
-function checkChores() {
-  checkReminders();
-}
-
 // ---- 期限のある行 ----
 
 // 期限の通知：時刻を指定したものは予定時刻を過ぎたら1回（notifiedFor に予定日時を書いて二重に送らない）。
@@ -191,23 +186,23 @@ function shopItemMarks(o, sale, stock) {
 // その店のクーポン（使える期間内。くり返しのないもの）と、通知の日から REMINDER_SHOP_DAYS 日のくり返しの日
 // coupons：「・お買物券 500円値引（〜4/10まで）」、days：「・ふくちゃんデー 会員10%OFF：11/9（月）・11/19（木）」
 function shopCouponLines(list, coupons, today) {
-  const aliases = reminderStoreAliases(list);
+  const aliases = storeAliases(list.store);
   const last = couponAddDays(today, REMINDER_SHOP_DAYS - 1);
   const out = { coupons: [], days: [] };
   coupons.forEach(o => {
-    if (aliases.indexOf(reminderStoreKey(o.store)) === -1) return;
+    if (aliases.indexOf(storeKey(o.store)) === -1) return;
     const from = normDate(o.validFrom);
     const until = normDate(o.validUntil);
     if ((until && until < today) || (from && from > last)) return;
     const title = saleOneLine(o.title);
-    const repeat = parseCouponRepeat(o.repeat);
+    const repeat = parseRepeat(o.repeat);
     if (!repeat) {
       out.coupons.push(`・${title}（${couponPeriod(from, until)}）`);
       return;
     }
     const dates = [];
     for (let ymd = today; ymd <= last; ymd = couponAddDays(ymd, 1)) {
-      if ((!from || from <= ymd) && (!until || ymd <= until) && couponRepeatMatches(repeat, ymd)) dates.push(ymd);
+      if ((!from || from <= ymd) && (!until || ymd <= until) && repeatMatches(repeat, ymd)) dates.push(ymd);
     }
     if (dates.length) {
       out.days.push(`・${title}：` + dates.map(ymd => `${Number(ymd.slice(5, 7))}/${Number(ymd.slice(8, 10))}（${"日月火水木金土"[new Date(ymd + "T00:00:00Z").getUTCDay()]}）`).join("・"));

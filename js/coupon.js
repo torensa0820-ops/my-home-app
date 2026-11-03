@@ -17,28 +17,9 @@ function loadCoupons(preloaded){
     .catch(err=>document.getElementById('coupons').replaceChildren(loadErrorView(err, ()=>reloadList('coupons', loadCoupons))));
 }
 
-// ---------- くり返し（repeat。GAS の parseCouponRepeat と同じ書き方）----------
-// monthly:9,19,29（毎月その日。-1 は末日）／ weekly:0,6（毎週その曜日。0=日〜6=土）。空・読めなければ null
-const WEEKDAYS = '日月火水木金土';
-function parseRepeat(v){
-  const m = normText(v).toLowerCase().replace(/\s/g, '').match(/^(monthly|weekly):([-\d,]+)$/);
-  if(!m) return null;
-  const values = [...new Set(m[2].split(',').filter(Boolean).map(Number))];
-  const ok = m[1] === 'monthly' ? n=>n === -1 || (n >= 1 && n <= 31) : n=>n >= 0 && n <= 6;
-  if(!values.length || !values.every(n=>Number.isInteger(n) && ok(n))) return null;
-  return {type:m[1], values:values.sort((a, b)=>(a === -1 ? 99 : a) - (b === -1 ? 99 : b))};
-}
-// 「毎月9・19・29日」「毎月15日・末日」「毎週日・土曜」
-function repeatLabel(r){
-  if(r.type === 'weekly') return '毎週' + r.values.map(n=>WEEKDAYS[n]).join('・') + '曜';
-  const days = r.values.filter(n=>n !== -1);
-  return '毎月' + [days.length ? days.join('・') + '日' : '', r.values.includes(-1) ? '末日' : ''].filter(Boolean).join('・');
-}
-function repeatMatches(r, d){
-  if(r.type === 'weekly') return r.values.includes(d.getDay());
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  return r.values.some(n=>n === -1 ? d.getDate() === last : n === d.getDate());
-}
+// ---------- くり返し（repeat）----------
+// monthly:9,19,29（毎月その日。-1 は末日）／ weekly:0,6（毎週その曜日。0=日〜6=土）
+// 読み方（parseRepeat）・くり返しの日か（repeatMatches）・「毎月9・19・29日」（repeatLabel）は gas/shared.js（GAS と共通）
 // 今日以降で、使える期間の中の次のくり返しの日（yyyy-mm-dd）。1年先までになければ空
 function nextRepeatDate(c, r){
   const from = toDateInputValue(c.validFrom), until = toDateInputValue(c.validUntil);
@@ -46,7 +27,7 @@ function nextRepeatDate(c, r){
   for(let i = 0; i <= 366; i++, d.setDate(d.getDate() + 1)){
     const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     if(until && ymd > until) return '';
-    if((!from || from <= ymd) && repeatMatches(r, d)) return ymd;
+    if((!from || from <= ymd) && repeatMatches(r, ymd)) return ymd;
   }
   return '';
 }
@@ -155,7 +136,7 @@ function createRepeatEditor(initial){
   const days = h('input', {type:'text', inputMode:'numeric', placeholder:'日付を「,」区切りで（例：9,19,29。末日は -1）',
     value:r && r.type === 'monthly' ? r.values.join(',') : ''});
   const picked = new Set(r && r.type === 'weekly' ? r.values : []);
-  const weeks = h('div', {class:'chips repeat-weeks'}, [...WEEKDAYS].map((w, i)=>{
+  const weeks = h('div', {class:'chips repeat-weeks'}, CHORE_WEEKDAYS.map((w, i)=>{
     const chip = h('button', {type:'button', class:'chip' + (picked.has(i) ? ' on' : '')}, w);
     chip.addEventListener('click', ()=>{ if(picked.has(i)) picked.delete(i); else picked.add(i); chip.classList.toggle('on', picked.has(i)); });
     return chip;
@@ -197,8 +178,8 @@ function couponCandidateCard(c){
     h('div', {class:'field coupon-field'}, h('label', {}, '内容'), title),
     c.detail ? h('div', {class:'coupon-detail'}, c.detail) : '',
     h('div', {class:'coupon-dates'},
-      h('div', {class:'field'}, h('label', {}, '使える日（任意）'), from),
-      h('div', {class:'field'}, h('label', {}, '期限（任意）'), until)),
+      field('使える日（任意）', from),
+      field('期限（任意）', until)),
     repeat.el,
     h('div', {class:'coupon-actions'}, photoLinks(c.fileId ? [c.fileId] : [], '写真を開く'), dismiss, remind));
 }

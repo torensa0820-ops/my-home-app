@@ -75,13 +75,26 @@ function receiptRead(sheet) {
   return { headers: headers, rows: rows };
 }
 
-// 1行のいくつかの列を書き換える（values：{見出し: 値}）
+// 1行のいくつかの列を書き換える（values：{見出し: 値}）。隣り合う列はまとめて1回で書く
 function receiptWrite(sheet, headers, row, values) {
-  Object.keys(values).forEach(k => {
+  const cells = Object.keys(values).map(k => {
     const col = headers.indexOf(k);
     if (col === -1) throw new Error(`シート「${sheet.getName()}」に ${k} の列がありません。`);
-    sheet.getRange(row, col + 1).setValue(values[k]);
-  });
+    return { col: col + 1, value: values[k] };
+  }).sort((a, b) => a.col - b.col);
+  for (let i = 0; i < cells.length;) {
+    let j = i + 1;
+    while (j < cells.length && cells[j].col === cells[j - 1].col + 1) j++;
+    sheet.getRange(row, cells[i].col, 1, j - i).setValues([cells.slice(i, j).map(c => c.value)]);
+    i = j;
+  }
+}
+
+// 何行かの1つの列に、同じ値を書く（rows：シートの行番号の配列）
+function receiptWriteColumn(sheet, headers, rows, key, value) {
+  const col = headers.indexOf(key);
+  if (col === -1) throw new Error(`シート「${sheet.getName()}」に ${key} の列がありません。`);
+  setSameValue(sheet, rows.map(row => [row, col + 1]), value);
 }
 
 // 「見出し → 値」のオブジェクトを、シートの末尾に1行追加する
@@ -191,7 +204,6 @@ function saveReceiptFile(bytes, kind, id, n, now) {
   return getReceiptFolder().createFile(Utilities.newBlob(bytes, "image/jpeg", name)).getId();
 }
 
-// ---- 撮影した分の一覧（今日撮った分と、まだ読まれていない件数）----
 // ---- 撮影した分の一覧（直近 RECEIPT_RECENT_DAYS 日）と、まだ読まれていない件数 ----
 // recent：[{id, kind, uploadedAt, status, store, purchasedAt, total, payment, importId, note, count（写真の枚数）,
 //           items（明細の件数）, auto・confirm・skip（明細の判断ごとの件数）, coupons（このレシートから作ったクーポン・候補の件数）}]
@@ -316,6 +328,7 @@ function getStockImports() {
 //   add     … 確認待ちを在庫に登録する（在庫の登録と同じ処理。itemName・qty・category・location・tags・expirationDate は画面で直した値）。status=added
 //   dismiss … 確認待ちを追加しない。status=dismissed
 //   undo    … 自動追加を取り消す。stockRowId のロットの個数を qty だけ減らす（0 未満にはしない）。status=undone
+// add・undo では在庫が変わるので、同じロックの中で買い物リストにも反映する
 // 戻り値：画面のトーストに出す文（なければ空）
 function stockImportAction(ss, data) {
   const lock = LockService.getScriptLock();
@@ -340,6 +353,7 @@ function stockImportAction(ss, data) {
       const written = { status: "added", updatedAt: now, itemName: normText(data.itemName), qty: qty, location: normText(data.location), tags: normTags(data.tags) };
       if (t.headers.indexOf("category") !== -1) written.category = normCategory(data.category);
       receiptWrite(sheet, t.headers, found._row, written);
+      syncStockRemindersSafe(ss);
       return "";
     }
 
@@ -347,6 +361,7 @@ function stockImportAction(ss, data) {
       if (status !== "自動追加") throw new Error("この品目はすでに取り消されています。読み込み直してください。");
       const message = reduceStockLot(ss, found.stockRowId, Number(found.qty) || 0);
       receiptWrite(sheet, t.headers, found._row, { status: "undone", updatedAt: now });
+      syncStockRemindersSafe(ss);
       return message;
     }
     throw new Error("action が不正です: " + data.action);
@@ -423,43 +438,14 @@ function couponAction(ss, data) {
 }
 
 // ---- くり返し（repeat 列）----
-// monthly:9,19,29 … 毎月その日（-1 は末日。その月にない日は飛ばす）
-// weekly:0,6      … 毎週その曜日（0=日〜6=土）
-// 空ならくり返しなし。読めなければ null
-function parseCouponRepeat(v) {
-  const m = normText(v).toLowerCase().replace(/\s/g, "").match(/^(monthly|weekly):([-\d,]+)$/);
-  if (!m) return null;
-  const values = [...new Set(m[2].split(",").filter(Boolean).map(Number))];
-  const ok = m[1] === "monthly" ? n => n === -1 || (n >= 1 && n <= 31) : n => n >= 0 && n <= 6;
-  if (!values.length || !values.every(n => Number.isInteger(n) && ok(n))) return null;
-  return { type: m[1], values: values.sort((a, b) => (a === -1 ? 99 : a) - (b === -1 ? 99 : b)) };
-}
+// 書き方の読み方（parseRepeat）・くり返しの日か（repeatMatches）・「毎月9・19・29日」（repeatLabel）は shared.js（画面と共通）
 
 // 画面から届いた repeat をそろえた文字列にする（空は空。読めなければエラー）
 function couponRepeatInput(v) {
   if (normText(v) === "") return "";
-  const r = parseCouponRepeat(v);
+  const r = parseRepeat(v);
   if (!r) throw new Error("くり返しの書き方が不正です: " + v);
   return `${r.type}:${r.values.join(",")}`;
-}
-
-// yyyy-MM-dd がくり返しの日か
-function couponRepeatMatches(r, ymd) {
-  const d = new Date(ymd + "T00:00:00Z");
-  if (r.type === "weekly") return r.values.indexOf(d.getUTCDay()) !== -1;
-  const day = d.getUTCDate();
-  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-  return r.values.some(n => n === -1 ? day === last : n === day);
-}
-
-// 「毎月9・19・29日」「毎月15日・末日」「毎週日・土曜」
-function couponRepeatLabel(r) {
-  if (r.type === "weekly") return "毎週" + r.values.map(n => "日月火水木金土"[n]).join("・") + "曜";
-  const days = r.values.filter(n => n !== -1);
-  const parts = [];
-  if (days.length) parts.push(days.join("・") + "日");
-  if (r.values.indexOf(-1) !== -1) parts.push("末日");
-  return "毎月" + parts.join("・");
 }
 
 // yyyy-MM-dd に n 日足す
@@ -490,14 +476,14 @@ function notifyCouponsAndPending() {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const notice = buildCouponNotice(ss);
     // 期限を過ぎた未使用のクーポンは、通知の有無にかかわらず expired にする
-    notice.expired.forEach(o => receiptWrite(notice.sheet, notice.headers, o._row, { status: "expired" }));
+    receiptWriteColumn(notice.sheet, notice.headers, notice.expired.map(o => o._row), "status", "expired");
     if (!notice.lines.length) {
       Logger.log("通知するクーポンも確認待ちもありませんでした。");
       return;
     }
     saleSplitMessages(notice.lines, SALE_DISCORD_LIMIT).forEach(msg => sendDiscordMessage(msg, "COUPON"));
     // 送れたクーポンだけ、今日通知したことを書く（失敗したら書かず、次回また送る）
-    notice.notified.forEach(o => receiptWrite(notice.sheet, notice.headers, o._row, { notifiedOn: notice.today }));
+    receiptWriteColumn(notice.sheet, notice.headers, notice.notified.map(o => o._row), "notifiedOn", notice.today);
     Logger.log(`クーポン ${notice.notified.length}件と確認待ちを通知しました。`);
   } finally {
     lock.releaseLock();
@@ -547,14 +533,14 @@ function buildCouponNotice(ss) {
     const fromDays = from ? couponDays(today, from) : null;
     const untilDays = until ? couponDays(today, until) : null;
     const endLabel = { 0: "今日まで", 1: "明日まで", 3: "あと3日" }[untilDays];
-    const repeat = parseCouponRepeat(o.repeat); // 読めない repeat はくり返しなしとして扱う
+    const repeat = parseRepeat(o.repeat); // 読めない repeat はくり返しなしとして扱う
     if (repeat) {
       // くり返し：最初の朝は「新しいクーポン」、それ以降はくり返しの日の前日（明日は）と当日（今日は）
       if (!notifiedOn) {
         groups.fresh.push({ o: o, key: until || "9999", line: couponRepeatLine(o, "新しいクーポン", repeat, from, until) });
-      } else if (couponRepeatMatches(repeat, today) && inRange(today, from, until)) {
+      } else if (repeatMatches(repeat, today) && inRange(today, from, until)) {
         groups.repeat.push({ o: o, key: "0", line: couponRepeatLine(o, "今日は", repeat, from, until) });
-      } else if (couponRepeatMatches(repeat, tomorrow) && inRange(tomorrow, from, until)) {
+      } else if (repeatMatches(repeat, tomorrow) && inRange(tomorrow, from, until)) {
         groups.repeat.push({ o: o, key: "1", line: couponRepeatLine(o, "明日は", repeat, from, until) });
       }
       return;
@@ -588,7 +574,7 @@ function couponLine(o, label, from, until, extra) {
 // 使える期間が決まっていれば後ろに書く。紙を持っていくとは限らない（お店の告知など）ので COUPON_REMINDER は付けない
 function couponRepeatLine(o, label, repeat, from, until) {
   const what = [o.store, o.title, o.detail].map(v => saleOneLine(v)).filter(Boolean).join(" ");
-  return `【クーポン】${label}：${what}（${couponRepeatLabel(repeat)}）${from || until ? " " + couponPeriod(from, until) : ""}`;
+  return `【クーポン】${label}：${what}（${repeatLabel(repeat)}）${from || until ? " " + couponPeriod(from, until) : ""}`;
 }
 
 // 使える期間「10/20〜10/26」（validFrom が空なら「〜10/26まで」、validUntil が空なら「10/20から」）

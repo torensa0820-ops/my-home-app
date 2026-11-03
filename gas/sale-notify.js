@@ -41,7 +41,7 @@ function notifySaleCheck() {
         sent = true;
       });
       const ts = Utilities.formatDate(new Date(), "Asia/Tokyo", "yyyy/MM/dd HH:mm:ss");
-      run.rows.forEach(r => sheet.getRange(r.row, col).setValue(ts));
+      setSameValue(sheet, run.rows.map(r => [r.row, col]), ts);
       Logger.log(`セールチェック ${run.runId} を通知しました（${run.rows.length}行）。`);
     });
   } finally {

@@ -5,7 +5,6 @@
 // rule：最初に表示するルール。current：編集中の行（くり返しの行のときだけ。次回の予定の表示に使う）
 function createRuleEditor(rule, current){
   rule = rule || {type:'daily', interval:1};
-  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const unit = (input, text)=>h('div', {class:'inline-unit'}, input, h('span', {}, text));
   const opt = (value, text)=>h('option', {value:String(value)}, text);
   const WEEK_ORDER = [1,2,3,4,5,6,0]; // 月曜始まり

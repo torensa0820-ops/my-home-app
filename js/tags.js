@@ -107,7 +107,7 @@ function categoryCounts(cats, order = []){
 // opts.tabs = {id, storageKey}：id の要素にカテゴリのタブ（すべて・各カテゴリ）を出す。タブを押すとそのカテゴリだけを選び、
 // パネルではカテゴリを複数選べる（いずれかを含む）。選んだカテゴリは storageKey で端末に覚えておく
 // 条件は「選んだカテゴリのいずれか」かつ「タグの条件」
-function createFilterBar(barId, sheet, onChange, opts = {}){
+function createFilterBar(barId, onChange, opts = {}){
   const bar = document.getElementById(barId);
   const section = bar.closest('.tab-panel');
   const tabsWrap = opts.tabs ? document.getElementById(opts.tabs.id) : null;
@@ -160,7 +160,7 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
       cloud,
       h('div', {class:'filter-actions'},
         h('button', {type:'button', class:'cancel-btn', onclick:clearAll}, '選択をすべて解除'),
-        h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeCompose(); openTagManager(sheet); }}, 'タグを管理'))));
+        h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeCompose(); openTagManager(); }}, 'タグを管理'))));
   panel.dataset.kind = 'filter';
   section.append(panel);
   enableComposeDrag(panel);
@@ -207,7 +207,7 @@ function createFilterBar(barId, sheet, onChange, opts = {}){
     // 選択中のタグは×付きで並べ、タップで外せるようにする（カテゴリはタブで見える）
     const chips = h('div', {class:'filter-chips'});
     [...selected].forEach(t=>chips.append(h('button', {type:'button', class:'chip on', onclick:()=>toggle(selected, t)}, `${t} ×`)));
-    bar.append(open, chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager(sheet)}, '管理'));
+    bar.append(open, chips, h('button', {type:'button', class:'filter-manage', onclick:()=>openTagManager()}, '管理'));
     status.innerHTML = '';
     if(count){
       status.append(h('span', {class:'count'}),
@@ -263,14 +263,14 @@ function tmTagCounts(){
   groupStock().forEach(g=>splitTags(g.tags).forEach(t=>counts[t] = (counts[t] || 0) + 1));
   return counts;
 }
-function openTagManager(sheet){ openSheet(sheet, tmListView); }
+function openTagManager(){ openSheet('stock', tmListView); }
 
-document.querySelectorAll('[data-tag-manage]').forEach(b=>b.addEventListener('click', ()=>openTagManager(b.dataset.tagManage)));
+document.querySelectorAll('[data-tag-manage]').forEach(b=>b.addEventListener('click', ()=>openTagManager()));
 
 // GASでタグを一括操作し、成功したら候補とカウントを読み込み直す
 function tagOp(payload){
   tm.busy = true;
-  return postToGas({type:'tag', sheet:tm.sheet, ...payload})
+  return postToGas({type:'tag', ...payload})
     .then(res=>{
       if(res.status !== 'success') throw new Error(res.message || '処理に失敗しました');
       return loadStock().then(()=>res);

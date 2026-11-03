@@ -64,7 +64,7 @@
               <select id="s-location-select" class="hybrid-select"></select>
               <input type="text" id="s-location-input" class="hybrid-input" placeholder="新しい収納場所を入力">
             </div>
-            <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage="stock">管理</button></div>
+            <div class="field"><div class="label-row"><label>タグ（複数選択可）</label><button type="button" class="text-btn" data-tag-manage>管理</button></div>
               <div id="s-tags-chips" class="chips"></div>
               <input type="text" id="s-tags-input" placeholder="新しいタグを入力して改行で追加">
               <p class="form-note">カテゴリを選ぶと、そのカテゴリで使っているタグだけを出します。ほかのカテゴリのタグも、入力欄に入れると付けられます。</p>
@@ -99,14 +99,7 @@
   </nav>
 </div>
 <div id="sheet-backdrop">
-  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-    <h2 id="sheet-title">在庫管理から削除</h2>
-    <div class="sheet-name" id="sheet-item-name"></div>
-    <p id="sheet-stock-warn" class="warn"></p>
-    <p>スプレッドシートからこの商品の行が削除されます。元に戻すことはできません。</p>
-    <button type="button" class="hold-btn" id="hold-delete-btn"><div class="fill"></div><span>長押しで削除</span></button>
-    <button type="button" class="cancel-btn" id="sheet-cancel-btn">キャンセル</button>
-  </div>
+  <div class="sheet" id="delete-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"></div>
 </div>
 <div id="tm-backdrop">
   <div class="sheet tall" role="dialog" aria-modal="true" aria-labelledby="tm-title">
@@ -122,6 +115,7 @@
 <div id="toast"></div>
 
 <script src="gas/chore-rule.js"></script>
+<script src="gas/shared.js"></script>
 <script src="js/common.js"></script>
 <script src="js/motion.js"></script>
 <script src="js/panels.js"></script>
