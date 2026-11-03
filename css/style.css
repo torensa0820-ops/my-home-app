@@ -18,7 +18,12 @@
   color-scheme:dark; /* 日付欄のアイコンやチェックボックスを暗い背景向けにする */
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
+  /* 動く時間とイージング（js/motion.js の MOTION_MS・MOTION_EASE と同じ値） */
+  --motion-ms:280ms;
+  --motion-ease:cubic-bezier(.2,.8,.2,1);
 }
+/* iPhone の「視差効果を減らす」がオンなら動かさずに切り替える */
+@media (prefers-reduced-motion: reduce){:root{--motion-ms:0ms;}}
 *{box-sizing:border-box;}
 html,body{height:100%;}
 body{margin:0;background:var(--bg);color:var(--text);font-family:"M PLUS Rounded 1c",-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;overscroll-behavior-y:none;}

@@ -70,6 +70,7 @@ index.html            HTML（画面の骨組み）
 css/style.css         見た目
 js/                   画面の処理。index.html で上から順に読み込む（順番に意味がある）
   common.js           GAS_URL、GASとの通信、トースト、要素作成 h()、日付・タグの小さな関数
+  motion.js           動きの共通部品（動く時間・イージング、「視差効果を減らす」の判定）
   panels.js           下から出るパネル（登録フォーム・絞り込み）、編集用のシート、長押しボタン
   tags.js             タグの選択、一覧の絞り込み、タグ管理
   stock.js            在庫
