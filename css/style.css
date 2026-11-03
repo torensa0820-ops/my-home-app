@@ -202,9 +202,11 @@ nav.tabbar button[data-tab="todo"].active{background:var(--chore-dim);color:var(
 /* 登録パネル：一覧を見ながら入力できるよう、タブバーの上に半分ほどの高さで重ねる */
 /* --tabbar-h はタブバーの高さ（66px）とその下の余白の合計。登録パネルはタブバーの少し上に浮かべる */
 :root{--tabbar-h:calc(66px + var(--tabbar-gap));--compose-pad:0px;}
-.compose{position:fixed;left:8px;right:8px;bottom:calc(var(--tabbar-h) + 8px);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 -6px 20px rgba(0,0,0,.25);display:none;flex-direction:column;z-index:5;}
+.compose{position:fixed;left:8px;right:8px;bottom:calc(var(--tabbar-h) + 8px);height:var(--compose-h,55%);max-width:520px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:18px;box-shadow:0 -6px 20px rgba(0,0,0,.25);display:flex;flex-direction:column;z-index:5;
+  /* 閉じている間はタブバーの後ろより下に置き、開くと下から出す（閉じるときは動き終わってから見えなくする） */
+  visibility:hidden;transform:translateY(calc(100% + var(--tabbar-h) + 16px));transition:transform var(--motion-ms) var(--motion-ease),visibility 0s linear var(--motion-ms);}
 body[data-compose="form"] .tab-panel.active .compose[data-kind="form"],
-body[data-compose="filter"] .tab-panel.active .compose[data-kind="filter"]{display:flex;}
+body[data-compose="filter"] .tab-panel.active .compose[data-kind="filter"]{visibility:visible;transform:none;transition-delay:0s;}
 .compose-grip{flex-shrink:0;height:24px;display:flex;align-items:center;justify-content:center;}
 /* つまみ・タイトル・説明文の行はドラッグで高さを変える領域。スクロールやズームに取られないようにする */
 .compose-grip,.compose-head,.compose-hint{touch-action:none;cursor:ns-resize;user-select:none;-webkit-user-select:none;}
@@ -234,9 +236,14 @@ body[data-compose="form"] #stock-panel .card-info{cursor:copy;}
 .delete-btn{flex-shrink:0;border:1px solid var(--danger);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:700;background:none;color:var(--danger);}
 .delete-btn:active{background:var(--danger-dim);}
 
-#sheet-backdrop,#tm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;justify-content:center;z-index:10;}
-#sheet-backdrop.show,#tm-backdrop.show{display:flex;}
-.sheet{width:100%;max-width:520px;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));}
+/* シートは下から出し、後ろの暗幕は薄く出す。閉じるときは動き終わってから見えなくする（visibility を遅らせて切り替える） */
+#sheet-backdrop,#tm-backdrop{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;z-index:10;visibility:hidden;transition:visibility 0s linear var(--motion-ms);}
+#sheet-backdrop::before,#tm-backdrop::before{content:"";position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:opacity var(--motion-ms) var(--motion-ease);}
+#sheet-backdrop > .sheet,#tm-backdrop > .sheet{transform:translateY(100%);transition:transform var(--motion-ms) var(--motion-ease);}
+#sheet-backdrop.show,#tm-backdrop.show{visibility:visible;transition-delay:0s;}
+#sheet-backdrop.show::before,#tm-backdrop.show::before{opacity:1;}
+#sheet-backdrop.show > .sheet,#tm-backdrop.show > .sheet{transform:none;}
+.sheet{position:relative;width:100%;max-width:520px;background:var(--surface);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:20px 20px calc(20px + var(--safe-bottom));}
 .sheet h2{margin:0 0 6px;font-size:17px;}
 .sheet .sheet-name{font-size:15px;font-weight:700;color:var(--danger);word-break:break-all;}
 .sheet p{margin:10px 0 0;font-size:13px;color:var(--muted);line-height:1.6;}
