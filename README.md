@@ -367,7 +367,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 4. Web アプリとしてデプロイし、URL を `js/common.js` の `GAS_URL` に入れる
 5. 在庫のカテゴリをタグから分けるときは `migrateStockCategory` を一度実行する（在庫シートをバックアップとして複製してから、`category` 列を足し、`STOCK_CATEGORIES` にあるタグを `category` に移して `tags` から外す。在庫取込シートにも `category` 列を足す。何度実行しても結果は同じ）
 
-通知のテストは `debugForceDiscordNotify` を実行する。天気の通知は `debugWeatherPreview`（ログに出すだけ）・`debugWeatherMorningNow`（いま送る）で確かめられる。セールチェックの通知（ペイロードの JSON）は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview`、やることの期限の通知文は `debugReminderNotifyPreview`、土曜の買い物の通知（ペイロードの JSON。曜日・時刻に関係なく今の内容で作る）は `debugShoppingNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
+通知のテストは `debugForceDiscordNotify` を実行する。天気の通知は `debugWeatherPreview`（ログに出すだけ。カードの下の行に、1時間ごとの予報をどこから読めたかが出る）・`debugWeatherMorningNow`（いま送る）で確かめられる。セールチェックの通知（ペイロードの JSON）は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview`、やることの期限の通知文は `debugReminderNotifyPreview`、土曜の買い物の通知（ペイロードの JSON。曜日・時刻に関係なく今の内容で作る）は `debugShoppingNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
 
 レシートの読み取りは、アプリの外で用意した Claude のスケジュールタスクが毎晩 0:00 に行う。「レシート」シートの `status` が空の行の写真（`fileIds`）を読み、上の「スプレッドシートの構成」のとおりに「レシート」「レシート明細」「在庫取込」「クーポン」シートへ書き込む。`status` が `再読` の行は在庫の判断だけをやり直す（在庫の自動追加では在庫シートの個数も足し、足したロットの `id` を `stockRowId` に入れる。このとき同じ商品の全ロットの `buyFlag` を空にする。新しいロットを作るときは `reorderAt` を既存のロットから写す）。
 

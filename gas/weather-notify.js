@@ -12,10 +12,10 @@ const WX_PLACE = { name: "鎌ケ谷市", lat: 35.7767, lon: 140.0008 };
 const WX_JMA_OFFICE = "120000";      // 千葉県（気象庁の予報・警報のファイル）
 const WX_JMA_CLASS10 = "120010";     // 千葉県北西部（天気・降水確率）
 const WX_JMA_CITY = "1222400";       // 鎌ケ谷市（警報・注意報）
-const WX_JMA_TEMP_POINT = "千葉";     // 気象庁の予報の気温の地点（Open-Meteo が読めないときに使う）
+const WX_JMA_TEMP_POINT = "千葉";     // 気象庁の予報の気温の地点（1時間ごとの予報が読めないときに使う）
 const WX_MORNING_TIME = "05:05";     // 朝の通知（5:00 の気象庁の予報が出たあと）
-const WX_MORNING_GIVEUP = "05:45";   // Open-Meteo が読めないとき、この時刻まで5分ごとに読み直してから送る
-const WX_PREFETCH_FROM = "04:00";    // この時刻から朝の通知までの間に Open-Meteo を先に読んでおく
+const WX_MORNING_GIVEUP = "05:45";   // 1時間ごとの予報が読めないとき、この時刻まで5分ごとに読み直してから送る
+const WX_PREFETCH_FROM = "04:00";    // この時刻から朝の通知までの間に 1時間ごとの予報を先に読んでおく
 const WX_TRAIN_WATCH = ["05:20", "08:00"]; // この間、電車の運行情報が変わったら追加で送る
 const WX_EVENING_TIME = "21:00";     // 翌日の注意（何かあるときだけ）
 const WX_AWAY_HOURS = [7, 19];       // 洗濯物を外に出しておく時間（家を出てから帰るまで）
@@ -79,15 +79,15 @@ function weatherTick() {
     const today = wxFmt(now, "yyyy-MM-dd");
     const hm = wxFmt(now, "HH:mm");
 
-    // 朝の通知の前に Open-Meteo を読んでおく（読めたら保存。朝に読めなかったときに使う）
-    if (hm >= WX_PREFETCH_FROM && hm < WX_MORNING_TIME && !wxCachedOpenMeteo(today)) {
-      try { wxOpenMeteoWithCache(today); } catch (e) { Logger.log(`Open-Meteo の先読みに失敗：${e}`); }
+    // 朝の通知の前に1時間ごとの予報を読んでおく（読めたら保存。朝に読めなかったときに使う）
+    if (hm >= WX_PREFETCH_FROM && hm < WX_MORNING_TIME && !wxCachedHourly(today)) {
+      try { wxHourlyWithCache(today); } catch (e) { Logger.log(`1時間ごとの予報の先読みに失敗：${e}`); }
     }
     if (hm >= WX_MORNING_TIME && props.getProperty("WX_MORNING_DATE") !== today) {
       // 朝の時刻を大きく過ぎていたら（トリガーの停止明けなど）送らない
       if (hm < WX_TRAIN_WATCH[1]) {
-        // Open-Meteo が読めないうちは、WX_MORNING_GIVEUP まで送らずに次の回で読み直す
-        const sent = sendMorningWeather({ waitForOpenMeteo: hm < WX_MORNING_GIVEUP });
+        // 1時間ごとの予報が読めないうちは、WX_MORNING_GIVEUP まで送らずに次の回で読み直す
+        const sent = sendMorningWeather({ waitForHourly: hm < WX_MORNING_GIVEUP });
         if (!sent) return;
       }
       props.setProperty("WX_MORNING_DATE", today);
@@ -129,12 +129,12 @@ function debugWeatherPreview() {
 // 送信
 // =========================================================
 
-// 送ったら true。opts.waitForOpenMeteo のとき、Open-Meteo が読めなければ送らずに false
+// 送ったら true。opts.waitForHourly のとき、1時間ごとの予報が読めなければ送らずに false
 function sendMorningWeather(opts) {
   const now = new Date();
   const d = collectWeatherData(now);
-  if (opts && opts.waitForOpenMeteo && !d.om) {
-    Logger.log("Open-Meteo が読めないので、朝の通知は次の回に読み直してから送ります。");
+  if (opts && opts.waitForHourly && !d.om) {
+    Logger.log("1時間ごとの予報が読めないので、朝の通知は次の回に読み直してから送ります。");
     return false;
   }
   sendDiscordPayload(buildMorningPayload(d, now), "WEATHER");
@@ -181,7 +181,7 @@ function collectWeatherData(now) {
       return null;
     }
   };
-  d.om = tryGet("天気（Open-Meteo）", () => wxOpenMeteoWithCache(wxFmt(now, "yyyy-MM-dd")));
+  d.om = tryGet("1時間ごとの予報", () => wxHourlyWithCache(wxFmt(now, "yyyy-MM-dd"), d));
   d.jma = tryGet("気象庁の予報", fetchJmaForecast);
   d.warnings = tryGet("警報・注意報", fetchJmaWarnings);
   d.typhoons = tryGet("台風情報", () => fetchTyphoons(now));
@@ -199,6 +199,77 @@ function wxFetchText(url) {
   return res.getContentText("UTF-8");
 }
 
+// ---- 1時間ごとの予報（気温・体感・湿度・風・降水量） ----
+// 1. MET Norway（ノルウェー気象局）の locationforecast。無料・登録不要。名乗り（User-Agent）が必要
+// 2. 読めなければ Open-Meteo（GAS からだと回数制限の 429 で断られることが多い）
+// 3. それもだめなら、今朝先に読んで保存した分
+const WX_METNO_UA = "my-home-app-weather/1.0 (+https://github.com/torensa0820-ops/my-home-app)";
+
+function fetchMetNo() {
+  const url = `https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${WX_PLACE.lat.toFixed(4)}&lon=${WX_PLACE.lon.toFixed(4)}`;
+  let last;
+  for (let i = 0; i < 2; i++) {
+    if (i) Utilities.sleep(4000);
+    try {
+      const res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { "User-Agent": WX_METNO_UA } });
+      const code = res.getResponseCode();
+      if (code !== 200 && code !== 203) throw new Error(`HTTP ${code}: ${res.getContentText().slice(0, 100)}`);
+      return JSON.parse(res.getContentText("UTF-8"));
+    } catch (e) { last = e; Logger.log(`MET Norway ${i + 1}回目：${e}`); }
+  }
+  throw last;
+}
+
+// MET Norway の天気記号 → WMO の天気コード（Open-Meteo と同じ。判定はこのコードで行う）
+function wxMetSymbolToWmo(sym) {
+  const s = String(sym || "").replace(/_(day|night|polartwilight)$/, "");
+  if (/thunder/.test(s)) return 95;
+  if (/snow/.test(s)) return /heavy/.test(s) ? 75 : /light/.test(s) ? 71 : 73;
+  if (/sleet/.test(s)) return 67;
+  if (/rain/.test(s)) return /heavy/.test(s) ? 65 : /light/.test(s) ? 61 : 63;
+  if (s === "fog") return 45;
+  if (s === "cloudy") return 3;
+  if (s === "partlycloudy") return 2;
+  if (s === "fair") return 1;
+  if (s === "clearsky") return 0;
+  return 3;
+}
+
+// MET Norway の応答を parseOpenMeteo と同じ形（日付 → hours[時] と日ごとの値）にする
+function parseMetNo(j) {
+  const days = {};
+  j.properties.timeseries.forEach(t => {
+    const d = new Date(t.time);
+    const date = wxFmt(d, "yyyy-MM-dd"), h = Number(wxFmt(d, "H"));
+    const inst = t.data.instant.details;
+    const n1 = t.data.next_1_hours;
+    if (!n1) return; // 1時間ごとの予報がある範囲（2日半ほど）だけ使う
+    const day = days[date] = days[date] || { hours: {}, uvs: [] };
+    day.hours[h] = {
+      temp: inst.air_temperature, feels: inst.apparent_air_temperature != null ? inst.apparent_air_temperature : inst.air_temperature,
+      rh: inst.relative_humidity, pop: null,
+      rain: (n1.details && n1.details.precipitation_amount) || 0,
+      code: wxMetSymbolToWmo(n1.summary && n1.summary.symbol_code),
+      wind: inst.wind_speed, gust: inst.wind_speed_of_gust != null ? inst.wind_speed_of_gust : null,
+    };
+    if (inst.ultraviolet_index_clear_sky != null) day.uvs.push(inst.ultraviolet_index_clear_sky);
+  });
+  Object.keys(days).forEach(date => {
+    const day = days[date], hs = Object.values(day.hours);
+    const nums = k => hs.map(x => x[k]).filter(v => v != null);
+    const gusts = nums("gust");
+    Object.assign(day, {
+      max: Math.max.apply(null, nums("temp")), min: Math.min.apply(null, nums("temp")),
+      feelsMax: Math.max.apply(null, nums("feels")),
+      uv: day.uvs.length ? Math.max.apply(null, day.uvs) : null,
+      rainSum: Math.round(nums("rain").reduce((a, v) => a + v, 0) * 10) / 10,
+      gustMax: gusts.length ? Math.max.apply(null, gusts) : null,
+    });
+    delete day.uvs;
+  });
+  return days;
+}
+
 // Open-Meteo：1時間ごとの気温・湿度・降水確率・風など（昨日から明日まで）
 function fetchOpenMeteo() {
   const q = [
@@ -207,33 +278,50 @@ function fetchOpenMeteo() {
     "daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,uv_index_max,precipitation_sum,wind_gusts_10m_max",
     "timezone=Asia%2FTokyo", "past_days=1", "forecast_days=2", "wind_speed_unit=ms",
   ].join("&");
-  const url = "https://api.open-meteo.com/v1/forecast?" + q;
-  // 混んでいる・回数制限（429）などで失敗することがあるので、少し待って2回まで読み直す
-  let last;
-  for (let i = 0; i < 3; i++) {
-    if (i) Utilities.sleep(i * 4000);
-    try { return JSON.parse(wxFetchText(url)); } catch (e) { last = e; Logger.log(`Open-Meteo ${i + 1}回目：${e}`); }
-  }
-  throw last;
+  return JSON.parse(wxFetchText("https://api.open-meteo.com/v1/forecast?" + q));
 }
 
-// Open-Meteo を読み、読めたら今日の分として保存する。読めなければ、今日の朝に保存した分を使う
-function wxOpenMeteoWithCache(today) {
+// 1時間ごとの予報を読む。読めたら今日の分として保存し、読めなければ今朝保存した分を使う
+// 返り値：日付 → { hours, max, min, ... }。d.omSource に取り先の名前を入れる
+function wxHourlyWithCache(today, d) {
   const cache = CacheService.getScriptCache();
-  try {
-    const raw = fetchOpenMeteo();
-    try { cache.put("WX_OM_" + today, JSON.stringify(raw), 6 * 3600); } catch (e) { /* 大きすぎるときは保存しない */ }
-    return parseOpenMeteo(raw);
-  } catch (e) {
-    const saved = wxCachedOpenMeteo(today);
-    if (saved) { Logger.log(`Open-Meteo が読めないので、先に読んだ分を使います：${e}`); return parseOpenMeteo(saved); }
-    throw e;
+  const errors = [];
+  let days = null, src = null;
+  try { days = parseMetNo(fetchMetNo()); src = "MET Norway"; }
+  catch (e) { errors.push(`MET Norway：${e}`); }
+  if (!days) {
+    try { days = parseOpenMeteo(fetchOpenMeteo()); src = "Open-Meteo"; }
+    catch (e) { errors.push(`Open-Meteo：${e}`); }
   }
+  if (days && days[today]) {
+    try { cache.put("WX_HOURLY_" + today, JSON.stringify({ src: src, days: days }), 6 * 3600); } catch (e) { /* 大きすぎるときは保存しない */ }
+  } else {
+    const saved = wxCachedHourly(today);
+    if (!saved) throw new Error(errors.join(" ／ ") || "今日の予報がありません");
+    Logger.log(`1時間ごとの予報が読めないので、先に読んだ分を使います：${errors.join(" ／ ")}`);
+    days = saved.days; src = saved.src + "（先に読んだ分）";
+  }
+  if (d) d.omSource = src;
+  wxRememberDays(today, days);
+  return days;
 }
 
-function wxCachedOpenMeteo(today) {
-  const s = CacheService.getScriptCache().get("WX_OM_" + today);
+function wxCachedHourly(today) {
+  const s = CacheService.getScriptCache().get("WX_HOURLY_" + today);
   return s ? JSON.parse(s) : null;
+}
+
+// 今日の最高気温・雨量を覚えておき、明日「昨日との差」「雨の翌日」に使う（MET Norway には昨日の値がないため）
+function wxRememberDays(today, days) {
+  const props = PropertiesService.getScriptProperties();
+  const t = days[today];
+  if (t && t.max != null && isFinite(t.max)) props.setProperty("WX_DAY_" + today, JSON.stringify({ max: t.max, rainSum: t.rainSum }));
+  const yesterday = wxShiftDate(today, -1);
+  if (!days[yesterday] || days[yesterday].max == null) {
+    const y = props.getProperty("WX_DAY_" + yesterday);
+    if (y) days[yesterday] = Object.assign({ hours: {} }, JSON.parse(y));
+  }
+  props.deleteProperty("WX_DAY_" + wxShiftDate(today, -3));
 }
 
 // 日付（yyyy-MM-dd）ごとに、時（0〜23）→ 値 の形にする
@@ -282,7 +370,7 @@ function parseJmaForecast(j, areaCode) {
     if (p.pops[i] === "" || p.pops[i] == null) return;
     out.pops.push({ date: t.slice(0, 10), from: Number(t.slice(11, 13)), to: Number(t.slice(11, 13)) + 6, pop: Number(p.pops[i]) });
   });
-  // 千葉の気温（00時の値が朝の最低、09時の値が日中の最高）。Open-Meteo が読めないときに使う
+  // 千葉の気温（00時の値が朝の最低、09時の値が日中の最高）。1時間ごとの予報が読めないときに使う
   out.temps = {};
   const tArea = ts[2] && ts[2].areas.find(a => a.area.name === WX_JMA_TEMP_POINT);
   if (tArea) {
@@ -683,7 +771,7 @@ function judgePollen(d, date) {
 }
 
 // 気温と服装のひとこと
-// Open-Meteo が読めないとき：気象庁の6時間ごとの降水確率だけで洗濯を決める
+// 1時間ごとの予報が読めないとき：気象庁の6時間ごとの降水確率だけで洗濯を決める
 function judgeLaundryJma(d, date, pollen) {
   const pop = wxJmaPop(d.jma, date, WX_AWAY_HOURS[0], WX_AWAY_HOURS[1]);
   if (pop == null) return null;
@@ -696,7 +784,7 @@ function judgeLaundryJma(d, date, pollen) {
 function judgeTemp(d, date) {
   const day = d.om && d.om[date];
   if (!day) {
-    // Open-Meteo が読めないとき：気象庁の千葉の予想気温
+    // 1時間ごとの予報が読めないとき：気象庁の千葉の予想気温
     const t = d.jma && d.jma.temps && d.jma.temps[date];
     if (!t || t.max == null) return null;
     return `🌡 最高**${t.max}℃**` + (t.min != null ? `／最低${t.min}℃` : "") + `（${WX_JMA_TEMP_POINT}の予想）`;
@@ -798,7 +886,7 @@ function buildMorningPayload(d, now) {
       title: wxShorten(title, 250),
       description: wxShorten(lines.join("\n"), 4000),
       color: color,
-      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
+      footer: { text: `${WX_PLACE.name}｜気象庁${d.omSource ? "・" + d.omSource : ""}${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
     }],
   };
 }
@@ -868,7 +956,7 @@ function buildEveningPayload(d, now) {
       title: `🌙 明日 ${wxFmt(new Date(tomorrow + "T12:00:00+09:00"), "M/d")}(${wxWeekday(new Date(tomorrow + "T12:00:00+09:00"))}) の注意`,
       description: wxShorten(items.join("\n"), 4000),
       color: WX_COLOR.danger,
-      footer: { text: `${WX_PLACE.name}｜気象庁・Open-Meteo${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
+      footer: { text: `${WX_PLACE.name}｜気象庁${d.omSource ? "・" + d.omSource : ""}${WX_TRAIN_ENABLED ? "・各鉄道会社" : ""}の情報` },
     }],
   };
 }
