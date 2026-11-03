@@ -386,8 +386,17 @@ form.todo-add{display:flex;gap:8px;background:none;border:none;border-radius:0;p
 .todo-list-row.off .tm-row{opacity:.55;}
 .todo-dot{flex-shrink:0;width:10px;height:10px;border-radius:50%;background:var(--chore);}
 .tm-inline select{width:auto;flex-shrink:0;}
-#tm-backdrop .chip.todo-color{min-width:40px;min-height:30px;background:var(--swatch,var(--surface-2));}
-#tm-backdrop .chip.todo-color.on{box-shadow:0 0 0 2px var(--text);background:var(--swatch,var(--surface-2));color:var(--text);}
+.chip.todo-color{min-width:40px;min-height:30px;background:var(--swatch,var(--surface-2));}
+#tm-backdrop .chip.todo-color.on,#todo-panel .chip.todo-color.on{box-shadow:0 0 0 2px var(--text);background:var(--swatch,var(--surface-2));color:var(--text);}
+#tm-backdrop[data-sheet="todo"] .tm-check input{accent-color:var(--chore);}
+/* やること：カテゴリのタブ・リストの追加（右下の＋と下から出るパネル）。色は家事の色 */
+#todo-panel .cat-tabs .chip.on{background:var(--chore-dim);color:var(--chore);}
+#todo-panel .cat-tabs .todo-cats-manage{color:var(--muted);}
+#todo-panel .fab,#todo-panel .submit-btn{background:var(--chore);}
+#todo-panel .seg button.on{background:var(--chore-dim);color:var(--chore);}
+#todo-view.nav-open ~ .fab{display:none;} /* リストを開いている間は出さない（リストの中には品目の追加欄がある） */
+.todo-new-cat{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.todo-new-cat[hidden]{display:none;}
 .tm-pair{display:flex;gap:8px;}
 .tm-pair > *{flex:1;margin-top:0;padding:13px;}
 

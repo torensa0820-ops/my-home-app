@@ -65,6 +65,8 @@ function doPost(e) {
       return jsonOutput({ status: "success", item: reminderAction(ss, data) });
     } else if (data.type === "reminderList") {
       return jsonOutput({ status: "success", list: reminderListAction(ss, data) });
+    } else if (data.type === "reminderCategory") {
+      return jsonOutput({ status: "success", category: reminderCategoryAction(ss, data) });
     } else if (data.type === "tag") {
       return jsonOutput({ status: "success", count: manageTags(ss, data) });
     } else {

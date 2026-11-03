@@ -1,11 +1,15 @@
-// やること：リストのカード（2列）→ リストの中（追加・丸のタップで完了・取り消し）→ 編集シート、リストの管理
+// やること：カテゴリのタブ → リストのカード（2列）→ リストの中（追加・丸のタップで完了・取り消し）→ 編集シート、リストとカテゴリの管理
+// カテゴリは type（家事 / 買い物）を持ち、中のリストの動き（店・在庫とのつながり）を決める。リストの kind はカテゴリの type と同じ
 // データは GAS の getReminders（起動時は getAll にまとめて取得）。タブを開くたびに読み込み直す（5分ごとの処理や在庫の変更で行が増えるため）
 // 完了・取り消しはすぐ画面に反映し、失敗したら元に戻して読み込み直す
 // 周期の入力欄は js/rule-editor.js、周期の計算は gas/chore-rule.js（GAS と共通）
 // リストの画面は js/nav-stack.js でリストのカードの上に重ねる（右から入り、「‹ リスト」か左端からのスワイプで戻る）
 
-const todo = {lists:[], items:[], sale:{items:{}, verdicts:{}}, listId:null, draft:'', doneOpen:false, loaded:false};
-const TODO_KINDS = ['家事', '買い物'];
+// categoryId：選んでいるカテゴリのタブ（端末に覚えておく）
+const TODO_CATEGORY_KEY = 'kurashilog.todoCategory';
+const todo = {categories:[], lists:[], items:[], sale:{items:{}, verdicts:{}}, categoryId:todoLoadCategory(), listId:null, draft:'', doneOpen:false, loaded:false};
+// カテゴリの種類（値はリストの kind と同じ）と、選ぶときの説明
+const TODO_TYPES = [['家事', 'やること型', '期限・くり返し・担当で管理する'], ['買い物', '買い物型', '店ごとのリスト。クーポンや在庫とつながる']];
 const TODO_ASSIGNEES = ['本人', '彼女'];
 const TODO_COLORS = ['#E2BC7A', '#9DCBA4', '#9DBBDF', '#EE9F94', '#C9A6E4']; // リストの色の候補（空なら --chore）
 const TODO_UNDO_MS = 5000; // 完了した直後に「取り消す」を出す時間
@@ -16,6 +20,7 @@ const TODO_INFO = {title:'やること', sub:'リストをタップして開く�
 function loadReminders(preloaded){
   return (preloaded ? Promise.resolve(preloaded) : getFromGas('action=getReminders'))
     .then(d=>{
+      todo.categories = d.categories || [];
       todo.lists = d.lists || [];
       todo.items = d.items || [];
       todo.sale = d.sale || {items:{}, verdicts:{}};
@@ -50,6 +55,7 @@ const todoStack = createNavStack(document.getElementById('todo-view'), todoGridP
 // リストを開く（右から入れる）
 function todoOpenList(list){
   if(todoStack.busy() || todoStack.depth() > 1) return;
+  closeCompose(); // リストの追加のパネルは、カードの画面でだけ使う
   todo.listId = list.id;
   todo.draft = '';
   todo.doneOpen = false;
@@ -74,8 +80,33 @@ function todoHeaderProgress(p, dur){
 
 // ---------- 小さな関数 ----------
 const todoBySort = (a, b)=>(Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
-function todoActiveLists(){ return todo.lists.filter(l=>l.active).sort(todoBySort); }
 function todoListOf(id){ return todo.lists.find(l=>String(l.id) === String(id)); }
+function todoTypeLabel(type){ return (TODO_TYPES.find(([t])=>t === type) || [, type])[1]; }
+
+// ---------- カテゴリ ----------
+function todoLoadCategory(){
+  try { return localStorage.getItem(TODO_CATEGORY_KEY) || null; } catch(_){ return null; }
+}
+function todoSelectCategory(c){
+  todo.categoryId = c ? String(c.id) : null;
+  try { localStorage.setItem(TODO_CATEGORY_KEY, todo.categoryId || ''); } catch(_){}
+}
+function todoCategories(){ return [...todo.categories].sort(todoBySort); }
+// リストの入っているカテゴリ。categoryId がまだないリスト（setupReminderCategories の前に作ったものなど）は、種類が同じ最初のカテゴリに出す
+function todoCategoryOfList(l){
+  const cs = todoCategories();
+  return cs.find(c=>String(c.id) === String(l.categoryId)) || cs.find(c=>c.type === l.kind) || null;
+}
+// 選んでいるカテゴリ（覚えていたカテゴリがなくなっていれば最初のカテゴリ。カテゴリがなければ null）
+function todoCurrentCategory(){
+  const cs = todoCategories();
+  return cs.find(c=>String(c.id) === String(todo.categoryId)) || cs[0] || null;
+}
+// カテゴリのリスト（all なら非表示のリストも）。カテゴリがまだなければ全リスト
+function todoListsIn(c, all = false){
+  return todo.lists.filter(l=>(all || l.active) && (!c || todoCategoryOfList(l) === c)).sort(todoBySort);
+}
+function todoActiveLists(){ return todoListsIn(todoCurrentCategory()); }
 function todoItemsOf(list){ return todo.items.filter(i=>String(i.listId) === String(list.id)); }
 function todoRule(i){ return choreParseRule(i.rule); }
 function todoDue(i){ return i.nextDue ? new Date(i.nextDue) : null; }
@@ -161,14 +192,43 @@ function renderTodo(){
   }
 }
 
-// リストのカード（2列）
+// カテゴリのタブと、選んでいるカテゴリのリストのカード（2列）
 function todoGridView(){
+  const cur = todoCurrentCategory();
   const head = h('div', {class:'list-head'},
     h('div', {class:'section-title'}, 'リスト'),
     h('button', {type:'button', class:'edit-toggle', onclick:()=>openSheet('todo', tmTodoListsView)}, 'リストの管理'));
   const lists = todoActiveLists();
-  if(!lists.length) return [head, h('p', {class:'empty-msg'}, 'リストがありません（GAS の setupReminders を実行するか、「リストの管理」から追加してください）')];
-  return [head, h('div', {class:'todo-grid'}, lists.map(todoListCard))];
+  const out = [todoCategoryTabs(cur), head];
+  if(!lists.length) out.push(h('p', {class:'empty-msg'}, cur ? `「${cur.name}」にリストはまだありません。右下の＋から作れます` : 'リストがありません（GAS の setupReminders を実行してください）'));
+  else out.push(h('div', {class:'todo-grid'}, lists.map(todoListCard)));
+  return out;
+}
+// カテゴリのタブ（在庫のカテゴリのタブと同じ見た目）。数字はまだ終わっていない件数。右端の「管理」でカテゴリの管理を開く
+function todoCategoryTabs(cur){
+  const cs = todoCategories();
+  const wrap = h('div', {class:'cat-tabs todo-cats', role:'tablist', 'aria-label':'カテゴリ'});
+  if(!cs.length){
+    wrap.append(h('button', {type:'button', class:'chip', onclick:()=>openSheet('todo', tmTodoCategoriesView)}, 'カテゴリを作る'));
+    return wrap;
+  }
+  cs.forEach(c=>{
+    const open = todoListsIn(c).reduce((n, l)=>n + todoItemsOf(l).filter(todoIsOpen).length, 0);
+    wrap.append(h('button', {type:'button', role:'tab', class:'chip' + (c === cur ? ' on' : ''), 'aria-selected':String(c === cur), onclick:()=>{
+      if(c === cur) return;
+      todoSelectCategory(c);
+      renderTodo();
+    }}, c.name, rollNumber(h('span', {class:'n'}), 'todoCat:' + c.id, open)));
+  });
+  wrap.append(h('button', {type:'button', class:'chip todo-cats-manage', onclick:()=>openSheet('todo', tmTodoCategoriesView)}, '管理'));
+  // 選んでいるタブが横にはみ出していれば、タブの行だけを横にずらして見せる
+  requestAnimationFrame(()=>{
+    const on = wrap.querySelector('.on');
+    if(!on || !wrap.isConnected) return;
+    const r = on.getBoundingClientRect(), w = wrap.getBoundingClientRect();
+    if(r.left < w.left || r.right > w.right) wrap.scrollLeft += r.left - w.left - 16;
+  });
+  return wrap;
 }
 function todoListCard(list){
   const items = todoItemsOf(list);
@@ -414,9 +474,13 @@ function tmTodoItemView(i, list){
   const title = h('input', {type:'text', value:i ? i.title : todo.draft});
   const qty = h('input', {type:'text', value:i ? (i.qty ?? '') : '', placeholder:'例：2 ／ 2袋'});
   const memo = h('input', {type:'text', value:i ? (i.memo || '') : ''});
-  // 移す先のリスト（非表示のリストも、今入っているリストなら出す）
-  const listSel = h('select', {}, todo.lists.filter(l=>l.active || String(l.id) === String(list.id)).sort(todoBySort)
-    .map(l=>h('option', {value:String(l.id)}, l.name)));
+  // 移す先のリスト（カテゴリごとにまとめる。非表示のリストも、今入っているリストなら出す）
+  const listOption = l=>h('option', {value:String(l.id)}, l.name);
+  const movable = l=>l.active || String(l.id) === String(list.id);
+  const cs = todoCategories();
+  const listSel = h('select', {}, cs.length
+    ? cs.map(c=>todoListsIn(c, true).filter(movable)).map((ls, n)=>ls.length ? h('optgroup', {label:cs[n].name}, ls.map(listOption)) : '')
+    : todo.lists.filter(movable).sort(todoBySort).map(listOption));
   listSel.value = String(list.id);
   // 担当（なし・本人・彼女）
   let assignee = i ? (i.assignee || '') : '';
@@ -505,81 +569,55 @@ function tmTodoItemView(i, list){
 }
 
 // ---------- リストの管理 ----------
-// リストの一覧（↑↓で並べ替え、タップで編集）と、新しいリストの追加
+// 選んでいるカテゴリのリストの一覧（↑↓で並べ替え、タップで編集）。リストの追加は右下の＋から
 function tmTodoListsView(){
-  tmTitle.textContent = 'リストの管理';
-  const lists = [...todo.lists].sort(todoBySort);
+  const cur = todoCurrentCategory();
+  tmTitle.textContent = cur ? `${cur.name}のリスト` : 'リストの管理';
+  const all = [...todo.lists].sort(todoBySort);
+  const lists = todoListsIn(cur, true);
+  // 入れ替えるのはカテゴリの中の隣どうし。sortOrder は全リストの通し番号なので、全体の並びの中で2つの位置を入れ替えて振り直す
   const move = (n, d)=>{
     const m = n + d;
     if(m < 0 || m >= lists.length || tm.busy) return;
-    [lists[n], lists[m]] = [lists[m], lists[n]];
-    lists.forEach((l, k)=>{ l.sortOrder = k + 1; });
+    const a = all.indexOf(lists[n]), b = all.indexOf(lists[m]);
+    [all[a], all[b]] = [all[b], all[a]];
+    all.forEach((l, k)=>{ l.sortOrder = k + 1; });
     tmRender();
     renderTodo();
     tm.busy = true;
-    postToGas({type:'reminderList', action:'reorder', ids:lists.map(l=>l.id)})
+    postToGas({type:'reminderList', action:'reorder', ids:all.map(l=>l.id)})
       .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '並べ替えに失敗しました'); })
       .catch(err=>{ toast(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
       .finally(()=>{ tm.busy = false; });
   };
   tmBody.append(h('div', {class:'tm-section'},
     h('h3', {}, 'リスト（上から順にカードを並べます）'),
-    lists.map((l, n)=>h('div', {class:'todo-list-row' + (l.active ? '' : ' off')},
+    lists.length ? lists.map((l, n)=>h('div', {class:'todo-list-row' + (l.active ? '' : ' off')},
       h('button', {type:'button', class:'tm-row', onclick:()=>tmShow(tmTodoListEditView, l)},
         h('span', {class:'todo-dot', style:l.color ? `background:${l.color}` : ''}),
         h('span', {class:'name'}, l.name),
-        h('span', {class:'count'}, [l.kind, l.active ? '' : '非表示'].filter(Boolean).join('・')),
+        h('span', {class:'count'}, l.active ? '' : '非表示'),
         h('span', {class:'chev'}, '›')),
       h('button', {type:'button', class:'lot-remove', disabled:n === 0, 'aria-label':'上へ', onclick:()=>move(n, -1)}, '↑'),
-      h('button', {type:'button', class:'lot-remove', disabled:n === lists.length - 1, 'aria-label':'下へ', onclick:()=>move(n, 1)}, '↓')))));
-
-  const name = h('input', {type:'text', placeholder:'例：カインズ'});
-  const kind = h('select', {}, TODO_KINDS.map(k=>h('option', {value:k}, k)));
-  kind.value = '買い物';
-  const add = h('button', {type:'button', class:'tm-btn'}, '追加');
-  add.addEventListener('click', ()=>{
-    const n = normText(name.value);
-    if(!n){ toast('リストの名前を入れてください'); return; }
-    add.disabled = true;
-    tm.busy = true;
-    postToGas({type:'reminderList', action:'add', name:n, kind:kind.value})
-      .then(res=>{
-        if(res.status !== 'success') throw new Error(res.message || '追加に失敗しました');
-        todo.lists.push(res.list);
-        tm.busy = false;
-        renderTodo();
-        tmShow(tmTodoListEditView, res.list); // 店名などを続けて入れられるように編集画面を開く
-      })
-      .catch(err=>{ tm.busy = false; add.disabled = false; toast(errMsg(err)); });
-  });
-  tmBody.append(h('div', {class:'tm-section'},
-    h('h3', {}, 'リストを追加'),
-    h('div', {class:'tm-inline'}, name, kind, add)));
+      h('button', {type:'button', class:'lot-remove', disabled:n === lists.length - 1, 'aria-label':'下へ', onclick:()=>move(n, 1)}, '↓')))
+      : h('p', {class:'tm-note'}, 'リストはまだありません。右下の＋から作れます。')));
 }
-// リストの編集：名前・種類・店・色・在庫に足すか聞く・表示
+// リストの編集：名前・カテゴリ（種類が同じカテゴリだけ）・店・色・在庫に足すか聞く・表示
 function tmTodoListEditView(l){
   tmTitle.textContent = 'リストを編集';
-  const field = (label, ...inputs)=>h('div', {class:'field'}, h('label', {}, label), inputs);
   const name = h('input', {type:'text', value:l.name});
-  const kind = h('select', {}, TODO_KINDS.map(k=>h('option', {value:k}, k)));
-  kind.value = l.kind;
-  const store = h('input', {type:'text', value:l.store || '', placeholder:'例：DAISO,ダイソー'});
-  const askStock = h('input', {type:'checkbox', checked:!!l.askStock});
-  const active = h('input', {type:'checkbox', checked:!!l.active});
+  const cats = todoCategories().filter(c=>c.type === l.kind);
+  const catSel = h('select', {}, cats.map(c=>h('option', {value:String(c.id)}, c.name)));
+  const cur = todoCategoryOfList(l);
+  if(cur) catSel.value = String(cur.id);
   let color = l.color || '';
-  const colors = h('div', {class:'chips'}, ['', ...TODO_COLORS].map(c=>h('button', {type:'button', class:'chip todo-color' + (c === color ? ' on' : ''),
-    style:c ? `--swatch:${c}` : '', 'aria-label':c || '色なし', onclick:e=>{
-      color = c;
-      colors.querySelectorAll('.chip').forEach(b=>b.classList.toggle('on', b === e.currentTarget));
-    }}, c ? '' : 'なし')));
-  const shopFields = h('div', {},
-    field('店', store, h('p', {class:'tm-note'}, 'クーポンの店名や、在庫の品目を入れる店の判断に使います。呼び方が違うときは「,」で区切って並べます（先頭の名前がクーポンの店名と合うように）。空なら、店が決まらない在庫の品目の行き先になります。')),
-    h('label', {class:'check'}, askStock, 'チェックしたときに在庫に足すか聞く'));
-  const syncKind = ()=>{ shopFields.hidden = kind.value !== '買い物'; };
-  kind.addEventListener('change', syncKind);
-  syncKind();
+  const colors = todoColorChips(color, c=>{ color = c; });
+  const shop = todoShopFields(l);
+  const active = h('input', {type:'checkbox', checked:!!l.active});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
-  tmBody.append(field('名前', name), field('種類', kind), shopFields, field('色', colors),
+  tmBody.append(todoField('名前', name),
+    todoField('カテゴリ', catSel, h('p', {class:'tm-note'}, `移せるのは${todoTypeLabel(l.kind)}のカテゴリだけです。`)),
+    l.kind === '買い物' ? shop.el : '', todoField('色', colors),
     h('label', {class:'check'}, active, 'カードを表示する（外すと非表示。品目はシートに残ります）'));
   tmFoot.append(save);
   save.addEventListener('click', ()=>{
@@ -588,8 +626,8 @@ function tmTodoListEditView(l){
     save.disabled = true;
     save.textContent = '保存中…';
     tm.busy = true;
-    postToGas({type:'reminderList', action:'edit', id:l.id, name:n, kind:kind.value, store:store.value, color,
-      askStock:askStock.checked, active:active.checked})
+    postToGas({type:'reminderList', action:'edit', id:l.id, name:n, categoryId:catSel.value, store:shop.store.value, color,
+      askStock:shop.askStock.checked, active:active.checked})
       .then(res=>{
         if(res.status !== 'success') throw new Error(res.message || '保存に失敗しました');
         Object.assign(l, res.list);
@@ -601,4 +639,242 @@ function tmTodoListEditView(l){
       })
       .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
   });
+}
+
+// リストの編集と追加で共通の部品
+function todoField(label, ...inputs){ return h('div', {class:'field'}, h('label', {}, label), inputs); }
+// 色の候補（onPick に選んだ色を渡す。空は色なし）
+function todoColorChips(color, onPick){
+  const wrap = h('div', {class:'chips'}, ['', ...TODO_COLORS].map(c=>h('button', {type:'button', class:'chip todo-color' + (c === color ? ' on' : ''),
+    style:c ? `--swatch:${c}` : '', 'aria-label':c || '色なし', onclick:e=>{
+      onPick(c);
+      wrap.querySelectorAll('.chip').forEach(b=>b.classList.toggle('on', b === e.currentTarget));
+    }}, c ? '' : 'なし')));
+  return wrap;
+}
+// 買い物型のリストだけの欄：店・在庫に足すか聞く
+function todoShopFields(l){
+  const store = h('input', {type:'text', value:l.store || '', placeholder:'例：DAISO,ダイソー'});
+  const askStock = h('input', {type:'checkbox', checked:!!l.askStock});
+  const el = h('div', {},
+    todoField('店', store, h('p', {class:'tm-note'}, 'クーポンの店名や、在庫の品目を入れる店の判断に使います。呼び方が違うときは「,」で区切って並べます（先頭の名前がクーポンの店名と合うように）。空なら、店が決まらない在庫の品目の行き先になります。')),
+    h('label', {class:'check'}, askStock, 'チェックしたときに在庫に足すか聞く'));
+  return {el, store, askStock};
+}
+
+// ---------- カテゴリの管理（在庫のタグ管理と同じ流れ） ----------
+// 一覧（新しいカテゴリを作る・↑↓でタブを並べ替え）→ カテゴリの詳細（名前の変更・リストを入れる・削除）→ 入れるリストを選ぶ
+function tmTodoCategoriesView(){
+  tmTitle.textContent = 'カテゴリの管理';
+  const cs = todoCategories();
+  const name = h('input', {type:'text', placeholder:'例：用事'});
+  const type = h('select', {}, TODO_TYPES.map(([t, label])=>h('option', {value:t}, label)));
+  const next = h('button', {type:'button', class:'tm-btn'}, '次へ');
+  next.addEventListener('click', ()=>{
+    const n = normText(name.value);
+    if(!n){ toast('カテゴリの名前を入れてください'); return; }
+    next.disabled = true;
+    tm.busy = true;
+    postToGas({type:'reminderCategory', action:'add', name:n, type:type.value})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '追加に失敗しました');
+        todo.categories.push(res.category);
+        tm.busy = false;
+        renderTodo();
+        tmShow(tmTodoCategoryView, res.category); // リストを続けて入れられるように詳細を開く
+      })
+      .catch(err=>{ tm.busy = false; next.disabled = false; toast(errMsg(err)); });
+  });
+  const move = (n, d)=>{
+    const m = n + d;
+    if(m < 0 || m >= cs.length || tm.busy) return;
+    [cs[n], cs[m]] = [cs[m], cs[n]];
+    cs.forEach((c, k)=>{ c.sortOrder = k + 1; });
+    tmRender();
+    renderTodo();
+    tm.busy = true;
+    postToGas({type:'reminderCategory', action:'reorder', ids:cs.map(c=>c.id)})
+      .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '並べ替えに失敗しました'); })
+      .catch(err=>{ toast(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
+      .finally(()=>{ tm.busy = false; });
+  };
+  tmBody.append(
+    h('div', {class:'tm-section'},
+      h('h3', {}, '新しいカテゴリを作る'),
+      h('div', {class:'tm-inline'}, name, type, next),
+      TODO_TYPES.map(([, label, note])=>h('p', {class:'tm-note'}, `${label}：${note}`))),
+    h('div', {class:'tm-section'},
+      h('h3', {}, '登録済みのカテゴリ（上から順にタブを並べます）'),
+      cs.length ? cs.map((c, n)=>h('div', {class:'todo-list-row'},
+        h('button', {type:'button', class:'tm-row', onclick:()=>tmShow(tmTodoCategoryView, c)},
+          h('span', {class:'name'}, c.name),
+          h('span', {class:'count'}, `${todoTypeLabel(c.type)}・${todoListsIn(c, true).length}リスト`),
+          h('span', {class:'chev'}, '›')),
+        h('button', {type:'button', class:'lot-remove', disabled:n === 0, 'aria-label':'上へ', onclick:()=>move(n, -1)}, '↑'),
+        h('button', {type:'button', class:'lot-remove', disabled:n === cs.length - 1, 'aria-label':'下へ', onclick:()=>move(n, 1)}, '↓')))
+        : h('p', {class:'tm-note'}, 'カテゴリはまだありません')));
+}
+// カテゴリの詳細：名前の変更・リストを入れる・削除（リストが入っている間は削除できない）
+function tmTodoCategoryView(c){
+  tmTitle.textContent = c.name;
+  const lists = todoListsIn(c, true);
+  const input = h('input', {type:'text', value:c.name});
+  const renameBtn = h('button', {type:'button', class:'tm-btn', onclick:()=>{
+    const n = normText(input.value);
+    if(!n || n === c.name) return;
+    renameBtn.disabled = true;
+    tm.busy = true;
+    postToGas({type:'reminderCategory', action:'rename', id:c.id, name:n})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '変更に失敗しました');
+        Object.assign(c, res.category);
+        tm.busy = false;
+        renderTodo();
+        tmRender();
+        toast('名前を変更しました');
+      })
+      .catch(err=>{ tm.busy = false; renameBtn.disabled = false; toast(errMsg(err)); });
+  }}, '変更');
+  const movable = todo.lists.some(l=>l.kind === c.type && todoCategoryOfList(l) !== c);
+  const deleteBtn = makeHoldButton('長押しでカテゴリを削除', reset=>{
+    tm.busy = true;
+    postToGas({type:'reminderCategory', action:'delete', id:c.id})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '削除に失敗しました');
+        todo.categories = todo.categories.filter(x=>x !== c);
+        tm.busy = false;
+        renderTodo();
+        tm.stack.pop();
+        tmRender();
+        toast(`「${c.name}」を削除しました`);
+      })
+      .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
+  });
+  tmBody.append(
+    h('p', {class:'tm-note tm-lead'}, `${todoTypeLabel(c.type)}・リスト${lists.length}件` + (lists.length ? `（${lists.map(l=>l.name).join('・')}）` : '')),
+    h('div', {class:'tm-section'},
+      h('h3', {}, '名前を変更'),
+      h('div', {class:'tm-inline'}, input, renameBtn)),
+    h('div', {class:'tm-section'},
+      h('h3', {}, 'リストを入れる'),
+      movable
+        ? h('button', {type:'button', class:'tm-btn tm-wide', onclick:()=>tmShow(tmTodoCategoryMoveView, c)}, '入れるリストを選ぶ')
+        : h('p', {class:'tm-note'}, `ほかのカテゴリに${todoTypeLabel(c.type)}のリストがありません。新しいリストは右下の＋から作れます。`)),
+    h('div', {class:'tm-section tm-danger'},
+      h('h3', {}, '削除'),
+      lists.length
+        ? h('p', {class:'tm-note'}, 'リストが入っている間は削除できません。先に、ほかのカテゴリの「リストを入れる」で移してください。')
+        : [h('p', {class:'tm-note'}, 'このカテゴリのタブがなくなります。'), deleteBtn]));
+}
+// カテゴリにリストを入れる：種類が同じ、ほかのカテゴリのリストを選ぶ（在庫のタグの「付ける行を選ぶ」と同じ）
+function tmTodoCategoryMoveView(c){
+  tmTitle.textContent = `「${c.name}」に入れる`;
+  const selected = new Set();
+  const submit = h('button', {type:'button', class:'tm-btn tm-wide'});
+  const update = ()=>{
+    submit.disabled = selected.size === 0;
+    submit.textContent = selected.size ? `${selected.size}件を入れる` : '入れるリストを選んでください';
+  };
+  submit.addEventListener('click', ()=>{
+    const lists = [...selected];
+    submit.disabled = true;
+    submit.textContent = '処理中…';
+    tm.busy = true;
+    postToGas({type:'reminderCategory', action:'move', id:c.id, listIds:lists.map(l=>l.id)})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '移せませんでした');
+        lists.forEach(l=>{ l.categoryId = c.id; });
+        tm.busy = false;
+        renderTodo();
+        toast(`${lists.length}件のリストを「${c.name}」に入れました`);
+        tm.stack.pop();
+        tmRender();
+      })
+      .catch(err=>{ tm.busy = false; toast(errMsg(err)); update(); });
+  });
+  update();
+  tmFoot.append(submit);
+  todo.lists.filter(l=>l.kind === c.type && todoCategoryOfList(l) !== c).sort(todoBySort).forEach(l=>{
+    const from = todoCategoryOfList(l);
+    const cb = h('input', {type:'checkbox', onchange:()=>{
+      if(cb.checked) selected.add(l); else selected.delete(l);
+      update();
+    }});
+    tmBody.append(h('label', {class:'tm-check'}, cb,
+      h('div', {class:'main'}, h('div', {class:'t1'}, l.name),
+        h('div', {class:'t2'}, [from ? `今は「${from.name}」` : '', l.active ? '' : '非表示'].filter(Boolean).join('・')))));
+  });
+}
+
+// ---------- リストの追加（右下の＋。在庫の登録パネルと同じく、下から出るパネル） ----------
+const todoComposeBody = h('div', {class:'compose-body'});
+const todoCompose = h('div', {class:'compose', role:'dialog', 'aria-labelledby':'todo-compose-title'},
+  h('div', {class:'compose-grip', 'aria-hidden':'true'}, h('span')),
+  h('div', {class:'compose-head'},
+    h('h2', {id:'todo-compose-title'}, '新しいリストを作る'),
+    h('button', {type:'button', class:'text-btn', onclick:closeCompose}, '閉じる')),
+  h('p', {class:'compose-hint'}, '作ったリストは、選んだカテゴリのタブにカードで並びます'),
+  todoComposeBody);
+todoCompose.dataset.kind = 'form';
+const todoFab = h('button', {type:'button', class:'fab', 'aria-label':'リストを追加', onclick:()=>{ todoFillCompose(); openCompose('form'); }}, '＋');
+document.getElementById('todo-panel').append(todoFab, todoCompose);
+enableComposeDrag(todoCompose);
+
+// パネルの中身を作り直す（開くたびに空にして、カテゴリは選んでいるタブにする）
+// カテゴリは選ぶか、「＋ 新しいカテゴリ」で名前と種類を入れる（在庫の登録フォームのカテゴリと同じ形）。買い物型なら店の欄も出す
+function todoFillCompose(){
+  const cs = todoCategories();
+  const cur = todoCurrentCategory();
+  const name = h('input', {type:'text', placeholder:'例：毎日のこと ／ カインズ'});
+  const catSel = h('select', {}, cs.map(c=>h('option', {value:String(c.id)}, c.name)), h('option', {value:'__new__'}, '＋ 新しいカテゴリ'));
+  catSel.value = cur ? String(cur.id) : '__new__';
+  const catName = h('input', {type:'text', placeholder:'新しいカテゴリの名前'});
+  let type = TODO_TYPES[0][0];
+  const typeSeg = h('div', {class:'seg'}, TODO_TYPES.map(([t, label])=>h('button', {type:'button', value:t, onclick:()=>{ type = t; sync(); }}, label)));
+  const typeNote = h('p', {class:'form-note'});
+  const newCat = h('div', {class:'todo-new-cat'}, catName, typeSeg, typeNote);
+  let color = '';
+  const colors = todoColorChips(color, c=>{ color = c; });
+  const shop = todoShopFields({});
+  const typeOf = ()=>catSel.value === '__new__' ? type : (cs.find(c=>String(c.id) === catSel.value) || {}).type;
+  const sync = ()=>{
+    newCat.hidden = catSel.value !== '__new__';
+    typeSeg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b.value === type));
+    typeNote.textContent = TODO_TYPES.find(([t])=>t === type)[2];
+    shop.el.hidden = typeOf() !== '買い物';
+  };
+  catSel.addEventListener('change', ()=>{
+    sync();
+    if(catSel.value === '__new__') catName.focus();
+  });
+  sync();
+  const submit = h('button', {type:'submit', class:'submit-btn'}, 'このリストを作る');
+  const form = h('form', {onsubmit:e=>{
+    e.preventDefault();
+    const n = normText(name.value);
+    if(!n){ toast('リストの名前を入れてください'); return; }
+    const payload = {type:'reminderList', action:'add', name:n, color, store:shop.store.value, askStock:shop.askStock.checked};
+    if(catSel.value === '__new__'){
+      const cn = normText(catName.value);
+      if(!cn){ toast('新しいカテゴリの名前を入れてください'); return; }
+      payload.newCategory = {name:cn, type};
+    } else {
+      payload.categoryId = catSel.value;
+    }
+    submit.disabled = true;
+    submit.textContent = '作成中…';
+    postToGas(payload)
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '作成に失敗しました');
+        const {category, ...list} = res.list;
+        if(category) todo.categories.push(category);
+        todo.lists.push(list);
+        todoSelectCategory(category || todoCategoryOfList(list));
+        closeCompose();
+        renderTodo();
+        toast(`「${list.name}」を作りました`);
+      })
+      .catch(err=>{ toast(errMsg(err)); submit.disabled = false; submit.textContent = 'このリストを作る'; });
+  }}, todoField('名前', name), todoField('カテゴリ', catSel, newCat), shop.el, todoField('色', colors), submit);
+  todoComposeBody.replaceChildren(form);
 }

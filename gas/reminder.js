@@ -1,15 +1,19 @@
 // =========================================================
 // やること：リストごとのリマインダー（家事・用事・買い物）
-// ・「リマインダーリスト」シート：1行＝1リスト。kind は 家事 / 買い物。買い物のリストは store（店）を持つ
+// ・「リマインダーカテゴリ」シート：1行＝1カテゴリ（画面のタブ）。type は 家事 / 買い物 で、中のリストの動きを決める
+// ・「リマインダーリスト」シート：1行＝1リスト。categoryId のカテゴリに入る。kind はカテゴリの type と同じ値を書く（ほかの処理は kind を見る）
+//   買い物のリストは store（店）を持つ
 // ・「リマインダー」シート：1行＝1件。rule があればくり返し（周期の計算は chore-rule.js）、なければ nextDue だけ（期限なしは空）
 //   くり返しなしの期限に時刻を付けたかは、nextDue が 0:00 ちょうどかどうかで判断する
 // ・在庫が「買う物」になったら買い物リストに行を作り、買う物でなくなったら自動で完了にする（syncStockReminders）
 // 通知は reminder-notify.js
 // =========================================================
+const SHEET_REMINDER_CATEGORY = "リマインダーカテゴリ";
 const SHEET_REMINDER_LIST = "リマインダーリスト";
 const SHEET_REMINDER = "リマインダー";
 const SHEET_CHORE = "家事"; // 以前の家事のシート。記録として残し、移行（setupReminders）で読むだけ
-const REMINDER_LIST_HEADERS = ["id", "name", "kind", "store", "color", "sortOrder", "askStock", "active", "createdAt"];
+const REMINDER_CATEGORY_HEADERS = ["id", "name", "type", "sortOrder", "createdAt"];
+const REMINDER_LIST_HEADERS = ["id", "name", "kind", "store", "color", "sortOrder", "askStock", "active", "createdAt", "categoryId"];
 const REMINDER_HEADERS = ["id", "listId", "title", "qty", "memo", "assignee", "rule", "cycle", "nextDue", "lastDone", "notifiedFor",
   "status", "doneAt", "doneBy", "source", "stockItemName", "createdAt", "updatedAt"];
 const REMINDER_KINDS = ["家事", "買い物"];
@@ -37,7 +41,7 @@ const REMINDER_DEFAULT_LISTS = [
 
 // ---- 読み取り ----
 
-// 画面に渡すデータ：lists（全リスト）、items（まだ終わっていない行・くり返しの行・最近完了した行）、sale（セール品目の印）
+// 画面に渡すデータ：categories（全カテゴリ）、lists（全リスト）、items（まだ終わっていない行・くり返しの行・最近完了した行）、sale（セール品目の印）
 // シートがまだなければ空（setupReminders の前でも画面全体が読み込めるようにする）
 function getReminders() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -48,10 +52,17 @@ function getReminders() {
     return status === REMINDER_DONE && o.doneAt instanceof Date && o.doneAt.getTime() >= since;
   });
   return {
+    categories: reminderCategories(ss).map(reminderOut),
     lists: reminderLists(ss).map(reminderOut),
     items: items.map(reminderOut),
     sale: getReminderSaleInfo(ss),
   };
+}
+
+// カテゴリの行（sortOrder の順。シートがなければ空）
+function reminderCategories(ss) {
+  return receiptRead(ss.getSheetByName(SHEET_REMINDER_CATEGORY)).rows
+    .sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
 }
 
 // リストの行（askStock・active は真偽値にする。active が空なら表示する）
@@ -258,10 +269,11 @@ function reminderDueInput(v) {
 
 // ---- リストの操作 ----
 // data.action
-//   add     … name・kind（家事 / 買い物）。sortOrder は最後
-//   edit    … name・kind・store・color・askStock・active を上書きする（id で指定）。active を false にすると非表示
+//   add     … name・categoryId（新しいカテゴリに入れるなら代わりに newCategory：{name, type}）・store・color・askStock。sortOrder は最後
+//   edit    … name・categoryId・store・color・askStock・active を上書きする（id で指定）。active を false にすると非表示
 //   reorder … ids（リストの id を並べたい順に）で sortOrder を振り直す
-// 戻り値：書き込んだ後のリスト（reorder は null）
+// kind は入れるカテゴリの type にする。カテゴリを移せるのは、type が同じカテゴリの間だけ
+// 戻り値：書き込んだ後のリスト（reorder は null）。add で新しいカテゴリを作ったときは list.category にそのカテゴリを付ける
 function reminderListAction(ss, data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -271,43 +283,120 @@ function reminderListAction(ss, data) {
     const t = receiptRead(sheet);
 
     if (data.action === "reorder") {
-      const ids = (data.ids || []).map(String);
-      t.rows.forEach(o => {
-        const i = ids.indexOf(String(o.id));
-        if (i !== -1 && Number(o.sortOrder) !== i + 1) receiptWrite(sheet, t.headers, o._row, { sortOrder: i + 1 });
-      });
+      reminderReorder(sheet, t, data.ids);
       return null;
     }
+    if (data.action !== "add" && data.action !== "edit") throw new Error("action が不正です: " + data.action);
 
     const name = normText(data.name);
     if (!name) throw new Error("リストの名前を入れてください。");
-    const kind = normText(data.kind);
-    if (REMINDER_KINDS.indexOf(kind) === -1) throw new Error("リストの種類が不正です: " + kind);
     const others = t.rows.filter(o => String(o.id) !== String(data.id));
     if (others.some(o => normText(o.name) === name)) throw new Error(`「${name}」というリストはもうあります。`);
+    const color = String(data.color ?? "").trim();
+    if (color && !REMINDER_COLORS.test(color)) throw new Error("色が不正です: " + color);
+    const found = data.action === "edit" ? t.rows.find(o => String(o.id) === String(data.id)) : null;
+    if (data.action === "edit" && !found) throw new Error("リストが見つかりません。読み込み直してください。");
+
+    // 入れるカテゴリ（add で newCategory があれば、ここで作る）
+    const created = data.action === "add" && data.newCategory ? reminderAddCategory(ss, data.newCategory) : null;
+    const category = created || reminderCategories(ss).find(c => String(c.id) === String(data.categoryId));
+    if (!category) throw new Error("カテゴリが見つかりません。読み込み直してください。");
+    const kind = String(category.type);
+    if (found && String(found.kind) !== kind) throw new Error("種類の違うカテゴリには移せません。");
+    const values = {
+      name: name, kind: kind, categoryId: category.id, store: kind === "買い物" ? reminderStoreInput(data.store) : "",
+      color: color, askStock: kind === "買い物" && data.askStock === true,
+    };
 
     if (data.action === "add") {
       const sortOrder = t.rows.reduce((max, o) => Math.max(max, Number(o.sortOrder) || 0), 0) + 1;
-      const row = { id: Utilities.getUuid(), name: name, kind: kind, store: "", color: "", sortOrder: sortOrder, askStock: false, active: true, createdAt: new Date() };
+      const row = Object.assign({ id: Utilities.getUuid(), sortOrder: sortOrder, active: true, createdAt: new Date() }, values);
       receiptAppend(sheet, row);
-      return reminderOut(row);
+      return Object.assign(reminderOut(row), created ? { category: reminderOut(created) } : {});
     }
-    if (data.action === "edit") {
-      const found = t.rows.find(o => String(o.id) === String(data.id));
-      if (!found) throw new Error("リストが見つかりません。読み込み直してください。");
-      const color = String(data.color ?? "").trim();
-      if (color && !REMINDER_COLORS.test(color)) throw new Error("色が不正です: " + color);
-      const values = {
-        name: name, kind: kind, store: kind === "買い物" ? reminderStoreInput(data.store) : "",
-        color: color, askStock: kind === "買い物" && data.askStock === true, active: data.active !== false,
-      };
-      receiptWrite(sheet, t.headers, found._row, values);
-      return reminderOut(Object.assign(found, values));
+    values.active = data.active !== false;
+    receiptWrite(sheet, t.headers, found._row, values);
+    return reminderOut(Object.assign(found, values));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ids（並べたい順の id）で sortOrder を振り直す。ids にない行は変えない
+function reminderReorder(sheet, t, ids) {
+  ids = (ids || []).map(String);
+  t.rows.forEach(o => {
+    const i = ids.indexOf(String(o.id));
+    if (i !== -1 && Number(o.sortOrder) !== i + 1) receiptWrite(sheet, t.headers, o._row, { sortOrder: i + 1 });
+  });
+}
+
+// ---- カテゴリの操作 ----
+// data.action
+//   add     … name・type（家事 / 買い物）。sortOrder は最後
+//   rename  … name（id で指定）
+//   delete  … カテゴリを消す（id で指定）。リストが入っていれば消さない
+//   reorder … ids（カテゴリの id を並べたい順に）で sortOrder を振り直す
+//   move    … listIds のリストをこのカテゴリ（id で指定）に移す。type が同じリストだけ
+// 戻り値：書き込んだ後のカテゴリ（delete・reorder・move は null）
+function reminderCategoryAction(ss, data) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = ss.getSheetByName(SHEET_REMINDER_CATEGORY);
+    if (!sheet) throw new Error("「リマインダーカテゴリ」シートがありません。GAS の setupReminderCategories を実行してください。");
+    if (data.action === "add") return reminderOut(reminderAddCategory(ss, data));
+    const t = receiptRead(sheet);
+    if (data.action === "reorder") {
+      reminderReorder(sheet, t, data.ids);
+      return null;
+    }
+    const found = t.rows.find(o => String(o.id) === String(data.id));
+    if (!found) throw new Error("カテゴリが見つかりません。読み込み直してください。");
+    const listSheet = ss.getSheetByName(SHEET_REMINDER_LIST);
+    const lists = receiptRead(listSheet);
+
+    if (data.action === "rename") {
+      const name = normText(data.name);
+      if (!name) throw new Error("カテゴリの名前を入れてください。");
+      if (t.rows.some(o => String(o.id) !== String(found.id) && normText(o.name) === name)) throw new Error(`「${name}」というカテゴリはもうあります。`);
+      receiptWrite(sheet, t.headers, found._row, { name: name });
+      return reminderOut(Object.assign(found, { name: name }));
+    }
+    if (data.action === "delete") {
+      const n = lists.rows.filter(o => String(o.categoryId) === String(found.id)).length;
+      if (n) throw new Error(`リストが${n}件入っています。先にほかのカテゴリへ移してください。`);
+      sheet.deleteRow(found._row);
+      return null;
+    }
+    if (data.action === "move") {
+      const ids = (data.listIds || []).map(String);
+      const targets = lists.rows.filter(o => ids.indexOf(String(o.id)) !== -1);
+      const wrong = targets.find(o => String(o.kind) !== String(found.type));
+      if (wrong) throw new Error(`「${wrong.name}」は種類が違うので移せません。`);
+      targets.forEach(o => receiptWrite(listSheet, lists.headers, o._row, { categoryId: found.id }));
+      return null;
     }
     throw new Error("action が不正です: " + data.action);
   } finally {
     lock.releaseLock();
   }
+}
+
+// カテゴリを1行足す（ロックは呼び出し側で取る）。c：{name, type}
+function reminderAddCategory(ss, c) {
+  const sheet = ss.getSheetByName(SHEET_REMINDER_CATEGORY);
+  if (!sheet) throw new Error("「リマインダーカテゴリ」シートがありません。GAS の setupReminderCategories を実行してください。");
+  const name = normText(c.name);
+  if (!name) throw new Error("カテゴリの名前を入れてください。");
+  const type = normText(c.type);
+  if (REMINDER_KINDS.indexOf(type) === -1) throw new Error("カテゴリの種類が不正です: " + type);
+  const rows = receiptRead(sheet).rows;
+  if (rows.some(o => normText(o.name) === name)) throw new Error(`「${name}」というカテゴリはもうあります。`);
+  const sortOrder = rows.reduce((max, o) => Math.max(max, Number(o.sortOrder) || 0), 0) + 1;
+  const row = { id: Utilities.getUuid(), name: name, type: type, sortOrder: sortOrder, createdAt: new Date() };
+  receiptAppend(sheet, row);
+  return row;
 }
 
 // 店名（「,」区切りで別名も書ける）を正規化してつなぎ直す
@@ -511,6 +600,33 @@ function setupReminders() {
 
   syncStockReminders(ss);
   Logger.log(`リストを${addedLists}件作り、家事を${moved}件移しました。checkReminders を5分ごとに実行するトリガーを作成しました。`);
+}
+
+// 【一度だけ実行】やることのカテゴリの用意（何度実行しても重複しない）
+// 1. 「リマインダーカテゴリ」シートを作り、「リマインダーリスト」に categoryId の列を足す
+// 2. 「家事」「買い物」のカテゴリ（REMINDER_KINDS と同じ名前・種類）のうち、同じ名前のカテゴリがないものを作る
+// 3. categoryId が空のリストを、kind と同じ名前・種類のカテゴリに入れる
+function setupReminderCategories() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = receiptSheet(ss, SHEET_REMINDER_CATEGORY, REMINDER_CATEGORY_HEADERS);
+  const listSheet = receiptSheet(ss, SHEET_REMINDER_LIST, REMINDER_LIST_HEADERS);
+  const categories = receiptRead(sheet).rows;
+  let added = 0;
+  REMINDER_KINDS.forEach(kind => {
+    if (categories.some(c => normText(c.name) === kind)) return;
+    categories.push(reminderAddCategory(ss, { name: kind, type: kind }));
+    added++;
+  });
+  const lists = receiptRead(listSheet);
+  let moved = 0;
+  lists.rows.forEach(o => {
+    if (normText(o.categoryId)) return;
+    const c = categories.find(c => normText(c.name) === String(o.kind) && String(c.type) === String(o.kind));
+    if (!c) return;
+    receiptWrite(listSheet, lists.headers, o._row, { categoryId: c.id });
+    moved++;
+  });
+  Logger.log(`カテゴリを${added}件作り、リストを${moved}件カテゴリに入れました。`);
 }
 
 // 【一度だけ実行】「セール品目」に packUnit の列を足し、空の行にパックの単位の案を入れる（入っている行は変えない）
