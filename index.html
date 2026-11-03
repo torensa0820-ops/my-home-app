@@ -32,6 +32,7 @@
   <main>
     <!-- ===== 在庫タブ ===== -->
     <section id="stock-panel" class="tab-panel active">
+      <div class="tab-scroll">
       <div id="stock-imports"></div>
       <div class="list-head">
         <div class="section-title">登録中の商品</div>
@@ -40,6 +41,7 @@
       <div class="cat-tabs" id="stock-cats" role="tablist" aria-label="カテゴリ"></div>
       <div class="filter-bar" id="stock-filter"></div>
       <div id="stock-list"><p class="empty-msg">読み込み中…</p></div>
+      </div>
 
       <button type="button" class="fab" data-compose="stock" aria-label="登録">＋</button>
       <div class="compose" data-kind="form" id="stock-compose" role="dialog" aria-labelledby="stock-compose-title">
@@ -81,7 +83,7 @@
 
     <!-- ===== クーポンタブ ===== -->
     <section id="coupon-panel" class="tab-panel">
-      <div id="coupons"><p class="empty-msg">読み込み中…</p></div>
+      <div class="tab-scroll"><div id="coupons"><p class="empty-msg">読み込み中…</p></div></div>
     </section>
 
     <!-- ===== やることタブ ===== -->

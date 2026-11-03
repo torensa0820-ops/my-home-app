@@ -31,6 +31,13 @@ function closeCompose(){
   delete document.body.dataset.compose;
   applyComposeHeight();
 }
+// 動かさずに閉じる（タブの切り替えでは、パネルがタブと一緒に動いて大きさが変わって見えるため）
+function closeComposeNow(){
+  const panel = activeCompose();
+  if(panel) panel.style.transition = 'none';
+  closeCompose();
+  if(panel){ void panel.offsetWidth; panel.style.transition = ''; }
+}
 document.querySelectorAll('.fab').forEach(b=>b.addEventListener('click', ()=>openCompose('form')));
 document.querySelectorAll('.compose-close').forEach(b=>b.addEventListener('click', closeCompose));
 // つまみだけでなく、タイトルと説明文の行（ヘッダー部分）全体をドラッグして高さを変えられるようにする

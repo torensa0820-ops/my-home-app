@@ -28,11 +28,13 @@ function createTitleSwap(el){
   el.append(back);
   let timer = 0;       // 動きが終わる時刻を待つタイマー
   let pending = null;  // 動いている途中に set された題名（動き終わってから入れる）
+  let current = [...front.children].map(c=>c.textContent); // 見えている（動いている途中なら、動き終わって見える）題名
   const fill = (layer, texts)=>[...layer.children].forEach((c, i)=>{ c.textContent = texts[i] || ''; });
   const clamp = v=>Math.min(1, Math.max(0, v));
 
   // 動かさずに題名を入れる（前面の1枚だけにする）
   function set(...texts){
+    current = texts;
     if(timer){ pending = texts; return; }
     fill(front, texts);
     el.classList.remove('swapping');
@@ -43,6 +45,7 @@ function createTitleSwap(el){
     clearTimeout(timer);
     timer = 0;
     pending = null;
+    current = p < 0.5 ? frontTexts : backTexts;
     fill(front, frontTexts);
     fill(back, backTexts);
     el.classList.add('swapping');
@@ -66,5 +69,5 @@ function createTitleSwap(el){
     track(frontTexts, backTexts, to, ms);
     pending = to ? backTexts : frontTexts;
   }
-  return {set, track, slide};
+  return {set, track, slide, current:()=>current};
 }
