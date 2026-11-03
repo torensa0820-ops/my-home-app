@@ -148,7 +148,7 @@ function renderStockList(){
       card.append(info, makeStepper(g.lots[0]));
     } else {
       card.append(
-        h('div', {class:'card-top'}, info, h('div', {class:'card-total'}, `計 ${stockTotal(g)}`)),
+        h('div', {class:'card-top'}, info, h('div', {class:'card-total'}, '計 ', rollNumber(h('span'), 'total:' + g.name, stockTotal(g)))),
         h('div', {class:'lots'}, g.lots.map(l=>{
           const e = expInfo(l);
           return h('div', {class:'lot'}, h('span', {class:'lot-exp exp ' + e.cls}, e.label || '期限なし'), makeStepper(l));
@@ -161,7 +161,7 @@ function renderStockList(){
 // ロットの個数を＋−するボタン（idで更新）
 // 個数で「買い物リストに入れる」やバッジ・タブの件数が変わるので、そのたびに一覧を描き直す
 function makeStepper(lot){
-  const count = h('span', {class:'count'}, String(lot.stock ?? 0));
+  const count = rollNumber(h('span', {class:'count'}), 'lot:' + lot.id, Number(lot.stock) || 0);
   const bump = delta=>{
     const prev = Number(lot.stock) || 0;
     // 増えたら GAS 側で buyFlag の印が外れるので、画面でも同じ商品の全ロットから外す

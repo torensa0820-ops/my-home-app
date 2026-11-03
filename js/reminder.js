@@ -176,7 +176,7 @@ function todoListCard(list){
   const hint = list.kind === '買い物' ? todoShopHint(list) : todoChoreHint(open, items);
   return h('button', {type:'button', class:'todo-card' + (open.length ? '' : ' empty'), style:list.color ? `--list:${list.color}` : '', onclick:()=>todoOpenList(list)},
     h('div', {class:'todo-card-name'}, list.name),
-    h('div', {class:'todo-card-count'}, String(open.length), h('small', {}, '件')),
+    h('div', {class:'todo-card-count'}, rollNumber(h('span'), 'todo:' + list.id, open.length), h('small', {}, '件')),
     h('div', {class:'todo-card-hint'}, hint || ' '));
 }
 // 家事のカードの一言：「期限切れ1件・今日2件」。どちらもなければ次の予定

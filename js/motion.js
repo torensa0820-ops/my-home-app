@@ -71,3 +71,18 @@ function createTitleSwap(el){
   }
   return {set, track, slide, current:()=>current};
 }
+
+// ---------- 数字の入れ替え ----------
+// 増えたら古い数字が上へ抜けて新しい数字が下から上がり、減ったら逆向きに動く。0 になったときは赤く光らせて少し大きくする
+// 一覧は描き直すたびに数字の要素を作り直すので、key ごとに前に出した数字を覚えておき、変わったものだけ動かす
+const shownNumbers = new Map();
+// el に value を入れて返す（key の前の数字と違えば動かす）
+function rollNumber(el, key, value){
+  const was = shownNumbers.get(key);
+  shownNumbers.set(key, value);
+  if(was === undefined || was === value || !motionMs()){ el.textContent = String(value); return el; }
+  el.classList.add('roll', value > was ? 'roll-up' : 'roll-down');
+  if(value === 0) el.classList.add('roll-zero');
+  el.replaceChildren(h('span', {class:'roll-old', 'aria-hidden':'true'}, String(was)), h('span', {}, String(value)));
+  return el;
+}

@@ -403,3 +403,17 @@ form.todo-add{display:flex;gap:8px;background:none;border:none;border-radius:0;p
 .swap > *{grid-area:1/1;min-width:0;}
 .swap:not(.swapping) > :last-child{display:none;}
 header{overflow:hidden;} /* 横にずれた題名で画面が横にスクロールしないようにする */
+/* 数字の入れ替え（js/motion.js の rollNumber）。古い数字と新しい数字を同じ場所に重ね、縦に入れ替える */
+.roll{display:inline-grid;justify-items:center;overflow:hidden;vertical-align:bottom;}
+.roll > *{grid-area:1/1;}
+.roll-up .roll-old{animation:roll-out-up calc(var(--motion-ms) * .8) var(--motion-ease) forwards;}
+.roll-up > :last-child{animation:roll-in-up calc(var(--motion-ms) * .8) var(--motion-ease);}
+.roll-down .roll-old{animation:roll-out-down calc(var(--motion-ms) * .8) var(--motion-ease) forwards;}
+.roll-down > :last-child{animation:roll-in-down calc(var(--motion-ms) * .8) var(--motion-ease);}
+@keyframes roll-out-up{to{transform:translateY(-100%);opacity:0;}}
+@keyframes roll-in-up{from{transform:translateY(100%);opacity:0;}}
+@keyframes roll-out-down{to{transform:translateY(100%);opacity:0;}}
+@keyframes roll-in-down{from{transform:translateY(-100%);opacity:0;}}
+/* 0 になったら赤く光らせて少し大きくし、元に戻す */
+.roll-zero{animation:roll-zero .6s ease-out;}
+@keyframes roll-zero{30%{scale:1.25;color:var(--danger);}}
