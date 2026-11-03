@@ -86,3 +86,54 @@ function rollNumber(el, key, value){
   el.replaceChildren(h('span', {class:'roll-old', 'aria-hidden':'true'}, String(was)), h('span', {}, String(value)));
   return el;
 }
+
+// ---------- 中身の入れ替え（シートの中で奥へ進む・戻る） ----------
+// 今の中身を同じ場所に重ねた写し（ghost）へ移し、update で新しい中身を描いてから、js/nav-stack.js と同じ向きで動かす
+// dir：1＝奥へ（新しい中身が右から入り、今の中身は少し左へずれる）、-1＝戻る（今の中身が右へ出て、新しい中身が少し左から寄ってくる）、0＝動かさない
+// items：[{el, fade}]。el は position の付いた要素の中に置くこと（写しはそこを基準に重ねる）。fade なら動きに合わせて薄くする（題名など、重なると読みにくいもの）
+const CONTENT_BACK_SHIFT = 0.3; // 後ろの中身を左にずらす割合（中身の幅に対して）
+const CONTENT_OUT = 'translateX(calc(100% + 24px))'; // 右へ出しきった位置（外側の余白の分も出す）
+let contentSwapDone = null; // 動いている途中の入れ替えを、最後の位置まで送って終わらせる関数
+function swapContent(dir, items, update){
+  if(contentSwapDone) contentSwapDone();
+  const ms = dir ? motionMs() : 0;
+  if(!ms){ update(); return; }
+  const pairs = items.map(({el, fade})=>{
+    const g = el.cloneNode(false);
+    g.removeAttribute('id');
+    g.classList.add('swap-ghost');
+    Object.assign(g.style, {left:el.offsetLeft + 'px', top:el.offsetTop + 'px', width:el.offsetWidth + 'px', height:el.offsetHeight + 'px'});
+    const scroll = el.scrollTop;
+    g.append(...el.childNodes);
+    el.after(g);
+    g.scrollTop = scroll;
+    // 前面（右へ出入りする方）と後ろ（少し左にずれる方）
+    return dir > 0 ? {el, front:el, back:g, ghost:g, fade} : {el, front:g, back:el, ghost:g, fade};
+  });
+  update();
+  const back = `translateX(${-CONTENT_BACK_SHIFT * 100}%)`;
+  const place = (n, x, o, fade)=>{ n.style.transform = x; if(fade) n.style.opacity = String(o); };
+  pairs.forEach(({front, back:b, fade})=>{
+    front.style.zIndex = '2';
+    b.style.zIndex = '1';
+    [front, b].forEach(n=>{ n.style.transition = 'none'; });
+    place(front, dir > 0 ? CONTENT_OUT : 'none', dir > 0 ? 0 : 1, fade);
+    place(b, dir > 0 ? 'none' : back, dir > 0 ? 1 : 0, fade);
+  });
+  void document.body.offsetWidth; // 置いた位置を確定させてから動かす
+  pairs.forEach(({front, back:b, fade})=>{
+    [front, b].forEach(n=>{ n.style.transition = motionTransition(ms); });
+    place(front, dir > 0 ? 'none' : CONTENT_OUT, dir > 0 ? 1 : 0, fade);
+    place(b, dir > 0 ? back : 'none', dir > 0 ? 0 : 1, fade);
+  });
+  const done = ()=>{
+    clearTimeout(timer);
+    contentSwapDone = null;
+    pairs.forEach(({el, ghost})=>{
+      ghost.remove();
+      el.style.transition = el.style.transform = el.style.opacity = el.style.zIndex = '';
+    });
+  };
+  const timer = setTimeout(done, ms);
+  contentSwapDone = done;
+}

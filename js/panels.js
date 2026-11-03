@@ -119,15 +119,23 @@ function closeSheet(){
   tmBackdrop.classList.remove('show');
 }
 // 画面は「一覧 → タグ詳細 → 付与する行の選択」のように積み重ね、「戻る」で1つ前に戻る
-function tmShow(view, ...args){ tm.stack.push([view, args]); tmRender(); }
-function tmRender(){
-  const [view, args] = tm.stack[tm.stack.length - 1];
-  tmBody.innerHTML = '';
-  tmFoot.innerHTML = '';
-  tmBody.scrollTop = 0;
-  tmBack.style.visibility = tm.stack.length > 1 ? 'visible' : 'hidden';
-  view(...args);
+// 奥へ進むときは中身と題名が右から入り、戻るときは右へ出る（js/motion.js の swapContent）
+function tmShow(view, ...args){
+  const deeper = tm.stack.length > 0; // シートを開いた最初の画面は動かさない
+  tm.stack.push([view, args]);
+  tmRender(deeper ? 1 : 0);
 }
-tmBack.addEventListener('click', ()=>{ if(!tm.busy && tm.stack.length > 1){ tm.stack.pop(); tmRender(); } });
+// dir：1＝奥へ、-1＝戻る、0（省略）＝動かさずに描き直す
+function tmRender(dir = 0){
+  const [view, args] = tm.stack[tm.stack.length - 1];
+  swapContent(dir, [{el:tmBody}, {el:tmTitle, fade:true}], ()=>{
+    tmBody.innerHTML = '';
+    tmFoot.innerHTML = '';
+    tmBody.scrollTop = 0;
+    tmBack.style.visibility = tm.stack.length > 1 ? 'visible' : 'hidden';
+    view(...args);
+  });
+}
+tmBack.addEventListener('click', ()=>{ if(!tm.busy && tm.stack.length > 1){ tm.stack.pop(); tmRender(-1); } });
 document.getElementById('tm-close').addEventListener('click', closeSheet);
 tmBackdrop.addEventListener('click', e=>{ if(e.target === tmBackdrop) closeSheet(); });

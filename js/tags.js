@@ -315,7 +315,7 @@ function tmDetailView(tag){
     if(tmTagCounts()[newName] && !confirm(`「${newName}」は既にあります。「${tag}」を「${newName}」に統合しますか？`)) return;
     renameBtn.disabled = true;
     tagOp({action:'rename', tag, newName})
-      .then(res=>{ toast(`${res.count}件のタグ名を変更しました`); tm.stack.pop(); tmShow(tmDetailView, newName); })
+      .then(res=>{ toast(`${res.count}件のタグ名を変更しました`); tm.stack[tm.stack.length - 1] = [tmDetailView, [newName]]; tmRender(); })
       .catch(err=>{ toast(errMsg(err)); renameBtn.disabled = false; });
   }}, '変更');
   const deleteBtn = makeHoldButton('長押しでタグを削除', reset=>{

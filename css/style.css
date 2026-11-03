@@ -417,3 +417,7 @@ header{overflow:hidden;} /* 横にずれた題名で画面が横にスクロー�
 /* 0 になったら赤く光らせて少し大きくし、元に戻す */
 .roll-zero{animation:roll-zero .6s ease-out;}
 @keyframes roll-zero{30%{scale:1.25;color:var(--danger);}}
+/* 中身の入れ替え（js/motion.js の swapContent）。今の中身の写しを同じ場所に重ねて動かす */
+.swap-ghost{position:absolute !important;margin:0 !important;pointer-events:none;}
+#tm-backdrop > .sheet{overflow:hidden;} /* 横に出入りする中身をシートの外に出さない */
+.tm-body{background:var(--surface);} /* 前面の中身で後ろの中身を隠す */
