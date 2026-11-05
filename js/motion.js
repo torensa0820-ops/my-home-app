@@ -157,12 +157,20 @@ function slideContent(dir, getEl, update, from = 0){
   const g = old.cloneNode(true);
   g.removeAttribute('id');
   g.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+  // 入力中の値は cloneNode で写らないので写す（写しが入力前の値で見えないように）
+  const fields = old.querySelectorAll('input, textarea, select');
+  g.querySelectorAll('input, textarea, select').forEach((n, i)=>{ n.value = fields[i].value; });
   g.classList.add('swap-ghost');
   g.setAttribute('aria-hidden', 'true');
-  Object.assign(g.style, {left:old.offsetLeft + 'px', top:old.offsetTop + 'px', width:old.offsetWidth + 'px', height:old.offsetHeight + 'px'});
+  const top = old.offsetTop;
+  Object.assign(g.style, {left:old.offsetLeft + 'px', top:top + 'px', width:old.offsetWidth + 'px', height:old.offsetHeight + 'px'});
   const w = old.offsetWidth + 24; // 隣のページとの間（外側の余白の分も空ける）
+  const scroller = old.offsetParent;
+  const scroll = scroller ? scroller.scrollTop : 0;
   update();
   const el = getEl();
+  // update でスクロール位置が変わっても（新しいページを一番上から見せるなど）、写しは画面の同じ位置に残す
+  if(scroller) g.style.top = top + scroller.scrollTop - scroll + 'px';
   el.after(g);
   [g, el].forEach(n=>{ n.style.transition = 'none'; });
   g.style.transform = `translateX(${from}px)`;

@@ -322,6 +322,13 @@ body[data-compose="form"] #stock-panel .card-info{cursor:copy;}
 .capture-summary{margin-top:20px;}
 /* クーポンの候補（内容と期間をその場で直す） */
 .coupon-card.candidate{border-style:dashed;}
+/* 一覧の下の「候補があります」の案内（候補は右のページにある） */
+.coupon-hint{margin:4px 0 0;padding:12px 14px;border-radius:12px;background:var(--coupon-dim);color:var(--coupon);font-size:13px;font-weight:700;line-height:1.5;}
+/* ページの点（iPhone のホーム画面のように、タブバーのすぐ上の中央に置く）。今のページの点を濃くする */
+.page-dots{position:absolute;left:50%;bottom:calc(var(--tabbar-h) + 10px);transform:translateX(-50%);z-index:1;display:flex;gap:8px;padding:6px 10px;border-radius:999px;background:var(--tabbar-bg);pointer-events:none;}
+.page-dots[hidden]{display:none;}
+.page-dots span{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.45;transition:background var(--motion-ms) var(--motion-ease),opacity var(--motion-ms) var(--motion-ease);}
+.page-dots span.on{background:var(--coupon);opacity:1;}
 .coupon-card.candidate .coupon-badge{background:var(--coupon-dim);color:var(--coupon);}
 .coupon-field{margin:8px 0 6px;}
 .coupon-dates{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}

@@ -1,7 +1,7 @@
 // クーポン：レシートに付いていたクーポン・割引券（夜に Claude が「クーポン」シートに書いたもの）
 // クーポンタブに期限の近い順の一覧を出し、「使った」「不要」を選ぶ。期限の近いものを目立たせる
 // status=候補：レシートとして撮った写真の中で Claude が見つけたクーポン・キャンペーン・告知など。
-//   一覧の下の「レシートから見つかった候補」で内容を直して「リマインドする」（通常のクーポンになり、翌朝通知される）か「不要」を選ぶ
+//   一覧の右のページ「レシートから見つかった候補」で内容を直して「リマインドする」（通常のクーポンになり、翌朝通知される）か「不要」を選ぶ
 // repeat（monthly:9,19,29 ／ weekly:0,6）があるクーポンはくり返しの日の前日・当日に通知される。一覧では期間の代わりに次の日を出す
 
 let couponList = []; // 未使用（status が空）と候補（status=候補）の両方
@@ -75,30 +75,56 @@ function sortedCoupons(candidate = false){
 }
 
 // 一覧と候補は別の箱に描く。1件処理しても、ほかの候補に入力中の内容が消えないよう、候補の箱は描き直さない
+// 候補は一覧の右のページに出す。候補があるときだけ、左右のスワイプでページをめくれる（js/category-swipe.js）
+// 今どちらのページかはタブバーの上の点（#coupon-dots）で示す。候補がないときは点を出さない
 const couponBox = h('div');
 const candidateBox = h('div');
 const candidateHead = h('h3');
+const couponPageEl = h('div', {class:'coupon-page'}); // 今のページの箱だけを入れる（スワイプで横に送る要素）
+let couponPage = 0; // 0＝クーポンの一覧、1＝候補
 
 function renderCoupons(){
-  document.getElementById('coupons').replaceChildren(couponBox, candidateBox);
+  document.getElementById('coupons').replaceChildren(couponPageEl);
   drawCoupons();
   candidateBox.replaceChildren();
   const candidates = sortedCoupons(true);
-  if(!candidates.length) return;
-  candidateBox.append(h('div', {class:'tm-section'},
-    candidateHead,
-    h('p', {class:'tm-note tm-lead'}, '写真に写っていたクーポン・キャンペーン・お店の告知です。内容と期間を直して「リマインドする」と、翌朝から通知します。'),
-    candidates.map(couponCandidateCard)));
-  updateCandidateHead();
+  if(candidates.length){
+    candidateBox.append(h('div', {class:'tm-section'},
+      candidateHead,
+      h('p', {class:'tm-note tm-lead'}, '写真に写っていたクーポン・キャンペーン・お店の告知です。内容と期間を直して「リマインドする」と、翌朝から通知します。'),
+      candidates.map(couponCandidateCard)));
+    updateCandidateHead();
+  } else couponPage = 0; // 候補がなくなっていれば一覧に戻す（候補が残っていれば、読み込み直しても今のページのまま）
+  showCouponPage();
 }
+// 今のページの箱を入れ、点を合わせる
+function showCouponPage(){
+  couponPageEl.replaceChildren(couponPage ? candidateBox : couponBox);
+  const dots = document.getElementById('coupon-dots');
+  dots.hidden = !sortedCoupons(true).length;
+  [...dots.children].forEach((d, i)=>d.classList.toggle('on', i === couponPage));
+}
+// dir（1＝候補へ、-1＝一覧へ）のページにする。めくった先は一番上から見せる
+function setCouponPage(dir){
+  couponPage = dir > 0 ? 1 : 0;
+  showCouponPage();
+  couponPageEl.closest('.tab-scroll').scrollTop = 0;
+}
+createCategorySwipe(document.getElementById('coupon-panel'), {
+  canStart:()=>sortedCoupons(true).length > 0,
+  target:()=>couponPageEl,
+  canStep:dir=>dir > 0 ? couponPage === 0 : couponPage === 1,
+  step:setCouponPage,
+});
+
 function drawCoupons(){
   const list = sortedCoupons();
+  const n = sortedCoupons(true).length;
   couponBox.replaceChildren();
-  if(list.length){
-    couponBox.append(h('div', {class:'tm-section'}, h('h3', {}, `クーポン（${list.length}枚）`), list.map(couponCard)));
-  } else if(!sortedCoupons(true).length){
-    couponBox.append(h('p', {class:'empty-msg'}, '使えるクーポンはありません'));
-  }
+  if(list.length) couponBox.append(h('div', {class:'tm-section'}, h('h3', {}, `クーポン（${list.length}枚）`), list.map(couponCard)));
+  else couponBox.append(h('p', {class:'empty-msg'}, '使えるクーポンはありません'));
+  // 候補は右のページにあるので、あることを一覧の下で知らせる
+  if(n) couponBox.append(h('p', {class:'coupon-hint'}, `レシートから見つかった候補が${n}件あります。左へスワイプすると確認できます →`));
 }
 // 候補の見出しの件数を直す（候補がなくなったら見出しごと消す）
 function updateCandidateHead(){
@@ -198,11 +224,14 @@ function couponDone(c, action, buttons, values = {}){
       couponList = action === 'remind'
         ? couponList.map(x=>x.id === c.id ? {...x, ...values, status:'', notifiedOn:''} : x)
         : couponList.filter(x=>x.id !== c.id);
+      drawCoupons();
       if(String(c.status || '') === COUPON_CANDIDATE){
+        // 最後の候補なら一覧のページへ戻す（処理した候補が見えたまま、ページごと右へ出ていく）
+        if(!sortedCoupons(true).length && couponPage) slideContent(-1, ()=>couponPageEl, ()=>setCouponPage(-1));
+        else showCouponPage();
         buttons[0].closest('.coupon-card').remove();
         updateCandidateHead();
       }
-      drawCoupons();
       couponBusy = false;
       toast(action === 'dismiss' && parseRepeat(c.repeat) ? 'もう通知しないようにしました' : COUPON_DONE_MSG[action]);
     })
