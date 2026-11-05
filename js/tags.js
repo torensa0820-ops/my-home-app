@@ -219,6 +219,15 @@ function createFilterBar(barId, onChange, opts = {}){
   function draw(){ drawTabs(); drawBar(); drawPanel(); }
   // カテゴリの条件に合うか（カテゴリを選んでいなければすべて合う）
   const matchesCategory = category=>!selectedCats.size || selectedCats.has(String(category ?? '').trim());
+  // タブの並び（すべて・各カテゴリ）で dir（1＝右、-1＝左）の隣のタブの位置。なければ -1
+  // カテゴリを複数選んでいるときは、どちらへ動かしても「すべて」にする
+  function stepIndex(dir){
+    if(!categories.length) return -1;
+    if(selectedCats.size > 1) return 0;
+    const i = selectedCats.size ? categories.findIndex(c=>selectedCats.has(c.name)) + 1 : 0;
+    const j = i + dir;
+    return j >= 0 && j <= categories.length ? j : -1;
+  }
 
   return {
     // タグ一覧を描き直す。名称変更・削除で無くなったタグは選択から外し、絞り込みを更新する
@@ -244,6 +253,15 @@ function createFilterBar(barId, onChange, opts = {}){
     active(){ return selected.size > 0 || selectedCats.size > 0; },
     // 選んでいるカテゴリ（「すべて」なら空）
     categories(){ return [...selectedCats]; },
+    // 左右のスワイプでタブを1つずらす（js/category-swipe.js）
+    canStepCategory(dir){ return stepIndex(dir) >= 0; },
+    stepCategory(dir){
+      const j = stepIndex(dir);
+      if(j < 0) return;
+      selectedCats.clear();
+      if(j) selectedCats.add(categories[j - 1].name);
+      changed();
+    },
     matchesCategory,
     // 絞り込みの条件に合うか
     matches(tagStr, category){

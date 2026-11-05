@@ -45,7 +45,7 @@ main{flex:1;position:relative;overflow:hidden;}
 .tab-panel{display:none;position:absolute;inset:0;overflow:hidden;background:var(--bg);}
 .tab-panel.active,.tab-panel.tab-leaving{display:block;}
 .tab-panel.tab-leaving{pointer-events:none;}
-.tab-scroll{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:16px 16px calc(var(--tabbar-h) + 92px + var(--compose-pad));}
+.tab-scroll{position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:16px 16px calc(var(--tabbar-h) + 92px + var(--compose-pad));}
 
 .card{background:var(--surface);border-radius:18px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .card-info{min-width:0;flex:1;cursor:pointer;}
@@ -400,7 +400,7 @@ form.todo-add{display:flex;gap:8px;background:none;border:none;border-radius:0;p
 
 /* 画面を積む部品（js/nav-stack.js）。やることタブは .tab-scroll の代わりに、重ねた画面がそれぞれスクロールする */
 .nav-stack{position:absolute;inset:0;overflow:hidden;}
-.nav-page{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--bg);padding:16px 16px calc(var(--tabbar-h) + 80px);will-change:transform;}
+.nav-page{position:absolute;inset:0;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;background:var(--bg);padding:16px 16px calc(var(--tabbar-h) + 80px);will-change:transform;}
 .nav-front{box-shadow:-10px 0 24px rgba(0,0,0,.35);}
 .nav-shade{position:absolute;inset:0;background:rgba(0,0,0,.35);pointer-events:none;}
 /* 画面を動かしている間、後ろの画面は押せないようにする */
@@ -426,5 +426,6 @@ header{overflow:hidden;} /* 横にずれた題名で画面が横にスクロー�
 @keyframes roll-zero{30%{scale:1.25;color:var(--danger);}}
 /* 中身の入れ替え（js/motion.js の swapContent）。今の中身の写しを同じ場所に重ねて動かす */
 .swap-ghost{position:absolute !important;margin:0 !important;pointer-events:none;}
+/* カテゴリの切り替えで横に送る中身（js/motion.js の slideContent）は、.tab-scroll・.nav-page の overflow-x:hidden で画面の外を隠す */
 #tm-backdrop > .sheet{overflow:hidden;} /* 横に出入りする中身をシートの外に出さない */
 .tm-body{background:var(--surface);} /* 前面の中身で後ろの中身を隠す */

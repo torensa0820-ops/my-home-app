@@ -137,3 +137,46 @@ function swapContent(dir, items, update){
   const timer = setTimeout(done, ms);
   contentSwapDone = done;
 }
+
+// ---------- 中身の横送り（カテゴリの切り替え） ----------
+// 左右に並んだページをめくるように、今の中身を dir と反対側へ出し、新しい中身を dir の側（1＝右、-1＝左）から入れる
+// 今の中身は写し（ghost）にして重ね、update で描き直した新しい中身と並べて動かす
+// getEl()：動かす要素（update の前と後で呼ぶので、描き直しで要素が作り直されてもよい）。position の付いた要素の中に置くこと
+// from：今の中身が横にずれている位置（px。スワイプで指についてずれた分）
+let contentSlideDone = null; // 動いている途中の横送りを、最後の位置まで送って終わらせる関数
+function slideContent(dir, getEl, update, from = 0){
+  if(contentSlideDone) contentSlideDone();
+  const ms = motionMs();
+  const old = getEl();
+  if(!ms || !old){
+    update();
+    const el = getEl();
+    if(el) el.style.transition = el.style.transform = '';
+    return;
+  }
+  const g = old.cloneNode(true);
+  g.removeAttribute('id');
+  g.querySelectorAll('[id]').forEach(n=>n.removeAttribute('id'));
+  g.classList.add('swap-ghost');
+  g.setAttribute('aria-hidden', 'true');
+  Object.assign(g.style, {left:old.offsetLeft + 'px', top:old.offsetTop + 'px', width:old.offsetWidth + 'px', height:old.offsetHeight + 'px'});
+  const w = old.offsetWidth + 24; // 隣のページとの間（外側の余白の分も空ける）
+  update();
+  const el = getEl();
+  el.after(g);
+  [g, el].forEach(n=>{ n.style.transition = 'none'; });
+  g.style.transform = `translateX(${from}px)`;
+  el.style.transform = `translateX(${from + dir * w}px)`;
+  void el.offsetWidth; // 置いた位置を確定させてから動かす
+  [g, el].forEach(n=>{ n.style.transition = motionTransition(ms); });
+  g.style.transform = `translateX(${-dir * w}px)`;
+  el.style.transform = 'translateX(0)';
+  const done = ()=>{
+    clearTimeout(timer);
+    contentSlideDone = null;
+    g.remove();
+    el.style.transition = el.style.transform = '';
+  };
+  const timer = setTimeout(done, ms);
+  contentSlideDone = done;
+}

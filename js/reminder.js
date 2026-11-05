@@ -196,11 +196,29 @@ function todoGridView(){
     h('div', {class:'section-title'}, 'リスト'),
     h('button', {type:'button', class:'edit-toggle', onclick:()=>openSheet('todo', tmTodoListsView)}, 'リストの管理'));
   const lists = todoActiveLists();
-  const out = [todoCategoryTabs(cur), head];
-  if(!lists.length) out.push(h('p', {class:'empty-msg'}, cur ? `「${cur.name}」にリストはまだありません。右下の＋から作れます` : 'リストがありません（GAS の setupReminders を実行してください）'));
-  else out.push(h('div', {class:'todo-grid'}, lists.map(todoListCard)));
-  return out;
+  // タブの下は、左右のスワイプでカテゴリを切り替えるときに横に送るので、1つにまとめる
+  const body = h('div', {class:'todo-cat-body'}, head);
+  if(!lists.length) body.append(h('p', {class:'empty-msg'}, cur ? `「${cur.name}」にリストはまだありません。右下の＋から作れます` : 'リストがありません（GAS の setupReminders を実行してください）'));
+  else body.append(h('div', {class:'todo-grid'}, lists.map(todoListCard)));
+  return [todoCategoryTabs(cur), body];
 }
+// 左右のスワイプで、選んでいるカテゴリの隣（dir：1＝右、-1＝左）のカテゴリにする。リストを開いている間は、左端からのスワイプで戻る（js/nav-stack.js）
+function todoStepTarget(dir){
+  const cs = todoCategories();
+  const i = cs.indexOf(todoCurrentCategory());
+  return i < 0 ? null : cs[i + dir] || null;
+}
+createCategorySwipe(document.getElementById('todo-view'), {
+  canStart:()=>todo.loaded && !todoStack.busy() && todoStack.depth() === 1,
+  target:()=>todoGridPage.querySelector('.todo-cat-body'),
+  canStep:dir=>!!todoStepTarget(dir),
+  step:dir=>{
+    const c = todoStepTarget(dir);
+    if(!c) return;
+    todoSelectCategory(c);
+    renderTodo();
+  },
+});
 // カテゴリのタブ（在庫のカテゴリのタブと同じ見た目）。数字はまだ終わっていない件数。右端の「管理」でカテゴリの管理を開く
 function todoCategoryTabs(cur){
   const cs = todoCategories();

@@ -251,6 +251,14 @@ const stockFilter = createFilterBar('stock-filter', ()=>{
 
 stockFilter.render([]);
 
+// 左右のスワイプでカテゴリのタブを切り替える（タブの下の一覧だけを横に送る）
+createCategorySwipe(document.getElementById('stock-panel'), {
+  canStart:()=>true,
+  target:()=>document.getElementById('stock-list'),
+  canStep:dir=>stockFilter.canStepCategory(dir),
+  step:dir=>stockFilter.stepCategory(dir),
+});
+
 const stockTagPicker = createTagPicker('s-tags-chips', 's-tags-input');
 const syncStockFormTags = stockTagSync(stockTagPicker, document.getElementById('s-category-select'), document.getElementById('s-category-input'));
 
