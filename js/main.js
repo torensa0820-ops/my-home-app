@@ -149,19 +149,12 @@ function springThumb(to, onMove = null, onSettle = null){
 renderThumb();
 
 // ---------- 触覚 ----------
-// タブを切り替えたときに、軽く振動させる
-// iPhone の Safari には navigator.vibrate がないので、iOS 18 からのスイッチ（<input type="checkbox" switch>）を
-// 切り替えたときの振動を借りる（見えないラベルをその場で作って click する。公式の機能ではないので、効かない版もある）
-// iPhone のスイッチは指を離したときなど、ユーザーの操作の中でしか振動しないので、指を動かしている途中には振動させない
-const HAPTIC_WHILE_MOVING = typeof navigator.vibrate === 'function';
+// Android：navigator.vibrate で、押したりドラッグしたりして選ぶタブが変わるたびに軽く振動させる
+// iPhone：navigator.vibrate がなく、iOS 26.5 からはスクリプトでスイッチ（<input type="checkbox" switch>）を押しても振動しない
+//   指でスイッチを直接押したときだけ振動するので、バーの上に見えないスイッチ（index.html の .tab-haptic）を重ねておく
+//   バーをタップすると振動する。ドラッグしたときは click にならないので振動しない
 function haptic(){
-  if(HAPTIC_WHILE_MOVING){ navigator.vibrate(8); return; }
-  const input = h('input', {type:'checkbox'});
-  input.setAttribute('switch', '');
-  const label = h('label', {'aria-hidden':'true', style:'display:none'}, input);
-  document.head.append(label);
-  label.click();
-  label.remove();
+  if(navigator.vibrate) navigator.vibrate(8);
 }
 
 // ボタンとハイライトを tab の色にする
@@ -174,12 +167,10 @@ function leaveTab(){
   if(stockEditMode) setStockEditMode(false);
   closeComposeNow();
 }
-// タブバーを指で押したあと（切り替えは指を離したときにするので、そのあとの click は押したことにしない）
-// click はキーボードで押したときのため
-let tabPressed = false;
+// 指やマウスはバーに重ねたスイッチ（.tab-haptic）に当たるので、ボタンの click はキーボードで押したときだけ
+// （指で押したときの切り替えは、下の「タブバーを指で押す・ドラッグする」で指を離したときにする）
 tabButtons.forEach(btn=>{
   btn.addEventListener('click', ()=>{
-    if(tabPressed){ tabPressed = false; return; }
     const from = activeTab(), tab = btn.dataset.tab;
     const again = tab === from;
     leaveTab();
@@ -240,14 +231,14 @@ function chaseFinger(d, raw){
   if(near !== d.near){
     d.near = near;
     tabbar.dataset.active = TAB_ORDER[near];
-    if(HAPTIC_WHILE_MOVING) haptic();
+    haptic();
   }
 }
 
+// setPointerCapture はしない（すると click がスイッチに届かず、iPhone で振動しない）
+// 指は押した要素に捕まえられたままなので、バーの外に出ても pointermove は届く。マウスでも追えるよう window で受ける
 tabbar.addEventListener('pointerdown', e=>{
   if(!e.isPrimary) return;
-  tabPressed = true;
-  try { tabbar.setPointerCapture(e.pointerId); } catch(_){} // 指がバーの外に出ても追い続ける
   if(tabSliding) tabSliding();
   leaveTab();
   const start = TAB_ORDER.indexOf(activeTab());
@@ -256,7 +247,7 @@ tabbar.addEventListener('pointerdown', e=>{
   holdThumb(true);
   chaseFinger(tabDrag, fingerTab(e.clientX));
 });
-tabbar.addEventListener('pointermove', e=>{
+window.addEventListener('pointermove', e=>{
   const d = tabDrag;
   if(!d || e.pointerId !== d.id) return;
   if(Math.abs(e.clientX - d.x0) >= TAB_DRAG_MOVED) d.moved = true;
@@ -278,7 +269,6 @@ function endTabDrag(e, cancel){
   if(cancel) to = d.start;
   else if(d.moved && Math.abs(v) >= TAB_DRAG_FLICK) to = v > 0 ? Math.ceil(d.p) : Math.floor(d.p);
   const again = !cancel && !d.moved && to === d.start; // 選んでいるタブを押した
-  if(to !== d.start) haptic();
   markTab(TAB_ORDER[to]);
   TAB_ORDER.forEach((tab, i)=>tabPanel(tab).classList.toggle('active', i === to));
   // 止まるまで、パネルと題名は行き先との間だけを動かす。止まったら（ほかの切り替えが始まったときも）transform を外す
