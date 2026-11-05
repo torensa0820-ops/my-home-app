@@ -167,37 +167,54 @@ function leaveTab(){
   if(stockEditMode) setStockEditMode(false);
   closeComposeNow();
 }
+// tab を選ぶ（パネルと題名は今のタブから横にスライドさせる。選んでいるタブなら、やることタブは開いているリストを閉じる）
+function selectTab(tab){
+  const from = activeTab();
+  const again = tab === from;
+  leaveTab();
+  if(!again){
+    const dir = TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(from) ? 1 : -1;
+    const oldHead = pageHead.current(), newHead = tabHeadText(tab);
+    markTab(tab);
+    slideTabPanels(tabPanel(from), tabPanel(tab), dir);
+    // 題名も同じ向きに動かす（前面＝右側の題名）
+    if(dir > 0) pageHead.slide(newHead, oldHead, 1, 0);
+    else pageHead.slide(oldHead, newHead, 0, 1);
+  }
+  springThumb(TAB_ORDER.indexOf(tab));
+  if(tab === 'todo') todoTabShown(again);
+}
 // 指やマウスはバーに重ねたスイッチ（.tab-haptic）に当たるので、ボタンの click はキーボードで押したときだけ
-// （指で押したときの切り替えは、下の「タブバーを指で押す・ドラッグする」で指を離したときにする）
-tabButtons.forEach(btn=>{
-  btn.addEventListener('click', ()=>{
-    const from = activeTab(), tab = btn.dataset.tab;
-    const again = tab === from;
-    leaveTab();
-    if(!again){
-      const dir = TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(from) ? 1 : -1;
-      const oldHead = pageHead.current(), newHead = tabHeadText(tab);
-      markTab(tab);
-      slideTabPanels(tabPanel(from), tabPanel(tab), dir);
-      springThumb(TAB_ORDER.indexOf(tab));
-      // 題名も同じ向きに動かす（前面＝右側の題名）
-      if(dir > 0) pageHead.slide(newHead, oldHead, 1, 0);
-      else pageHead.slide(oldHead, newHead, 0, 1);
-    }
-    if(tab === 'todo') todoTabShown(again);
-  });
-});
+// （指で押したときは、下の「タブバーを指で押す・ドラッグする」で切り替える）
+tabButtons.forEach(btn=>btn.addEventListener('click', ()=>selectTab(btn.dataset.tab)));
 
 // ---------- タブバーを指で押す・ドラッグする ----------
-// バーのどこを押しても、ハイライトが指の位置へ向かい、指を動かせばついてくる。タブのパネルと題名もハイライトと一緒に横に動く
+// バーのどこを押しても、ハイライトが指の位置へ向かい、指を動かせばついてくる
+// ドラッグすると、タブのパネルと題名もハイライトと一緒に横に動く
 // （ハイライトが隣のタブまで動くと、パネルは画面1枚分動く。タブの上で少し引っかかるのも、パネルと題名で同じ）
 // 指を離したら一番近いタブへばねで寄せて切り替える。はじいたときは、はじいた向きのタブに寄せる
+// タップ（動かさずに離した）のときは、ハイライトだけ先に寄せ、切り替えはスイッチの change まで待つ
+// iPhone の Safari は、押している間や指を離したときに新しく見えるもの（隣のパネル、描き直した一覧）が出ると、
+// そのタップを click にしない。するとスイッチが切り替わらず振動しないので、それまでは画面を変えない
 const TAB_DRAG_MOVED = 6;    // この距離横に動いたらドラッグにする（動かさずに離したら、そのタブを押したことにする）
 const TAB_DRAG_FLICK = 0.4;  // 指を離したとき、この速さ（px/ms）以上ではじいていれば、その向きのタブに寄せる
 const TAB_DRAG_RUBBER = 0.2; // 端のタブより先へ動かしたときに、ハイライトが指についてくる割合
 const TAB_DRAG_RUBBER_MAX = 0.12; // 端のタブより先へ出す上限（タブの間隔に対して）
 const TAB_CONTENT_DEAD = 0.1; // ハイライトがタブからこの分ずれるまでは、パネルと題名を動かさない（タブの端を押しただけで画面がずれないように）
+const TAB_TAP_WAIT = 400;    // タップのあと、スイッチの change が来なくても切り替えるまでの時間（ms）
+const tabHapticInput = tabbar.querySelector('.tab-haptic input');
 let tabDrag = null; // {id, x0, x, t, v, moved, start, near, p, heads}
+let tabTap = null;  // 切り替えを待っているタップ {tab, timer}
+
+// 待っているタップのタブに切り替える
+function commitTabTap(){
+  const t = tabTap;
+  if(!t) return;
+  tabTap = null;
+  clearTimeout(t.timer);
+  selectTab(t.tab);
+}
+tabHapticInput.addEventListener('change', commitTabTap);
 
 // 指の x 座標を、タブの番号の単位にする（0＝左端のタブの真ん中）
 function fingerTab(x){
@@ -222,11 +239,12 @@ function moveTabContent(heads, pos, lo = 0, hi = TAB_ORDER.length - 1){
   placeTabPanels(p);
   pageHead.track(heads[i + 1], heads[i], i + 1 - p);
 }
-// ハイライトに指の位置 raw（タブの番号の単位）を追わせる
+// ハイライトに指の位置 raw（タブの番号の単位）を追わせる（ドラッグになっていれば、パネルと題名も）
 function chaseFinger(d, raw){
   d.p = Math.min(TAB_ORDER.length - 1, Math.max(0, raw));
   const over = raw - d.p; // 端のタブより先へ動かした分
-  chaseThumb(tabSticky(d.p) + Math.sign(over) * Math.min(TAB_DRAG_RUBBER_MAX, Math.abs(over) * TAB_DRAG_RUBBER), pos=>moveTabContent(d.heads, pos));
+  const pos = tabSticky(d.p) + Math.sign(over) * Math.min(TAB_DRAG_RUBBER_MAX, Math.abs(over) * TAB_DRAG_RUBBER);
+  chaseThumb(pos, d.moved ? p=>moveTabContent(d.heads, p) : null);
   const near = Math.round(d.p);
   if(near !== d.near){
     d.near = near;
@@ -239,18 +257,22 @@ function chaseFinger(d, raw){
 // 指は押した要素に捕まえられたままなので、バーの外に出ても pointermove は届く。マウスでも追えるよう window で受ける
 tabbar.addEventListener('pointerdown', e=>{
   if(!e.isPrimary) return;
+  commitTabTap();
   if(tabSliding) tabSliding();
-  leaveTab();
   const start = TAB_ORDER.indexOf(activeTab());
-  const heads = TAB_ORDER.map((tab, i)=>i === start ? pageHead.current() : tabHeadText(tab));
-  tabDrag = {id:e.pointerId, x0:e.clientX, x:e.clientX, t:e.timeStamp, v:0, moved:false, start, near:start, heads};
+  tabDrag = {id:e.pointerId, x0:e.clientX, x:e.clientX, t:e.timeStamp, v:0, moved:false, start, near:start, heads:null};
   holdThumb(true);
   chaseFinger(tabDrag, fingerTab(e.clientX));
 });
 window.addEventListener('pointermove', e=>{
   const d = tabDrag;
   if(!d || e.pointerId !== d.id) return;
-  if(Math.abs(e.clientX - d.x0) >= TAB_DRAG_MOVED) d.moved = true;
+  if(!d.moved && Math.abs(e.clientX - d.x0) >= TAB_DRAG_MOVED){
+    // ドラッグになったら、整理モードとパネルを閉じてから、パネルと題名も動かし始める
+    d.moved = true;
+    leaveTab();
+    d.heads = TAB_ORDER.map((tab, i)=>i === d.start ? pageHead.current() : tabHeadText(tab));
+  }
   const dt = e.timeStamp - d.t;
   if(dt > 0) d.v = (e.clientX - d.x) / dt;
   d.x = e.clientX;
@@ -264,11 +286,18 @@ function endTabDrag(e, cancel){
   if(!d || e.pointerId !== d.id) return;
   tabDrag = null;
   holdThumb(false);
+  if(!d.moved){
+    // タップ：ハイライトだけ寄せて、切り替えはスイッチの change（来なければ TAB_TAP_WAIT ms 後）まで待つ
+    const to = cancel ? d.start : Math.round(d.p);
+    tabbar.dataset.active = TAB_ORDER[to];
+    springThumb(to);
+    if(!cancel) tabTap = {tab:TAB_ORDER[to], timer:setTimeout(commitTabTap, TAB_TAP_WAIT)};
+    return;
+  }
   const v = e.timeStamp - d.t > 100 ? 0 : d.v; // 止めてから離したときは、はじいたことにしない
   let to = Math.round(d.p);
   if(cancel) to = d.start;
-  else if(d.moved && Math.abs(v) >= TAB_DRAG_FLICK) to = v > 0 ? Math.ceil(d.p) : Math.floor(d.p);
-  const again = !cancel && !d.moved && to === d.start; // 選んでいるタブを押した
+  else if(Math.abs(v) >= TAB_DRAG_FLICK) to = v > 0 ? Math.ceil(d.p) : Math.floor(d.p);
   markTab(TAB_ORDER[to]);
   TAB_ORDER.forEach((tab, i)=>tabPanel(tab).classList.toggle('active', i === to));
   // 止まるまで、パネルと題名は行き先との間だけを動かす。止まったら（ほかの切り替えが始まったときも）transform を外す
@@ -284,13 +313,6 @@ function endTabDrag(e, cancel){
     });
     pageHead.set(...tabHeadText(TAB_ORDER[to]));
   };
-  if(again){
-    // 画面はほとんど動いていないので、すぐ戻す（やることタブなら、開いているリストを閉じる動きに任せる）
-    springThumb(to);
-    finish();
-    if(TAB_ORDER[to] === 'todo') todoTabShown(true);
-    return;
-  }
   tabSliding = finish;
   springThumb(to, pos=>moveTabContent(d.heads, pos, lo, hi), finish);
   if(to !== d.start && TAB_ORDER[to] === 'todo') todoTabShown(false);
