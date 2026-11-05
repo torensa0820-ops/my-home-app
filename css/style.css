@@ -40,7 +40,7 @@ header{padding:calc(22px + var(--safe-top)) 20px 16px;flex-shrink:0;}
 header h1{margin:0;font-size:24px;font-weight:800;}
 header p{margin:4px 0 0;font-size:13px;color:var(--muted);}
 /* タブのパネルは main いっぱいに重ねて置き、中の .tab-scroll がそれぞれスクロールする（タブごとにスクロール位置を覚える）
-   切り替えではパネルごと横にスライドさせる（js/main.js）。出ていく途中のパネルは .tab-leaving で見せたまま押せなくする */
+   切り替えではパネルごと横にスライドさせる（js/main.js）。出ていく途中・タブバーのドラッグで覗いているパネルは .tab-leaving で見せたまま押せなくする */
 main{flex:1;position:relative;overflow:hidden;}
 .tab-panel{display:none;position:absolute;inset:0;overflow:hidden;background:var(--bg);}
 .tab-panel.active,.tab-panel.tab-leaving{display:block;}
@@ -160,11 +160,27 @@ details[open] summary:before{content:"▾ ";}
    背景がカードの面と近いので、縁に1pxの線（影で描くので高さは変わらない）を付けて区別する */
 :root{--tabbar-gap:max(12px, calc(var(--safe-bottom) - 4px));}
 nav.tabbar{position:fixed;left:16px;right:16px;bottom:var(--tabbar-gap);z-index:6;display:flex;gap:4px;max-width:488px;margin:0 auto;padding:6px;border-radius:999px;background:var(--tabbar-bg);box-shadow:0 0 0 1px var(--border),0 8px 24px rgba(0,0,0,.3);}
-nav.tabbar button{flex:1;height:54px;border:none;border-radius:999px;background:none;color:var(--muted);font-size:10px;font-weight:700;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;}
+/* 選んでいるタブのハイライト（.tab-thumb）はボタンの後ろに1つだけ置き、js/main.js が transform で横に動かして伸び縮みさせる
+   バーを左右にドラッグするとハイライトが指について動くので、ドラッグ中に画面がスクロールしないよう touch-action を止める
+   色は data-active（ドラッグ中は、離したら入るタブ）のタブの色（--thumb）で決める
+   バーの端からはみ出しても浮いて見えないよう、ハイライトはタブの色を薄く透かしたガラスにする（縁の線と上端の光で形を見せ、後ろはぼかす） */
+nav.tabbar{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+nav.tabbar[data-active="stock"]{--thumb:var(--stock);}
+nav.tabbar[data-active="coupon"]{--thumb:var(--coupon);}
+nav.tabbar[data-active="todo"]{--thumb:var(--chore);}
+.tab-thumb{position:absolute;left:6px;top:6px;width:calc((100% - 20px) / 3);height:54px;border-radius:999px;pointer-events:none;will-change:transform;
+  /* 濃さは、バーの上でタブの色の文字が 4.5:1 以上になる 16% まで */
+  background:color-mix(in srgb, var(--thumb) 16%, transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--thumb) 45%, transparent),inset 0 1px 0 rgba(255,255,255,.12);
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+  transition:background-color .2s,box-shadow .2s;}
+/* 振動を出すための見えないスイッチ（js/main.js の haptic） */
+.haptic{position:fixed;left:0;top:0;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;}
+nav.tabbar button{position:relative;flex:1;height:54px;border:none;border-radius:999px;background:none;color:var(--muted);font-size:10px;font-weight:700;padding:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:color .2s;}
 nav.tabbar button svg{width:24px;height:24px;}
-nav.tabbar button[data-tab="stock"].active{background:var(--stock-dim);color:var(--stock);}
-nav.tabbar button[data-tab="coupon"].active{background:var(--coupon-dim);color:var(--coupon);}
-nav.tabbar button[data-tab="todo"].active{background:var(--chore-dim);color:var(--chore);}
+nav.tabbar[data-active="stock"] button[data-tab="stock"]{color:var(--stock);}
+nav.tabbar[data-active="coupon"] button[data-tab="coupon"]{color:var(--coupon);}
+nav.tabbar[data-active="todo"] button[data-tab="todo"]{color:var(--chore);}
 
 .list-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;}
 /* 在庫のカテゴリのタブ：1行に並べ、はみ出したら横にスクロールする（画面の端まで流す） */
