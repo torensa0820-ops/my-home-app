@@ -1,9 +1,10 @@
 // 左右のスワイプでカテゴリを切り替える部品（在庫・やることのカテゴリのタブ）
-// 画面の左側に指を置いて右へ動かすと前のカテゴリ、右側に置いて左へ動かすと次のカテゴリにする（端のカテゴリから先へは進まない）
+// 右へ動かすと前のカテゴリ、左へ動かすと次のカテゴリにする（端のカテゴリから先へは進まない）
+// 右へは画面の左端から CAT_SWIPE_ZONE の幅、左へは右端から CAT_SWIPE_ZONE の幅の中で始めればよい（真ん中あたりはどちらへも動かせる）
 // 中身は指に少しだけついて動き、離したら js/motion.js の slideContent で入れ替える。届かなければ元の位置へ戻す
 // 縦のスクロールを邪魔しないよう、最初の CAT_SWIPE_LOCK px で横か縦かを決め、はっきり横のときだけ指について動かす
 
-const CAT_SWIPE_ZONE = 0.4;          // スワイプを始められる、左右それぞれの端からの幅（画面幅に対して。真ん中の残りからは始めない）
+const CAT_SWIPE_ZONE = 0.75;         // スワイプを始められる、動かす向きと反対の端からの幅（画面幅に対して）
 const CAT_SWIPE_LOCK = 10;           // この距離動いたところで、横のスワイプか縦のスクロールかを決める（px）
 const CAT_SWIPE_SLOPE = 1.5;         // 横の動きが縦のこの倍以上のときだけ横のスワイプにする（斜めのスクロールを取り違えない）
 const CAT_SWIPE_DONE = 0.25;         // 指を離したとき、この割合以上動かしていれば切り替える（画面幅に対して）
@@ -20,18 +21,15 @@ const CAT_SWIPE_IGNORE = '.cat-tabs, .filter-chips, .compose, input, textarea, s
 // opts.step(dir)：カテゴリを切り替えて描き直す
 function createCategorySwipe(container, opts){
   const width = ()=>container.getBoundingClientRect().width || 1;
-  let drag = null; // {x0, y0, x, t, v, dir, locked, el, can}
+  let drag = null; // {x0, y0, x, t, v, pos, dir, locked, el, can}
 
   container.addEventListener('touchstart', e=>{
     drag = null;
     if(e.touches.length !== 1 || e.target.closest(CAT_SWIPE_IGNORE) || !opts.canStart()) return;
     const t = e.touches[0];
     const r = container.getBoundingClientRect();
-    const x = (t.clientX - r.left) / (r.width || 1);
-    // 左側からは右へ（前のカテゴリ）、右側からは左へ（次のカテゴリ）
-    const dir = x <= CAT_SWIPE_ZONE ? -1 : x >= 1 - CAT_SWIPE_ZONE ? 1 : 0;
-    if(!dir) return;
-    drag = {x0:t.clientX, y0:t.clientY, x:t.clientX, t:e.timeStamp, v:0, dir, locked:null, el:null, can:false};
+    const pos = (t.clientX - r.left) / (r.width || 1); // 指を置いた位置（0＝左端 〜 1＝右端）
+    drag = {x0:t.clientX, y0:t.clientY, x:t.clientX, t:e.timeStamp, v:0, pos, dir:0, locked:null, el:null, can:false};
   }, {passive:true});
 
   container.addEventListener('touchmove', e=>{
@@ -41,8 +39,10 @@ function createCategorySwipe(container, opts){
     const dx = t.clientX - drag.x0, dy = t.clientY - drag.y0;
     if(drag.locked === null){
       if(Math.abs(dx) < CAT_SWIPE_LOCK && Math.abs(dy) < CAT_SWIPE_LOCK) return;
-      // 始めた側から内側へ、はっきり横に動かしたときだけ
-      drag.locked = Math.abs(dx) >= Math.abs(dy) * CAT_SWIPE_SLOPE && Math.sign(dx) === -drag.dir;
+      // はっきり横に動かしていて、その向きで始められる位置に指を置いていたときだけ（右へ＝前のカテゴリ、左へ＝次のカテゴリ）
+      drag.dir = dx > 0 ? -1 : 1;
+      drag.locked = Math.abs(dx) >= Math.abs(dy) * CAT_SWIPE_SLOPE
+        && (drag.dir < 0 ? drag.pos <= CAT_SWIPE_ZONE : drag.pos >= 1 - CAT_SWIPE_ZONE);
       if(!drag.locked){ drag = null; return; }
       drag.el = opts.target();
       drag.can = opts.canStep(drag.dir);
