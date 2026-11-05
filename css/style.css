@@ -322,8 +322,8 @@ body[data-compose="form"] #stock-panel .card-info{cursor:copy;}
 .capture-summary{margin-top:20px;}
 /* クーポンの候補（内容と期間をその場で直す） */
 .coupon-card.candidate{border-style:dashed;}
-/* 一覧の下の「候補があります」の案内（候補は右のページにある） */
-.coupon-hint{margin:4px 0 0;padding:12px 14px;border-radius:12px;background:var(--coupon-dim);color:var(--coupon);font-size:13px;font-weight:700;line-height:1.5;}
+/* 一覧の上の「候補があります」の案内（候補は右のページにある） */
+.coupon-hint{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:var(--coupon-dim);color:var(--coupon);font-size:13px;font-weight:700;line-height:1.5;}
 /* ページの点（iPhone のホーム画面のように、タブバーのすぐ上の中央に置く）。今のページの点を濃くする */
 .page-dots{position:absolute;left:50%;bottom:calc(var(--tabbar-h) + 10px);transform:translateX(-50%);z-index:1;display:flex;gap:8px;padding:6px 10px;border-radius:999px;background:var(--tabbar-bg);pointer-events:none;}
 .page-dots[hidden]{display:none;}

@@ -121,10 +121,10 @@ function drawCoupons(){
   const list = sortedCoupons();
   const n = sortedCoupons(true).length;
   couponBox.replaceChildren();
+  // 候補は右のページにあるので、あることを一覧の上で知らせる
+  if(n) couponBox.append(h('p', {class:'coupon-hint'}, `レシートから見つかった候補が${n}件あります。左へスワイプすると確認できます →`));
   if(list.length) couponBox.append(h('div', {class:'tm-section'}, h('h3', {}, `クーポン（${list.length}枚）`), list.map(couponCard)));
   else couponBox.append(h('p', {class:'empty-msg'}, '使えるクーポンはありません'));
-  // 候補は右のページにあるので、あることを一覧の下で知らせる
-  if(n) couponBox.append(h('p', {class:'coupon-hint'}, `レシートから見つかった候補が${n}件あります。左へスワイプすると確認できます →`));
 }
 // 候補の見出しの件数を直す（候補がなくなったら見出しごと消す）
 function updateCandidateHead(){
