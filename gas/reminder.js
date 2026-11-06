@@ -366,7 +366,7 @@ function reminderReorder(sheet, t, ids) {
 
 // ---- カテゴリの操作 ----
 // data.action
-//   add     … name・type（家事 / 買い物）。sortOrder は最後
+//   add     … name・categoryType（家事 / 買い物）。sortOrder は最後
 //   rename  … name（id で指定）
 //   delete  … カテゴリを消す（id で指定）。リストが入っていれば消さない
 //   reorder … ids（カテゴリの id を並べたい順に）で sortOrder を振り直す
@@ -378,7 +378,8 @@ function reminderCategoryAction(ss, data) {
   try {
     const sheet = ss.getSheetByName(SHEET_REMINDER_CATEGORY);
     if (!sheet) throw new Error("「リマインダーカテゴリ」シートがありません。GAS の setupReminderCategories を実行してください。");
-    if (data.action === "add") return reminderOut(reminderAddCategory(ss, data));
+    // カテゴリの種類は categoryType で受け取る（type はリクエストの種類 "reminderCategory" に使っているため）
+    if (data.action === "add") return reminderOut(reminderAddCategory(ss, { name: data.name, type: data.categoryType }));
     const t = receiptRead(sheet);
     if (data.action === "reorder") {
       reminderReorder(sheet, t, data.ids);

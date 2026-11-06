@@ -710,7 +710,7 @@ function tmTodoCategoriesView(){
     if(!n){ toastError('カテゴリの名前を入れてください'); return; }
     next.disabled = true;
     tm.busy = true;
-    postToGas({type:'reminderCategory', action:'add', name:n, type:type.value})
+    postToGas({type:'reminderCategory', action:'add', name:n, categoryType:type.value})
       .then(res=>{
         if(res.status !== 'success') throw new Error(res.message || '追加に失敗しました');
         todo.categories.push(res.category);
