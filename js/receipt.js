@@ -72,7 +72,7 @@ function sendPhoto(kind, useCamera){
         toast(res.count > 1 ? `${res.count}枚目を送りました` : `${kind}を送りました`);
       })
       // 時間切れでも GAS 側では保存できていることがあるので、最近撮った分を読み込み直して確かめられるようにする
-      .catch(err=>toast(errMsg(err)))
+      .catch(err=>toastError(errMsg(err)))
       .finally(()=>{
         capture.sending = false;
         tm.busy = false;
@@ -264,7 +264,7 @@ function rereadReceipt(r, btn){
       tmRender();
       loadReceiptSummary();
     })
-    .catch(err=>{ tm.busy = false; toast(errMsg(err)); btn.disabled = false; btn.textContent = '在庫の判断を読み直す'; });
+    .catch(err=>{ tm.busy = false; toastError(errMsg(err)); btn.disabled = false; btn.textContent = '在庫の判断を読み直す'; });
 }
 
 // 撮り間違えた写真を読まないようにする（まだ読まれていない1件だけ）
@@ -279,6 +279,6 @@ function skipReceiptPhoto(r, btn){
       if(capture.current && capture.current.id === r.id){ capture.current = null; }
       toast('この写真は読まないようにしました');
     })
-    .catch(err=>toast(errMsg(err)))
+    .catch(err=>toastError(errMsg(err)))
     .finally(()=>{ tm.busy = false; tmRender(); loadReceiptSummary(); });
 }

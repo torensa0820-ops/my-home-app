@@ -296,7 +296,7 @@ function tagOp(payload){
     .finally(()=>{ tm.busy = false; });
 }
 function hasSeparator(name){
-  if(/[,，、]/.test(name)){ toast('タグ名に「,」「、」は使えません'); return true; }
+  if(/[,，、]/.test(name)){ toastError('タグ名に「,」「、」は使えません'); return true; }
   return false;
 }
 
@@ -334,12 +334,12 @@ function tmDetailView(tag){
     renameBtn.disabled = true;
     tagOp({action:'rename', tag, newName})
       .then(res=>{ toast(`${res.count}件のタグ名を変更しました`); tm.stack[tm.stack.length - 1] = [tmDetailView, [newName]]; tmRender(); })
-      .catch(err=>{ toast(errMsg(err)); renameBtn.disabled = false; });
+      .catch(err=>{ toastError(errMsg(err)); renameBtn.disabled = false; });
   }}, '変更');
   const deleteBtn = makeHoldButton('長押しでタグを削除', reset=>{
     tagOp({action:'delete', tag})
       .then(res=>{ toast(`${res.count}件から「${tag}」を外しました`); tm.stack.pop(); tmRender(); })
-      .catch(err=>{ toast(errMsg(err)); reset(); });
+      .catch(err=>{ toastError(errMsg(err)); reset(); });
   });
   tmBody.append(
     h('p', {class:'tm-note tm-lead'}, `${count}件に付いています`),
@@ -375,7 +375,7 @@ function tmAssignView(tag){
         const [view, args] = tm.stack[tm.stack.length - 1];
         if(view === tmDetailView && args[0] === tag) tmRender(); else tmShow(tmDetailView, tag);
       })
-      .catch(err=>{ toast(errMsg(err)); update(); });
+      .catch(err=>{ toastError(errMsg(err)); update(); });
   });
   update();
   tmFoot.append(submit);

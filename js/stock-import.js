@@ -13,7 +13,7 @@ function loadStockImports(preloaded){
       stockImp.auto = data.auto || [];
       renderStockImportBanner();
     })
-    .catch(err=>toast(`レシートからの在庫の読み込みに失敗しました（${errMsg(err)}）`));
+    .catch(err=>toastError(`レシートからの在庫の読み込みに失敗しました（${errMsg(err)}）`));
 }
 
 // 在庫タブの上に「レシートから」を出す（確認待ちも自動追加もなければ何も出さない）
@@ -95,7 +95,7 @@ function undoStockImport(it, btn){
       afterStockImportDone(it, res.message || `「${it.itemName}」を${Number(it.qty) || 0}個減らしました`);
     })
     // 時間切れでも GAS 側では取り消し済みのことがあるため、一覧を読み込み直す
-    .catch(err=>{ tm.busy = false; toast(errMsg(err)); btn.disabled = false; btn.textContent = '取り消す'; loadStockImports(); loadStock(); });
+    .catch(err=>{ tm.busy = false; toastError(errMsg(err)); btn.disabled = false; btn.textContent = '取り消す'; loadStockImports(); loadStock(); });
 }
 
 // ---------- 確認待ちの1件を直して追加する ----------
@@ -155,8 +155,8 @@ function tmStockImportItem(it){
   save.addEventListener('click', ()=>{
     const itemName = normText(name.value);
     const value = Number(qty.value) || 0;
-    if(!itemName){ toast('商品名を入力してください'); return; }
-    if(value <= 0){ toast('個数を入力してください'); return; }
+    if(!itemName){ toastError('商品名を入力してください'); return; }
+    if(value <= 0){ toastError('個数を入力してください'); return; }
     save.disabled = true; dismiss.disabled = true;
     save.textContent = '追加中…';
     tm.busy = true;
@@ -167,7 +167,7 @@ function tmStockImportItem(it){
         return loadStock();
       })
       .then(()=>afterStockImportDone(it, `「${itemName}」を在庫に追加しました`))
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; dismiss.disabled = false; save.textContent = '在庫に追加'; });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); save.disabled = false; dismiss.disabled = false; save.textContent = '在庫に追加'; });
   });
   dismiss.addEventListener('click', ()=>{
     save.disabled = true; dismiss.disabled = true;
@@ -178,6 +178,6 @@ function tmStockImportItem(it){
         if(res.status !== 'success') throw new Error(res.message || '処理に失敗しました');
         afterStockImportDone(it, `「${it.itemName}」は追加しません`);
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; dismiss.disabled = false; dismiss.textContent = '追加しない'; });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); save.disabled = false; dismiss.disabled = false; dismiss.textContent = '追加しない'; });
   });
 }

@@ -31,7 +31,7 @@ function loadReminders(preloaded){
 }
 // 読み込みに失敗したとき。表示中のデータがあれば残してトーストだけ出す（タブを開くたびの読み込み直しなど）
 function todoShowLoadError(err){
-  if(todo.loaded){ toast(errMsg(err)); return; }
+  if(todo.loaded){ toastError(errMsg(err)); return; }
   todoGridPage.replaceChildren(loadErrorView(err, ()=>{
     todoGridPage.replaceChildren(h('p', {class:'empty-msg'}, '読み込み中…'));
     loadReminders();
@@ -382,7 +382,7 @@ function todoQuickAdd(list, input){
       renderTodo();
     })
     .catch(err=>{
-      toast(errMsg(err));
+      toastError(errMsg(err));
       // 入れた文字を戻す（ほかの文字を入れ始めていなければ）
       if(!todo.draft){ todo.draft = title; renderTodo(); }
     });
@@ -419,7 +419,7 @@ function todoComplete(i, stockQty){
       Object.assign(i, prev);
       renderTodo();
       hideTodoUndo();
-      toast(errMsg(err));
+      toastError(errMsg(err));
       loadReminders(); // 時間切れでも GAS 側では完了済みのことがあるため、実際の状態に合わせる
       return false;
     });
@@ -443,7 +443,7 @@ function todoUndo(i, prev, stockQty){
       if(stockQty) loadStock();
       toast('取り消しました');
     })
-    .catch(err=>{ Object.assign(i, cur); renderTodo(); toast(errMsg(err)); loadReminders(); });
+    .catch(err=>{ Object.assign(i, cur); renderTodo(); toastError(errMsg(err)); loadReminders(); });
 }
 // 完了の欄の丸を押したとき（くり返しなしだけ）：まだの状態に戻す
 function todoReopen(i){ todoUndo(i, null, null); }
@@ -475,7 +475,7 @@ function tmTodoAskStockView(i, list){
     h('button', {type:'button', class:'cancel-btn', onclick:()=>{ closeSheet(); todoComplete(i, null); }}, '足さずに完了'),
     h('button', {type:'button', class:'tm-btn', onclick:()=>{
       const n = Number(qty.value);
-      if(!(n > 0) || Math.floor(n) !== n){ toast('個数は1以上の整数で入れてください'); return; }
+      if(!(n > 0) || Math.floor(n) !== n){ toastError('個数は1以上の整数で入れてください'); return; }
       closeSheet();
       todoComplete(i, n);
     }}, '足して完了')));
@@ -541,7 +541,7 @@ function tmTodoItemView(i, list){
           renderTodo();
           toast('削除しました');
         })
-        .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
+        .catch(err=>{ tm.busy = false; toastError(errMsg(err)); reset(); });
     });
     tmBody.append(h('div', {class:'tm-section tm-danger'},
       h('h3', {}, '削除'),
@@ -555,15 +555,15 @@ function tmTodoItemView(i, list){
   save.addEventListener('click', ()=>{
     const payload = {type:'reminder', action:i ? 'edit' : 'add', id:i ? i.id : undefined, listId:listSel.value,
       title:normText(title.value), qty:normText(qty.value), memo:normText(memo.value), assignee, rule:null, due:''};
-    if(!payload.title){ toast('名前を入れてください'); return; }
+    if(!payload.title){ toastError('名前を入れてください'); return; }
     if(mode === 'once'){
-      if(!date.value){ toast('期限の日付を入れてください'); return; }
+      if(!date.value){ toastError('期限の日付を入れてください'); return; }
       payload.due = date.value + (time.value ? 'T' + time.value : '');
     }
     if(mode === 'repeat'){
       payload.rule = editor.get();
       const err = choreValidate(payload.rule);
-      if(err){ toast(err); return; }
+      if(err){ toastError(err); return; }
     }
     save.disabled = true;
     save.textContent = '保存中…';
@@ -578,7 +578,7 @@ function tmTodoItemView(i, list){
         renderTodo();
         toast(i ? '保存しました' : '追加しました');
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = i ? '保存' : '追加'; });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); save.disabled = false; save.textContent = i ? '保存' : '追加'; });
   });
 }
 
@@ -601,7 +601,7 @@ function tmTodoListsView(){
     tm.busy = true;
     postToGas({type:'reminderList', action:'reorder', ids:all.map(l=>l.id)})
       .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '並べ替えに失敗しました'); })
-      .catch(err=>{ toast(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
+      .catch(err=>{ toastError(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
       .finally(()=>{ tm.busy = false; });
   };
   tmBody.append(h('div', {class:'tm-section'},
@@ -644,7 +644,7 @@ function tmTodoListEditView(l){
         tmRender();
         toast(`「${l.name}」を削除しました`);
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); reset(); });
   });
   tmBody.append(field('名前', name),
     field('カテゴリ', catSel, h('p', {class:'tm-note'}, `移せるのは${todoTypeLabel(l.kind)}のカテゴリだけです。`)),
@@ -658,7 +658,7 @@ function tmTodoListEditView(l){
   tmFoot.append(save);
   save.addEventListener('click', ()=>{
     const n = normText(name.value);
-    if(!n){ toast('リストの名前を入れてください'); return; }
+    if(!n){ toastError('リストの名前を入れてください'); return; }
     save.disabled = true;
     save.textContent = '保存中…';
     tm.busy = true;
@@ -673,7 +673,7 @@ function tmTodoListEditView(l){
         tmRender();
         toast('保存しました');
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
   });
 }
 
@@ -707,7 +707,7 @@ function tmTodoCategoriesView(){
   const next = h('button', {type:'button', class:'tm-btn'}, '次へ');
   next.addEventListener('click', ()=>{
     const n = normText(name.value);
-    if(!n){ toast('カテゴリの名前を入れてください'); return; }
+    if(!n){ toastError('カテゴリの名前を入れてください'); return; }
     next.disabled = true;
     tm.busy = true;
     postToGas({type:'reminderCategory', action:'add', name:n, type:type.value})
@@ -718,7 +718,7 @@ function tmTodoCategoriesView(){
         renderTodo();
         tmShow(tmTodoCategoryView, res.category); // リストを続けて入れられるように詳細を開く
       })
-      .catch(err=>{ tm.busy = false; next.disabled = false; toast(errMsg(err)); });
+      .catch(err=>{ tm.busy = false; next.disabled = false; toastError(errMsg(err)); });
   });
   const move = (n, d)=>{
     const m = n + d;
@@ -730,7 +730,7 @@ function tmTodoCategoriesView(){
     tm.busy = true;
     postToGas({type:'reminderCategory', action:'reorder', ids:cs.map(c=>c.id)})
       .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '並べ替えに失敗しました'); })
-      .catch(err=>{ toast(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
+      .catch(err=>{ toastError(errMsg(err)); loadReminders().then(()=>{ if(tm.stack.length) tmRender(); }); })
       .finally(()=>{ tm.busy = false; });
   };
   tmBody.append(
@@ -768,7 +768,7 @@ function tmTodoCategoryView(c){
         tmRender();
         toast('名前を変更しました');
       })
-      .catch(err=>{ tm.busy = false; renameBtn.disabled = false; toast(errMsg(err)); });
+      .catch(err=>{ tm.busy = false; renameBtn.disabled = false; toastError(errMsg(err)); });
   }}, '変更');
   const movable = todo.lists.some(l=>l.kind === c.type && todoCategoryOfList(l) !== c);
   const deleteBtn = makeHoldButton('長押しでカテゴリを削除', reset=>{
@@ -783,7 +783,7 @@ function tmTodoCategoryView(c){
         tmRender();
         toast(`「${c.name}」を削除しました`);
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); reset(); });
   });
   tmBody.append(
     h('p', {class:'tm-note tm-lead'}, `${todoTypeLabel(c.type)}・リスト${lists.length}件` + (lists.length ? `（${lists.map(l=>l.name).join('・')}）` : '')),
@@ -825,7 +825,7 @@ function tmTodoCategoryMoveView(c){
         tm.stack.pop();
         tmRender();
       })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); update(); });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); update(); });
   });
   update();
   tmFoot.append(submit);
@@ -887,11 +887,11 @@ function todoFillCompose(){
   const form = h('form', {onsubmit:e=>{
     e.preventDefault();
     const n = normText(name.value);
-    if(!n){ toast('リストの名前を入れてください'); return; }
+    if(!n){ toastError('リストの名前を入れてください'); return; }
     const payload = {type:'reminderList', action:'add', name:n, color, store:shop.store.value, askStock:shop.askStock.checked};
     if(catSel.value === '__new__'){
       const cn = normText(catName.value);
-      if(!cn){ toast('新しいカテゴリの名前を入れてください'); return; }
+      if(!cn){ toastError('新しいカテゴリの名前を入れてください'); return; }
       payload.newCategory = {name:cn, type};
     } else {
       payload.categoryId = catSel.value;
@@ -909,7 +909,7 @@ function todoFillCompose(){
         renderTodo();
         toast(`「${list.name}」を作りました`);
       })
-      .catch(err=>{ toast(errMsg(err)); submit.disabled = false; submit.textContent = 'このリストを作る'; });
+      .catch(err=>{ toastError(errMsg(err)); submit.disabled = false; submit.textContent = 'このリストを作る'; });
   }}, field('名前', name), field('カテゴリ', catSel, newCat), shop.el, field('色', colors), submit);
   todoComposeBody.replaceChildren(form);
 }

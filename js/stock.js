@@ -47,12 +47,12 @@ function toggleBuyFlag(g){
   renderStockList();
   postToGas({type:'stock', action:'setBuyFlag', target:g.name, value:on})
     .then(res=>{
-      if(res.status !== 'success'){ undo(); toast(res.message || '更新に失敗しました'); return; }
+      if(res.status !== 'success'){ undo(); toastError(res.message || '更新に失敗しました'); return; }
       toast(on ? '買い物リストに入れました' : '買い物リストから外しました');
       loadReminders();
     })
     // 時間切れでも GAS 側では更新済みのことがあるため、一覧を読み込み直して実際の状態に合わせる
-    .catch(err=>{ undo(); toast(errMsg(err)); loadStock(); loadReminders(); });
+    .catch(err=>{ undo(); toastError(errMsg(err)); loadStock(); loadReminders(); });
 }
 function makeBuyButton(g){
   return h('button', {type:'button', class:'buy-btn' + (g.buyFlag ? ' on' : ''), 'aria-pressed':String(g.buyFlag), onclick:e=>{
@@ -180,7 +180,7 @@ function sendBump(id){
   const req = postToGas({type:'stock', action:'bump', id, value:p.delta})
     .then(res=>{ if(res.status !== 'success') throw new Error(res.message || '更新に失敗しました'); })
     // 失敗したら一覧を読み込み直して実際の個数に合わせる（時間切れでも GAS 側では更新済みのことがある）
-    .catch(err=>{ toast(errMsg(err)); setTimeout(()=>loadStock()); })
+    .catch(err=>{ toastError(errMsg(err)); setTimeout(()=>loadStock()); })
     .finally(()=>bumpsInFlight.delete(req));
   bumpsInFlight.add(req);
   return req;
@@ -226,7 +226,7 @@ function openDeleteSheet(g){
         renderStockList();
         toast(`「${g.name}」を削除しました`);
       })
-      .catch(err=>{ toast(errMsg(err)); reset(); });
+      .catch(err=>{ toastError(errMsg(err)); reset(); });
   });
   deleteSheet.replaceChildren(
     h('h2', {id:'sheet-title'}, '在庫管理から削除'),
@@ -292,8 +292,8 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
   postToGas({type:'stock', target:name, value, category, location, tags, expirationDate, modelNumber})
     .then(res=>{
       if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
-      else toast(res.message || '登録に失敗しました');
-    }).catch(err=>toast(errMsg(err)));
+      else toastError(res.message || '登録に失敗しました');
+    }).catch(err=>toastError(errMsg(err)));
 });
 // 一覧の商品をタップすると、商品名・カテゴリ・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
 function fillStockForm(g, card){
@@ -339,7 +339,7 @@ function tmItemView(g){
     const entry = {id: lot ? lot.id : undefined, exp, count};
     const row = h('div', {class:'lot-edit'}, exp, count,
       h('button', {type:'button', class:'lot-remove', 'aria-label':'この行を削除', onclick:()=>{
-        if(lotRows.length <= 1){ toast('賞味期限の行は1つ以上必要です（商品ごと消すときは「整理」から）'); return; }
+        if(lotRows.length <= 1){ toastError('賞味期限の行は1つ以上必要です（商品ごと消すときは「整理」から）'); return; }
         if(entry.id !== undefined) deleteIds.push(entry.id);
         lotRows.splice(lotRows.indexOf(entry), 1);
         row.remove();
@@ -375,14 +375,14 @@ function tmItemView(g){
 
   save.addEventListener('click', ()=>{
     const itemName = normText(name.value);
-    if(!itemName){ toast('商品名を入力してください'); return; }
+    if(!itemName){ toastError('商品名を入力してください'); return; }
     const lots = lotRows.map(r=>({id:r.id, expirationDate:r.exp.value, stock:Number(r.count.value) || 0}));
     const exps = lots.map(l=>l.expirationDate);
-    if(new Set(exps).size !== exps.length){ toast('同じ賞味期限の行が重複しています'); return; }
+    if(new Set(exps).size !== exps.length){ toastError('同じ賞味期限の行が重複しています'); return; }
     // 数値の欄に数字以外を入れると value が空になるので、badInput でも確かめる
     const reorderText = reorder.value.trim();
     const reorderAt = parseReorderAt(reorderText);
-    if(reorder.validity.badInput || (reorderText && reorderAt === '')){ toast('買う目安は0以上の整数で入れてください'); return; }
+    if(reorder.validity.badInput || (reorderText && reorderAt === '')){ toastError('買う目安は0以上の整数で入れてください'); return; }
     save.disabled = true;
     save.textContent = '保存中…';
     tm.busy = true;
@@ -400,6 +400,6 @@ function tmItemView(g){
         return loadStock();
       })
       .then(()=>{ tm.busy = false; toast('保存しました'); closeSheet(); })
-      .catch(err=>{ tm.busy = false; toast(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
+      .catch(err=>{ tm.busy = false; toastError(errMsg(err)); save.disabled = false; save.textContent = '保存'; });
   });
 }

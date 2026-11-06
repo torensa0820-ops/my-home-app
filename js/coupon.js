@@ -191,9 +191,9 @@ function couponCandidateCard(c){
   const dismiss = h('button', {type:'button', class:'row-action'}, '不要');
   remind.addEventListener('click', ()=>{
     const values = {title:normText(title.value), validFrom:from.value, validUntil:until.value, repeat:repeat.value()};
-    if(!values.title){ toast('内容を入力してください'); return; }
-    if(values.validFrom && values.validUntil && values.validFrom > values.validUntil){ toast('開始日が期限より後になっています'); return; }
-    if(values.repeat === null){ toast('くり返しの日付・曜日を正しく入れてください'); return; }
+    if(!values.title){ toastError('内容を入力してください'); return; }
+    if(values.validFrom && values.validUntil && values.validFrom > values.validUntil){ toastError('開始日が期限より後になっています'); return; }
+    if(values.repeat === null){ toastError('くり返しの日付・曜日を正しく入れてください'); return; }
     couponDone(c, 'remind', [remind, dismiss], values);
   });
   dismiss.addEventListener('click', ()=>couponDone(c, 'dismiss', [remind, dismiss]));
@@ -235,5 +235,5 @@ function couponDone(c, action, buttons, values = {}){
       couponBusy = false;
       toast(action === 'dismiss' && parseRepeat(c.repeat) ? 'もう通知しないようにしました' : COUPON_DONE_MSG[action]);
     })
-    .catch(err=>{ couponBusy = false; toast(errMsg(err)); buttons.forEach(b=>{ b.disabled = false; }); });
+    .catch(err=>{ couponBusy = false; toastError(errMsg(err)); buttons.forEach(b=>{ b.disabled = false; }); });
 }

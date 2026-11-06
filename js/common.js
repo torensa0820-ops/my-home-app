@@ -6,12 +6,60 @@ const GAS_URL = "https://script.google.com/macros/s/AKfycbzCsng8oDxwQnSnUlxz1m3A
 
 let stockCache = [];
 
-function toast(msg){
+// ---------- トースト ----------
+// 画面下に一時的に出す知らせ。文字数が多いほど長く出し（2秒＋1文字60ms、最大7秒）、下にスワイプすればすぐ消せる
+// 成功・完了は toast、エラーや入力の不足は toastError（アイコンの色と記号が変わる）
+const TOAST_MIN_MS = 2000, TOAST_PER_CHAR_MS = 60, TOAST_MAX_MS = 7000;
+const TOAST_SWIPE_PX = 36; // これより下に引いて離したら消す
+
+function toast(msg, kind = 'ok'){
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  if(!toast._ready){ toastSwipe(el); toast._ready = true; }
+  el.replaceChildren(h('span', {class:'toast-icon', 'aria-hidden':'true'}, kind === 'error' ? '!' : '✓'), h('span', {class:'toast-msg'}, msg));
+  el.dataset.kind = kind;
+  el.classList.remove('dragging');
+  el.style.transform = el.style.opacity = '';
   el.classList.add('show');
+  toastHideLater(el, Math.min(TOAST_MAX_MS, TOAST_MIN_MS + String(msg).length * TOAST_PER_CHAR_MS));
+}
+function toastError(msg){ toast(msg, 'error'); }
+function toastHideLater(el, ms){
   clearTimeout(toast._t);
-  toast._t = setTimeout(()=>el.classList.remove('show'), 1800);
+  toast._t = setTimeout(()=>el.classList.remove('show'), ms);
+}
+// 指で下に引くとついてきて、TOAST_SWIPE_PX より下で離すか素早く払うと消える。それ以外は元に戻して、少し時間を足してまた待つ
+function toastSwipe(el){
+  let startY = null, dy = 0, startT = 0;
+  el.addEventListener('pointerdown', e=>{
+    if(!el.classList.contains('show')) return;
+    startY = e.clientY; dy = 0; startT = e.timeStamp;
+    clearTimeout(toast._t);
+    el.classList.add('dragging');
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e=>{
+    if(startY === null) return;
+    const d = e.clientY - startY;
+    dy = d > 0 ? d : d / 4; // 上には少しだけ動かす（引っぱれないことを見せる）
+    el.style.transform = `translateY(${dy}px)`;
+    el.style.opacity = dy > 0 ? Math.max(0, 1 - dy / 120) : '';
+  });
+  const end = e=>{
+    if(startY === null) return;
+    startY = null;
+    el.classList.remove('dragging');
+    const fast = dy > 16 && dy / Math.max(1, e.timeStamp - startT) > 0.6; // 短くても素早く払ったら消す
+    if(dy > TOAST_SWIPE_PX || fast){
+      el.style.transform = `translateY(${dy + 40}px)`;
+      el.style.opacity = '0';
+      el.classList.remove('show');
+    } else {
+      el.style.transform = el.style.opacity = '';
+      toastHideLater(el, TOAST_MIN_MS);
+    }
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
 }
 
 // ---------- GASとの通信 ----------
