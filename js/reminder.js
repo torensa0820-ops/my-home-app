@@ -629,10 +629,32 @@ function tmTodoListEditView(l){
   const shop = todoShopFields(l);
   const active = h('input', {type:'checkbox', checked:!!l.active});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
+  // 削除は非表示のリストだけ。「その他・店未定」は GAS がエラーを返す（在庫の品目の行き先なので）
+  const itemCount = todo.items.filter(i=>String(i.listId) === String(l.id)).length;
+  const deleteBtn = makeHoldButton('長押しでリストを削除', reset=>{
+    tm.busy = true;
+    postToGas({type:'reminderList', action:'delete', id:l.id})
+      .then(res=>{
+        if(res.status !== 'success') throw new Error(res.message || '削除に失敗しました');
+        todo.lists = todo.lists.filter(x=>x !== l);
+        todo.items = todo.items.filter(i=>String(i.listId) !== String(l.id));
+        tm.busy = false;
+        renderTodo();
+        tm.stack.pop();
+        tmRender();
+        toast(`「${l.name}」を削除しました`);
+      })
+      .catch(err=>{ tm.busy = false; toast(errMsg(err)); reset(); });
+  });
   tmBody.append(field('名前', name),
     field('カテゴリ', catSel, h('p', {class:'tm-note'}, `移せるのは${todoTypeLabel(l.kind)}のカテゴリだけです。`)),
     l.kind === '買い物' ? shop.el : '', field('色', colors),
-    h('label', {class:'check'}, active, 'カードを表示する（外すと非表示。品目はシートに残ります）'));
+    h('label', {class:'check'}, active, 'カードを表示する（外すと非表示。品目はシートに残ります）'),
+    h('div', {class:'tm-section tm-danger'},
+      h('h3', {}, '削除'),
+      l.active
+        ? h('p', {class:'tm-note'}, '表示中のリストは削除できません。「カードを表示する」を外して保存すると、削除できるようになります。')
+        : [h('p', {class:'tm-note'}, `中の品目${itemCount ? `${itemCount}件` : ''}（完了したものも）がいっしょに消えます。元に戻すことはできません。`), deleteBtn]));
   tmFoot.append(save);
   save.addEventListener('click', ()=>{
     const n = normText(name.value);

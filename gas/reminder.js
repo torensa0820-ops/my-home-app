@@ -271,8 +271,9 @@ function reminderDueInput(v) {
 //   add     … name・categoryId（新しいカテゴリに入れるなら代わりに newCategory：{name, type}）・store・color・askStock。sortOrder は最後
 //   edit    … name・categoryId・store・color・askStock・active を上書きする（id で指定）。active を false にすると非表示
 //   reorder … ids（リストの id を並べたい順に）で sortOrder を振り直す
+//   delete  … 非表示のリストを、中の品目（完了済みも含む）といっしょに消す（id で指定）。表示中のリストと REMINDER_OTHER_LIST は消さない
 // kind は入れるカテゴリの type にする。カテゴリを移せるのは、type が同じカテゴリの間だけ
-// 戻り値：書き込んだ後のリスト（reorder は null）。add で新しいカテゴリを作ったときは list.category にそのカテゴリを付ける
+// 戻り値：書き込んだ後のリスト（reorder・delete は null）。add で新しいカテゴリを作ったときは list.category にそのカテゴリを付ける
 function reminderListAction(ss, data) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -283,6 +284,10 @@ function reminderListAction(ss, data) {
 
     if (data.action === "reorder") {
       reminderReorder(sheet, t, data.ids);
+      return null;
+    }
+    if (data.action === "delete") {
+      reminderDeleteList(ss, sheet, t, data.id);
       return null;
     }
     if (data.action !== "add" && data.action !== "edit") throw new Error("action が不正です: " + data.action);
@@ -318,6 +323,35 @@ function reminderListAction(ss, data) {
     return reminderOut(Object.assign(found, values));
   } finally {
     lock.releaseLock();
+  }
+}
+
+// 非表示のリストを、中の品目といっしょに消す（ロックは呼び出し側で取る）。t は「リマインダーリスト」シートを読んだもの
+function reminderDeleteList(ss, sheet, t, id) {
+  const found = t.rows.find(o => String(o.id) === String(id));
+  if (!found) throw new Error("リストが見つかりません。読み込み直してください。");
+  if (normText(found.name) === REMINDER_OTHER_LIST) {
+    throw new Error(`「${REMINDER_OTHER_LIST}」は、店が決まらない在庫の品目の行き先なので削除できません（非表示にはできます）。`);
+  }
+  const active = String(found.active ?? "") === "" ? true : reminderBool(found.active);
+  if (active) throw new Error("表示中のリストは削除できません。先に非表示にしてください。");
+  // 品目を先に消す（途中で失敗しても、どのリストにも入らない品目が残らないように）
+  const itemSheet = ss.getSheetByName(SHEET_REMINDER);
+  if (itemSheet) {
+    const rows = receiptRead(itemSheet).rows.filter(o => String(o.listId) === String(found.id)).map(o => o._row);
+    reminderDeleteRows(itemSheet, rows);
+  }
+  sheet.deleteRow(found._row);
+}
+
+// 行番号の行を消す。下から消して番号がずれないようにし、続いている行はまとめて1回で消す
+function reminderDeleteRows(sheet, rows) {
+  const sorted = rows.slice().sort((a, b) => b - a);
+  for (let i = 0; i < sorted.length;) {
+    let j = i + 1;
+    while (j < sorted.length && sorted[j] === sorted[j - 1] - 1) j++;
+    sheet.deleteRows(sorted[j - 1], j - i);
+    i = j;
   }
 }
 
