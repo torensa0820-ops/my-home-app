@@ -1,9 +1,9 @@
 // 在庫：レシートから（夜に Claude がレシートを読んで「在庫取込」シートに書いた品目の確認）
 // 確認待ち（kind=確認・status が空）：直してから「在庫に追加」するか「追加しない」
-// 自動追加（status=自動追加・7日以内）：在庫に登録済みの品目を Claude が足した分。間違いなら「取り消す」で個数を戻す
+// 自動追加（status=自動追加・今日を含めて autoDays 日以内）：在庫に登録済みの品目を Claude が足した分。間違いなら「取り消す」で個数を戻す
 
-const stockImp = {pending:[], auto:[]};
-const STOCK_IMPORT_AUTO_LABEL = '7日以内'; // 自動追加を出す期間（GAS の STOCK_IMPORT_AUTO_DAYS）
+// autoDays：自動追加を出す日数（GAS の STOCK_IMPORT_AUTO_DAYS が返ってくる）
+const stockImp = {pending:[], auto:[], autoDays:3};
 
 // preloaded：起動時にまとめて取得したデータ（あれば通信しない）
 function loadStockImports(preloaded){
@@ -11,6 +11,7 @@ function loadStockImports(preloaded){
     .then(data=>{
       stockImp.pending = data.pending || [];
       stockImp.auto = data.auto || [];
+      if(Number(data.autoDays) > 0) stockImp.autoDays = Number(data.autoDays);
       renderStockImportBanner();
     })
     .catch(err=>toastError(`レシートからの在庫の読み込みに失敗しました（${errMsg(err)}）`));
@@ -67,7 +68,7 @@ function tmStockImportList(){
   }
   if(stockImp.auto.length){
     tmBody.append(h('div', {class:'tm-section'},
-      h('h3', {}, `自動で在庫に足した分（${STOCK_IMPORT_AUTO_LABEL}）`),
+      h('h3', {}, `自動で在庫に足した分（今日を含めて${stockImp.autoDays}日）`),
       h('p', {class:'tm-note tm-lead'}, '在庫に登録済みの品目（タグ「ストック」）は、レシートを読んだときに個数を足しています。間違いなら「取り消す」で個数を戻します。'),
       stockImp.auto.map(it=>{
         const undo = h('button', {type:'button', class:'row-action'}, '取り消す');

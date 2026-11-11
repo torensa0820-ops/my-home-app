@@ -24,7 +24,7 @@ const RECEIPT_MAX_BYTES = 5 * 1024 * 1024; // 受け取る写真1枚の上限
 const RECEIPT_REREAD = "再読"; // レシートの status。アプリで「在庫の判断を読み直す」を押したもの（今夜 Claude が在庫の判断だけやり直す）
 const RECEIPT_UNREAD = ["", RECEIPT_REREAD]; // 今夜 Claude が読む status
 const RECEIPT_RECENT_DAYS = 14; // 撮影画面に出す「最近撮った分」の日数
-const STOCK_IMPORT_AUTO_DAYS = 7; // 自動追加をこの日数のあいだ画面に出す（取り消せるようにする）
+const STOCK_IMPORT_AUTO_DAYS = 3; // 自動追加を画面に出す日数（今日を含めた暦日。取り消せるようにする）
 const COUPON_MENTION = ""; // 通知の先頭に付けるメンション（"@everyone" にすると付く）
 const COUPON_REMINDER = "※紙のクーポンを持っていく"; // クーポンの通知の行末に付ける
 const COUPON_CANDIDATE = "候補"; // クーポンの status。レシートの写真から Claude が見つけた候補（画面で確認するまで通知しない）
@@ -302,25 +302,28 @@ function skipReceipt(ss, data) {
 
 // ---- 在庫取込 ----
 // pending：確認待ち（kind=確認・status が空。古い順）
-// auto：Claude が在庫に足した分（status=自動追加・作成から7日以内。新しい順）
+// auto：Claude が在庫に足した分（status=自動追加・作成日が今日を含めて STOCK_IMPORT_AUTO_DAYS 日以内。新しい順）
 // どちらも receiptFiles（レシートの写真のファイル ID の配列）を付ける
+// autoDays：auto を出す日数（画面の見出しに使う）
 function getStockImports() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const rows = receiptRead(ss.getSheetByName(SHEET_STOCK_IMPORT)).rows;
-  const since = Date.now() - STOCK_IMPORT_AUTO_DAYS * 86400000;
+  const ymd = t => Utilities.formatDate(new Date(t), "Asia/Tokyo", "yyyy-MM-dd");
+  const since = ymd(Date.now() - (STOCK_IMPORT_AUTO_DAYS - 1) * 86400000);
   const pending = rows.filter(o => String(o.kind ?? "") === "確認" && String(o.status ?? "") === "");
   const auto = rows.filter(o => {
     if (String(o.status ?? "") !== "自動追加") return false;
     const t = receiptTime(o.createdAt);
-    return isNaN(t) || t >= since; // 作成日時が読めないものは出しておく（取り消せるように）
+    return isNaN(t) || ymd(t) >= since; // 作成日時が読めないものは出しておく（取り消せるように）
   });
-  if (!pending.length && !auto.length) return { pending: [], auto: [] };
+  if (!pending.length && !auto.length) return { pending: [], auto: [], autoDays: STOCK_IMPORT_AUTO_DAYS };
   const files = receiptFileMap(ss);
   const out = o => Object.assign(receiptOut(o), { receiptFiles: files[String(o.receiptId)] || [] });
   const time = o => receiptTime(o.createdAt) || 0;
   return {
     pending: pending.sort((a, b) => time(a) - time(b)).map(out),
     auto: auto.sort((a, b) => time(b) - time(a)).map(out),
+    autoDays: STOCK_IMPORT_AUTO_DAYS,
   };
 }
 
