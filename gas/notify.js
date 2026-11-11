@@ -12,6 +12,18 @@ function getDiscordWebhookUrl(channel) {
   return url;
 }
 
+// 担当ごとの Discord ユーザー ID を入れるスクリプトプロパティ（ID はリポジトリに書かない）
+const DISCORD_ASSIGNEE_USER_PROPS = { "本人": "DISCORD_USER_ID_SELF", "彼女": "DISCORD_USER_ID_PARTNER" };
+
+// 担当に合わせた先頭のメンション。担当の ID が設定されていればその人だけ、
+// 担当なし・ID が未設定なら @everyone。allowed は payload の allowed_mentions（それ以外の相手を鳴らさない）
+function discordMentionFor(assignee) {
+  const prop = DISCORD_ASSIGNEE_USER_PROPS[normText(assignee)];
+  const id = prop ? String(PropertiesService.getScriptProperties().getProperty(prop) || "").trim() : "";
+  if (/^\d+$/.test(id)) return { text: `<@${id}>`, allowed: { parse: [], users: [id] } };
+  return { text: "@everyone", allowed: { parse: ["everyone"] } };
+}
+
 // 「在庫」タブのexpirationDateを毎日チェックし、期限が迫っている商品をDiscordへ通知
 function checkExpirationAndNotifyDiscord() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();

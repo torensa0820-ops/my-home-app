@@ -6,8 +6,9 @@
 // どちらも checkReminders（5分ごと）から送る。あわせて在庫とのつながり（syncStockReminders）もここで行う
 // =========================================================
 const REMINDER_MORNING_HOUR = 8; // 期限切れ・時刻なしの今日のものをまとめて通知する時刻（毎朝）
-const REMINDER_MENTION = "@everyone"; // 期限の通知の先頭に付けるメンション
+const REMINDER_MENTION = true; // 期限の通知の先頭にメンションを付けるか（担当が本人・彼女ならその人だけ、担当なしは @everyone。ID は notify.js の DISCORD_ASSIGNEE_USER_PROPS）
 const REMINDER_DIGEST_KEY = "CHORE_DIGEST_DATE"; // 朝のまとめを送った日（以前の家事の通知と同じキー。移行した日に二重に送らない）
+const REMINDER_DIGEST_GROUPS_KEY = "REMINDER_DIGEST_SENT_GROUPS"; // 朝のまとめを送り終えた担当（途中で失敗したときだけ使う）
 const REMINDER_SHOP_WEEKDAY = 6; // 買い物の通知の曜日（0=日〜6=土）
 const REMINDER_SHOP_HOUR = 8; // 買い物の通知の時刻（この時刻を過ぎた最初の5分ごとの処理で送る）
 const REMINDER_SHOP_MENTION = ""; // 買い物の通知の先頭に付けるメンション（"@everyone" にすると付く）
@@ -42,21 +43,46 @@ function checkReminders() {
 
 // ---- 期限のある行 ----
 
-// 期限の通知：時刻を指定したものは予定時刻を過ぎたら1回（notifiedFor に予定日時を書いて二重に送らない）。
+// 期限の通知：担当ごとに別のメッセージで送る（本人・彼女はその人だけにメンション、担当なしは @everyone）。
+// 時刻を指定したものは予定時刻を過ぎたら1回（送れた担当の分だけ notifiedFor に予定日時を書いて二重に送らない）。
 // 毎朝 REMINDER_MORNING_HOUR 時に、期限切れと今日のもの（時刻ありは過ぎたもの）をまとめて1回
+// （途中で失敗したら、送れた担当を REMINDER_DIGEST_GROUPS_KEY に覚えて、次の5分ごとの処理では残りだけ送る）
 function notifyDueReminders(ss, now) {
   const plan = buildDueNotice(ss, now);
-  if (plan.timed.length) {
-    sendDiscordMessage(plan.timedText, "REMINDER");
-    plan.timed.forEach(x => receiptWrite(plan.sheet, plan.headers, x.o._row, { notifiedFor: x.due }));
-  }
+  let sent = 0;
+  const send = msg => {
+    if (sent++) Utilities.sleep(SALE_SEND_INTERVAL_MS);
+    sendDiscordPayload(msg.payload, "REMINDER");
+  };
+  plan.timed.forEach(msg => {
+    send(msg);
+    msg.items.forEach(x => receiptWrite(plan.sheet, plan.headers, x.o._row, { notifiedFor: x.due }));
+  });
   if (!plan.digestDue) return;
-  if (plan.digest.length) sendDiscordMessage(plan.digestText, "REMINDER");
-  PropertiesService.getScriptProperties().setProperty(REMINDER_DIGEST_KEY, plan.today);
+  const props = PropertiesService.getScriptProperties();
+  const done = reminderDigestSentGroups(props, plan.today);
+  plan.digest.filter(msg => done.indexOf(msg.key) === -1).forEach(msg => {
+    send(msg);
+    done.push(msg.key);
+    props.setProperty(REMINDER_DIGEST_GROUPS_KEY, JSON.stringify({ date: plan.today, keys: done }));
+  });
+  props.setProperty(REMINDER_DIGEST_KEY, plan.today);
+  props.deleteProperty(REMINDER_DIGEST_GROUPS_KEY);
+}
+
+// 今日の朝のまとめで、もう送れた担当（"本人" / "彼女" / ""）
+function reminderDigestSentGroups(props, today) {
+  try {
+    const v = JSON.parse(props.getProperty(REMINDER_DIGEST_GROUPS_KEY) || "null");
+    return v && v.date === today && Array.isArray(v.keys) ? v.keys : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // 通知する内容を作る（送信も書き込みもしない）
-// timed：予定時刻を過ぎた時刻指定の行、digest：朝のまとめの行（digestDue が false なら今は送らない）
+// timed：予定時刻を過ぎた時刻指定の行、digest：朝のまとめの行（digestDue が false なら今は送らない）。
+// どちらも担当ごとのメッセージの配列 [{ key: 担当, items: 行, payload: Discord に送る形 }]
 function buildDueNotice(ss, now) {
   const sheet = ss.getSheetByName(SHEET_REMINDER);
   const t = receiptRead(sheet);
@@ -79,20 +105,32 @@ function buildDueNotice(ss, now) {
     .filter(x => !justNotified.has(x.o._row) && (x.timed ? x.due <= now : x.due < tomorrow))
     .sort((a, b) => a.due - b.due);
 
-  const label = (x, many) => `${many ? x.list.name + "：" : ""}${normText(x.o.title)}${x.o.assignee ? `［${normText(x.o.assignee)}］` : ""}`;
-  const many = arr => new Set(arr.map(x => String(x.list.id))).size > 1; // 複数のリストにまたがるときだけリスト名を付ける
-  const timedMany = many(timed);
-  const digestMany = many(digest);
   return {
-    sheet: sheet, headers: t.headers, today: today, digestDue: digestDue, timed: timed, digest: digest,
-    timedText: `${REMINDER_MENTION ? REMINDER_MENTION + " " : ""}【やることの時間です】\n`
-      + timed.map(x => `・${label(x, timedMany)}（${fmtTime(x.due)}）`).join("\n"),
-    digestText: `${REMINDER_MENTION ? REMINDER_MENTION + " " : ""}【今日のやること】期限切れ・今日やることがあります\n` + digest.map(x => {
+    sheet: sheet, headers: t.headers, today: today, digestDue: digestDue,
+    timed: reminderGroupMessages(timed, "【やることの時間です】", x => fmtTime(x.due)),
+    digest: reminderGroupMessages(digest, "【今日のやること】期限切れ・今日やることがあります", x => {
       const late = choreDiffDays(todayStart, x.due);
-      const when = late > 0 ? `${late}日遅れ` : (x.timed ? `今日 ${fmtTime(x.due)}・未完了` : "今日");
-      return `・${label(x, digestMany)}（${when}）`;
-    }).join("\n"),
+      return late > 0 ? `${late}日遅れ` : (x.timed ? `今日 ${fmtTime(x.due)}・未完了` : "今日");
+    }),
   };
+}
+
+// 行を担当ごとに分けてメッセージにする（本人 → 彼女 → 担当なし の順）。先頭のメンションは discordMentionFor。
+// その人だけへのメンションにできないとき（ID が未設定）は、行に［担当］を付ける。
+// 複数のリストにまたがるメッセージだけ、行にリスト名を付ける
+function reminderGroupMessages(items, head, when) {
+  const groups = {};
+  items.forEach(x => { const k = normText(x.o.assignee); (groups[k] = groups[k] || []).push(x); });
+  const order = k => { const i = REMINDER_ASSIGNEES.indexOf(k); return i === -1 ? REMINDER_ASSIGNEES.length : i; };
+  return Object.keys(groups).sort((a, b) => order(a) - order(b)).map(key => {
+    const rows = groups[key];
+    const mention = REMINDER_MENTION ? discordMentionFor(key) : null;
+    const showAssignee = key && !(mention && mention.allowed.users);
+    const many = new Set(rows.map(x => String(x.list.id))).size > 1;
+    const content = `${mention ? mention.text + " " : ""}${head}\n` + rows.map(x =>
+      `・${many ? x.list.name + "：" : ""}${normText(x.o.title)}${showAssignee ? `［${key}］` : ""}（${when(x)}）`).join("\n");
+    return { key: key, items: rows, payload: { content: content, allowed_mentions: mention ? mention.allowed : { parse: [] } } };
+  });
 }
 
 // 時刻を指定した行か（くり返しは rule.time。くり返しなしは nextDue が 0:00 ちょうどでなければ時刻あり）
@@ -216,9 +254,10 @@ function shopCouponLines(list, coupons, today) {
 // 【デバッグ用】今の期限の通知文をログに出す（送信も notifiedFor・送った日の書き込みもしない）
 function debugReminderNotifyPreview() {
   const plan = buildDueNotice(SpreadsheetApp.getActiveSpreadsheet(), new Date());
-  Logger.log(plan.timed.length ? plan.timedText : "予定時刻を過ぎた時刻指定のものはありません。");
+  const show = msgs => msgs.map(m => `---- 担当：${m.key || "なし"} ----\n${JSON.stringify(m.payload, null, 2)}`).join("\n");
+  Logger.log(plan.timed.length ? show(plan.timed) : "予定時刻を過ぎた時刻指定のものはありません。");
   Logger.log(!plan.digestDue ? `朝のまとめは今は送りません（${REMINDER_MORNING_HOUR}時前か、今日はもう送りました）。`
-    : plan.digest.length ? plan.digestText : "朝のまとめに入るものはありません。");
+    : plan.digest.length ? show(plan.digest) : "朝のまとめに入るものはありません。");
 }
 
 // 【デバッグ用】買い物の通知のペイロードをログに出す（曜日・時刻に関係なく、今の内容で作る。送信も送った日の書き込みもしない）
