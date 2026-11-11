@@ -371,7 +371,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
    - `setupReceiptTriggers` を一度実行する（`notifyCouponsAndPending` を毎朝 7:00 に実行するトリガーが作られる。何度実行しても重複しない）。あわせて「レシート」「在庫取込」「クーポン」シートを用意し、写真の保存先のフォルダを作る。初回はドライブの権限の許可を求められる
 4. Web アプリとしてデプロイし、URL を `js/common.js` の `GAS_URL` に入れる
 
-天気の通知は `debugWeatherPreview`（ログに出すだけ。カードの下の行に、1時間ごとの予報をどこから読めたかが出る）・`debugWeatherMorningNow`（いま送る）で確かめられる。セールチェックの通知（ペイロードの JSON）は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview`、やることの期限の通知文は `debugReminderNotifyPreview`、土曜の買い物の通知（ペイロードの JSON。曜日・時刻に関係なく今の内容で作る）は `debugShoppingNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
+天気の通知は `debugWeatherPreview`（ログに出すだけ。カードの下の行に、1時間ごとの予報をどこから読めたかが出る）・`debugWeatherMorningNow`（いま送る）で確かめられる。セールチェックの通知（ペイロードの JSON）は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview`、やることの期限の通知文（担当ごと。朝のまとめは時刻・送った日に関係なく今の内容で作る）は `debugReminderNotifyPreview`、土曜の買い物の通知（ペイロードの JSON。曜日・時刻に関係なく今の内容で作る）は `debugShoppingNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
 
 レシートの読み取りは、アプリの外で用意した Claude のスケジュールタスクが毎晩 0:00 に行う。「レシート」シートの `status` が空の行の写真（`fileIds`）を読み、上の「スプレッドシートの構成」のとおりに「レシート」「レシート明細」「在庫取込」「クーポン」シートへ書き込む。`status` が `再読` の行は在庫の判断だけをやり直す（在庫の自動追加では在庫シートの個数も足し、足したロットの `id` を `stockRowId` に入れる。このとき同じ商品の全ロットの `buyFlag` を空にする。新しいロットを作るときは `reorderAt` を既存のロットから写す）。
 

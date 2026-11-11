@@ -83,7 +83,8 @@ function reminderDigestSentGroups(props, today) {
 // 通知する内容を作る（送信も書き込みもしない）
 // timed：予定時刻を過ぎた時刻指定の行、digest：朝のまとめの行（digestDue が false なら今は送らない）。
 // どちらも担当ごとのメッセージの配列 [{ key: 担当, items: 行, payload: Discord に送る形 }]
-function buildDueNotice(ss, now) {
+// forceDigest：時刻・送った日に関係なく朝のまとめを作る（デバッグ用のプレビューだけで使う）
+function buildDueNotice(ss, now, forceDigest) {
   const sheet = ss.getSheetByName(SHEET_REMINDER);
   const t = receiptRead(sheet);
   const lists = {};
@@ -100,7 +101,7 @@ function buildDueNotice(ss, now) {
   const timed = tasks.filter(x => x.timed && x.due <= now && x.notified !== x.due.getTime());
   const justNotified = new Set(timed.map(x => x.o._row));
   const today = Utilities.formatDate(now, "Asia/Tokyo", "yyyy-MM-dd");
-  const digestDue = now.getHours() >= REMINDER_MORNING_HOUR && PropertiesService.getScriptProperties().getProperty(REMINDER_DIGEST_KEY) !== today;
+  const digestDue = !!forceDigest || now.getHours() >= REMINDER_MORNING_HOUR && PropertiesService.getScriptProperties().getProperty(REMINDER_DIGEST_KEY) !== today;
   const digest = !digestDue ? [] : tasks
     .filter(x => !justNotified.has(x.o._row) && (x.timed ? x.due <= now : x.due < tomorrow))
     .sort((a, b) => a.due - b.due);
@@ -251,13 +252,13 @@ function shopCouponLines(list, coupons, today) {
 
 // ---- デバッグ用 ----
 
-// 【デバッグ用】今の期限の通知文をログに出す（送信も notifiedFor・送った日の書き込みもしない）
+// 【デバッグ用】今の期限の通知文を担当ごとにログに出す（送信も notifiedFor・送った日の書き込みもしない）
+// 朝のまとめは、時刻・今日もう送ったかに関係なく、今の内容で作って出す
 function debugReminderNotifyPreview() {
-  const plan = buildDueNotice(SpreadsheetApp.getActiveSpreadsheet(), new Date());
+  const plan = buildDueNotice(SpreadsheetApp.getActiveSpreadsheet(), new Date(), true);
   const show = msgs => msgs.map(m => `---- 担当：${m.key || "なし"} ----\n${JSON.stringify(m.payload, null, 2)}`).join("\n");
-  Logger.log(plan.timed.length ? show(plan.timed) : "予定時刻を過ぎた時刻指定のものはありません。");
-  Logger.log(!plan.digestDue ? `朝のまとめは今は送りません（${REMINDER_MORNING_HOUR}時前か、今日はもう送りました）。`
-    : plan.digest.length ? show(plan.digest) : "朝のまとめに入るものはありません。");
+  Logger.log(plan.timed.length ? "【時刻の通知】\n" + show(plan.timed) : "予定時刻を過ぎた時刻指定のものはありません。");
+  Logger.log(plan.digest.length ? "【朝のまとめ（今の内容で作ったもの）】\n" + show(plan.digest) : "朝のまとめに入るもの（期限切れ・今日のもの）はありません。");
 }
 
 // 【デバッグ用】買い物の通知のペイロードをログに出す（曜日・時刻に関係なく、今の内容で作る。送信も送った日の書き込みもしない）
