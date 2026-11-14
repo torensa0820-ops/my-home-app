@@ -133,7 +133,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
 | `lastUpdated` | 最終更新日時 |
 | `reorderAt` | 買う目安（同じ商品の全ロットで共通）。0 以上の整数か空。合計個数がこの数以下になったら買う物とみなす。数字でないものは目安なしとして扱う |
 | `buyFlag` | 「買い物リストに入れる」の印（同じ商品の全ロットで共通）。`買う` か空。個数が増えたら空にする（**シートに直接個数を足すときも空にする**） |
-| `size` | 容量（ロットごとの値。商品単位の情報ではない）。「数字＋単位」の文字（例：`2L`・`2kg`・`1200g`・`200組`）。**空＝普段の量**（「セール品目」の `unitQty`／`stockPerUnit` の量）。普段と違う容量の物を買ったときだけ入れる。レシートの自動追加など容量を指定しない登録は、空のロットに入る |
+| `size` | 容量（ロットごとの値。商品単位の情報ではない）。「数字＋単位」の文字（例：`2L`・`2kg`・`1200g`・`200組`）。**空＝普段の量**（「セール品目」の `unitQty`／`stockPerUnit` の量）。普段と違う容量の物を買ったときだけ入れる。容量を指定しない登録は、空のロットに入る。レシートからの登録は、レシートの品名に容量が印字されていればその容量のロットに、なければ空のロットに入る |
 
 買う物の判定（`gas/shared.js` の `stockBuyReason`。画面と GAS で共通。商品名ごとに全ロットの `stock` の合計で判断する）：型番の入った商品は対象外。`reorderAt` があれば `合計 <= reorderAt`（`buyFlag` は見ない）。空なら、`buyFlag` が `買う`、またはタグ「ストック」があって合計が 0。
 
@@ -230,6 +230,7 @@ gas/                  GAS のコード（clasp push でこのフォルダの中�
 | `id` | UUID |
 | `receiptId` | レシートシートの `id` |
 | `itemName`・`qty`・`category`・`location`・`tags` | 品目・個数・カテゴリ・収納場所・タグ（アプリで「在庫に追加」したときは直した値で上書きする）。`category` は在庫シートと同じカテゴリ（分からなければ空）で、`tags` に分類は入れない |
+| `size` | 容量。レシートの品名に印字されていれば Claude が入れる（例：「パンテーンEXDR詰替600G」→ `600g`）。書き方は在庫シートの `size` と同じ「数字＋単位」の文字。**印字がなければ空＝普段の量**（推測では入れない）。自動追加では、在庫の同じ `size` のロットに足す。アプリで「在庫に追加」したときは直した値で上書きする。列は `category` の右（列がないシートでは、次に写真を受け取ったときに見出しを足す。それまでは容量なしで動く） |
 | `kind` | `自動`（在庫シートにタグ「ストック」で登録済みの品目。Claude が在庫に直接足す）／ `確認`（新しく在庫管理したほうがよさそうな品目） |
 | `status` | `自動追加`（Claude が在庫に足し済み）、空＝確認待ち、`added`、`dismissed`、`undone`（自動追加をアプリで取り消した） |
 | `reason` | Claude が追加を勧める理由 |
@@ -308,8 +309,8 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 | `getStock` | 在庫の全行 |
 | `getReminders` | やること。`lists`（全リスト）、`items`（まだ終わっていない行・くり返しの行・4日以内に完了した行）、`sale`（`items`：品目名 → `{pack: "2袋まで"}`、`verdicts`：品目名 → `買い` / `待ち`（最新の回）） |
 | `getReceipts` | 最近14日に撮った分（`recent`。`count` に写真の枚数、`items`・`auto`・`confirm`・`skip` に明細の件数、`coupons` にクーポン・候補の件数）と、今夜読む件数（`unread`。`status` が空か `再読`） |
-| `getReceiptDetail` | 撮影した1件（`id`）の反映の詳細。`receipt`・`items`（レシート明細と、対応する在庫取込の行 `stockImport`）・`otherStockImports`・`coupons` |
-| `getStockImports` | 在庫取込の確認待ち（`pending`）と、今日を含めて3日以内の自動追加（`auto`）。どちらも `receiptFiles` 付き。`autoDays` は `auto` を出す日数 |
+| `getReceiptDetail` | 撮影した1件（`id`）の反映の詳細。`receipt`・`items`（レシート明細と、対応する在庫取込の行 `stockImport`）・`otherStockImports`・`coupons`。在庫取込の行には `size`（容量）も入る |
+| `getStockImports` | 在庫取込の確認待ち（`pending`）と、今日を含めて3日以内の自動追加（`auto`）。どちらも `receiptFiles` と `size`（容量。なければ空）付き。`autoDays` は `auto` を出す日数 |
 | `getCoupons` | 未使用（`status` が空）と候補（`status`=`候補`）で、期限を過ぎていないクーポン（期限の近い順。画面で `status` によって分けて表示する）。`getAll` にも `coupons` として入る |
 
 ### 書き込み（POST。本文は JSON）
@@ -325,7 +326,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 | `receipt` | `upload` | 写真を1枚受け取り、ドライブに保存する（`kind`：`レシート` / `クーポン`、`image`：JPEG の base64。1枚 5MB まで）。`receiptId` があればその1件（未読のものだけ）に写真を足す。返り値に `id`・`count`（その1件の枚数） |
 | `receipt` | `skip` | まだ読まれていない1件を読まないようにする（`id`）。`status` を `skipped` にする |
 | `receipt` | `reread` | 読み取り済みのレシート（`id`）の在庫の判断を今夜やり直させる。`status` を `再読` にする |
-| `stockImport` | `add` | 確認待ちを在庫に登録する（`id`・`itemName`・`qty`・`category`・`location`・`tags`・`expirationDate`。在庫の登録と同じ処理）。`status` を `added` にする |
+| `stockImport` | `add` | 確認待ちを在庫に登録する（`id`・`itemName`・`qty`・`category`・`location`・`tags`・`expirationDate`・`size`。在庫の登録と同じ処理で、賞味期限と容量が同じロットがあれば個数を足し、なければロットを追加する。`size` を送らないか空なら普段の量として扱う）。在庫取込の行も送った値（`size` を含む）で書き換え、`status` を `added` にする |
 | `stockImport` | `dismiss` | 確認待ちを追加しない（`id`）。`status` を `dismissed` にする |
 | `stockImport` | `undo` | 自動追加を取り消す（`id`）。`stockRowId` のロットの個数を `qty` だけ減らし、`status` を `undone` にする。ロットが見つからなければ個数は変えず、返り値の `message` で知らせる |
 | `coupon` | `used` / `dismiss` | クーポンを使った（`used`）・不要（`dismissed`）にする（`id`）。`used` は未使用のクーポンだけ、`dismiss` は未使用のクーポンと候補 |
@@ -374,7 +375,7 @@ Claude がレシートの**全品目**を書き、在庫についての判断と
 
 天気の通知は `debugWeatherPreview`（ログに出すだけ。カードの下の行に、1時間ごとの予報をどこから読めたかが出る）・`debugWeatherMorningNow`（いま送る）で確かめられる。セールチェックの通知（ペイロードの JSON）は `debugSaleCheckPreview`、クーポンの通知文は `debugCouponNotifyPreview`、やることの期限の通知文（担当ごと。朝のまとめは時刻・送った日に関係なく今の内容で作る）は `debugReminderNotifyPreview`、土曜の買い物の通知（ペイロードの JSON。曜日・時刻に関係なく今の内容で作る）は `debugShoppingNotifyPreview` でログに出せる（送信もシートへの書き込みもしない）。
 
-レシートの読み取りは、アプリの外で用意した Claude のスケジュールタスクが毎晩 0:00 に行う。「レシート」シートの `status` が空の行の写真（`fileIds`）を読み、上の「スプレッドシートの構成」のとおりに「レシート」「レシート明細」「在庫取込」「クーポン」シートへ書き込む。`status` が `再読` の行は在庫の判断だけをやり直す（在庫の自動追加では在庫シートの個数も足し、足したロットの `id` を `stockRowId` に入れる。このとき同じ商品の全ロットの `buyFlag` を空にする。新しいロットを作るときは `reorderAt` を既存のロットから写す）。
+レシートの読み取りは、アプリの外で用意した Claude のスケジュールタスクが毎晩 0:00 に行う。「レシート」シートの `status` が空の行の写真（`fileIds`）を読み、上の「スプレッドシートの構成」のとおりに「レシート」「レシート明細」「在庫取込」「クーポン」シートへ書き込む。`status` が `再読` の行は在庫の判断だけをやり直す（在庫の自動追加では在庫シートの個数も足し、足したロットの `id` を `stockRowId` に入れる。このとき同じ商品の全ロットの `buyFlag` を空にする。新しいロットを作るときは `reorderAt` を既存のロットから写す）。レシートの品名に容量が印字されていれば（例：「パンテーンEXDR詰替600G」）、「在庫取込」の `size` に書き、自動追加では在庫の同じ `size` のロットに足す（なければその `size` のロットを作る）。印字がなければ空（普段の量）のままにし、「セール品目」の `unitQty` などからの推測では入れない。
 
 ### 2. 画面
 
