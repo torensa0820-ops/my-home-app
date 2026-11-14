@@ -62,7 +62,7 @@ function tmStockImportList(){
       stockImp.pending.map(it=>h('button', {type:'button', class:'tm-row import-row', onclick:()=>tmShow(tmStockImportItem, it)},
         h('span', {class:'name'},
           h('span', {}, it.itemName || '品名不明'),
-          h('small', {}, it.reason || [it.category, it.location, splitTags(it.tags).join(', ')].filter(Boolean).join('・') || '—')),
+          h('small', {}, [normText(it.size), it.reason || [it.category, it.location, splitTags(it.tags).join(', ')].filter(Boolean).join('・')].filter(Boolean).join('・') || '—')),
         h('span', {class:'amt'}, `×${Number(it.qty) || 1}`),
         h('span', {class:'chev'}, '›')))));
   }
@@ -77,7 +77,7 @@ function tmStockImportList(){
           h('span', {class:'when'}, stockImportDay(it)),
           h('span', {class:'name'},
             h('span', {}, it.itemName || '品名不明'),
-            h('small', {}, it.location || '—')),
+            h('small', {}, [normText(it.size), it.location].filter(Boolean).join('・') || '—')),
           h('span', {class:'amt'}, `+${Number(it.qty) || 0}`),
           undo);
       })));
@@ -113,6 +113,9 @@ function tmStockImportItem(it){
   const chips = h('div', {class:'chips', id:'si-tags-chips'});
   const tagInput = h('input', {type:'text', id:'si-tags-input', placeholder:'新しいタグを入力して改行で追加'});
   const exp = h('input', {type:'date'});
+  // 容量（レシートの品名に印字があれば入っている。空は普段の量）。size の列がない古い在庫シートでは欄を出さず、送らない
+  const hasSize = stockSheetColumns.includes('size');
+  const size = h('input', {type:'text', value:normText(it.size), placeholder:'通常'});
   const known = h('p', {class:'tm-note'});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '在庫に追加');
   const dismiss = h('button', {type:'button', class:'cancel-btn'}, '追加しない');
@@ -121,7 +124,7 @@ function tmStockImportItem(it){
   const existing = ()=>groupStock().find(g=>normText(g.name) === normText(name.value));
   function drawKnown(){
     const g = existing();
-    known.textContent = g ? `「${g.name}」は在庫に登録済みです。賞味期限が同じなら個数を足します。` : '';
+    known.textContent = g ? `「${g.name}」は在庫に登録済みです。賞味期限${hasSize ? 'と容量' : ''}が同じなら個数を足します。` : '';
   }
   name.addEventListener('input', drawKnown);
   const g0 = existing();
@@ -132,6 +135,7 @@ function tmStockImportItem(it){
   tmBody.append(
     h('div', {class:'import-info'},
       h('div', {class:'top'}, h('span', {}, it.itemName || '品名不明'), h('b', {}, `×${Number(it.qty) || 1}`)),
+      normText(it.size) ? h('div', {class:'sub'}, `容量：${normText(it.size)}`) : '',
       it.reason ? h('div', {class:'sub'}, `おすすめの理由：${it.reason}`) : '',
       photoLinks(it.receiptFiles)),
     field('商品名', name),
@@ -141,6 +145,7 @@ function tmStockImportItem(it){
     field('収納場所', locSelect, locInput),
     field('タグ（複数選択可）', chips, tagInput, h('p', {class:'tm-note'}, TAG_LIMIT_NOTE)),
     field('賞味期限（任意）', exp),
+    hasSize ? field('容量（任意）', size, h('p', {class:'tm-note'}, 'レシートに容量が書いてあれば入っています。普段と同じ量なら空のままにしてください')) : '',
     h('div', {class:'tm-section tm-danger'},
       h('h3', {}, '追加しない'),
       h('p', {class:'tm-note'}, '在庫で管理しない品目のときに使います。一覧から消えます。'),
@@ -162,7 +167,7 @@ function tmStockImportItem(it){
     save.textContent = '追加中…';
     tm.busy = true;
     postToGas({type:'stockImport', action:'add', id:it.id, itemName, qty:value,
-      category:getHybridValue(catSelect, catInput), location:getHybridValue(locSelect, locInput), tags:picker.value(), expirationDate:exp.value})
+      category:getHybridValue(catSelect, catInput), location:getHybridValue(locSelect, locInput), tags:picker.value(), expirationDate:exp.value, size:hasSize ? normText(size.value) : ''})
       .then(res=>{
         if(res.status !== 'success') throw new Error(res.message || '追加に失敗しました');
         return loadStock();

@@ -165,6 +165,12 @@ const RECEIPT_DECISION_CLS = {自動追加:'auto', 確認:'confirm', 対象外:'
 const STOCK_IMPORT_STATUS = {自動追加:'在庫に足しました', '':'確認待ち（在庫タブの「レシートから」）', added:'在庫に追加しました', dismissed:'「追加しない」にしました', undone:'取り消しました'};
 const COUPON_STATUS_LABEL = {'':'未使用（通知します）', 候補:'候補（クーポン一覧で確認）', used:'使った', dismissed:'不要', expired:'期限切れ'};
 
+// 在庫取込の行の個数と容量：「（2個・600g）」。どちらもなければ空
+function stockImportAmount(si){
+  const parts = [si.qty ? `${si.qty}個` : '', normText(si.size)].filter(Boolean);
+  return parts.length ? `（${parts.join('・')}）` : '';
+}
+
 function tmReceiptDetail(r){
   tmTitle.textContent = r.kind === 'クーポン' ? 'クーポンの写真' : 'レシートの反映';
   tmBody.append(h('p', {class:'empty-msg'}, '読み込み中…'));
@@ -212,7 +218,7 @@ function drawReceiptDetail(d){
             h('span', {class:'decision ' + cls}, it.decision || '—')),
           it.matchedStock ? h('div', {class:'sub'}, `在庫の「${it.matchedStock}」と同じ物`) : '',
           it.reason ? h('div', {class:'sub'}, it.reason) : '',
-          si ? h('div', {class:'sub state'}, `→ ${STOCK_IMPORT_STATUS[String(si.status || '')] || si.status}${si.qty ? `（${si.qty}個）` : ''}`) : ''));
+          si ? h('div', {class:'sub state'}, `→ ${STOCK_IMPORT_STATUS[String(si.status || '')] || si.status}${stockImportAmount(si)}`) : ''));
       });
     } else {
       stockBody.push(h('p', {class:'tm-note'}, '品目ごとの記録がありません（品目の記録を始める前に読んだレシートです）。下の「在庫の判断を読み直す」を押すと、今夜記録されます。'));
@@ -220,7 +226,7 @@ function drawReceiptDetail(d){
     (d.otherStockImports || []).forEach(si=>stockBody.push(h('div', {class:'receipt-line'},
       h('div', {class:'main'}, h('span', {}, `${si.itemName}${Number(si.qty) > 1 ? ` ×${si.qty}` : ''}`),
         h('span', {class:'decision ' + (si.kind === '自動' ? 'auto' : 'confirm')}, si.kind === '自動' ? '自動追加' : '確認')),
-      h('div', {class:'sub state'}, `→ ${STOCK_IMPORT_STATUS[String(si.status || '')] || si.status}`))));
+      h('div', {class:'sub state'}, `→ ${STOCK_IMPORT_STATUS[String(si.status || '')] || si.status}${normText(si.size) ? `（${normText(si.size)}）` : ''}`))));
     tmBody.append(section(`在庫（${items.length}品目）`, stockBody));
   }
 
