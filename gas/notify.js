@@ -57,7 +57,10 @@ function checkExpirationAndNotifyDiscord() {
 
     // 本日（0日）〜3日以内が対象
     if (diffDays >= 0 && diffDays <= 3) {
-      alerts.push({ name: name, diffDays: diffDays, stock: stock });
+      // 同じ商品・同じ期限で容量だけ違うロットは、1行にまとめて個数を足す
+      const same = alerts.find(a => a.name === name && a.diffDays === diffDays);
+      if (same) same.stock += stock;
+      else alerts.push({ name: name, diffDays: diffDays, stock: stock });
     }
   }
 

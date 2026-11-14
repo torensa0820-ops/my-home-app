@@ -652,7 +652,9 @@ function readExpiringStock(now) {
     const exp = parseExpirationDate(r[iExp]);
     if (!exp) return;
     const days = Math.round((exp - today) / 86400000);
-    if (days >= 0 && days <= 1) out.push({ name: String(r[iName]), days: days });
+    // 同じ商品・同じ期限で容量だけ違うロットは1件にまとめる
+    const name = String(r[iName]);
+    if (days >= 0 && days <= 1 && !out.some(e => e.name === name && e.days === days)) out.push({ name: name, days: days });
   });
   return out.sort((a, b) => a.days - b.days);
 }
