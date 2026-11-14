@@ -100,7 +100,7 @@ function getPendingSaleRuns(sheet) {
   return Object.keys(byRun).sort().map(runId => byRun[runId]).filter(run => run.rows.length > 0);
 }
 
-// 「セール品目」（itemName ごとの行）と「在庫」（itemName ごとの stock の合計）を読む
+// 「セール品目」（itemName ごとの行）と「在庫」（itemName ごとの個数の合計 total と、ロットの配列 lots）を読む
 function getSaleMasters() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const items = {};
@@ -111,7 +111,11 @@ function getSaleMasters() {
   const stocks = {};
   saleSheetRows(ss, SHEET_STOCK).forEach(o => {
     const name = saleName(o);
-    if (name) stocks[name] = (stocks[name] || 0) + (saleNum(o.stock) || 0);
+    if (!name) return;
+    const s = stocks[name] = stocks[name] || { total: 0, lots: [] };
+    const stock = saleNum(o.stock) || 0;
+    s.total += stock;
+    s.lots.push({ stock: stock, size: normText(o.size) }); // size の列がないシートでは ""（普段の量）
   });
   return { items: items, stocks: stocks };
 }
@@ -198,8 +202,11 @@ function saleStorePayload(run, masters) {
     const unitQty = item ? saleNum(item.unitQty) : null;
     if (stock === undefined || unitQty === null) return null; // 在庫か1回分の量が分からない
     const stockPerUnit = saleNum(item.stockPerUnit);
-    if (stock * (stockPerUnit === null ? unitQty : stockPerUnit) >= unitQty) return null;
-    return { name: name, item: item, stock: stock, unit: stockPerUnit === 1 ? String(item.unit ?? "").trim() : "個" };
+    // 在庫量は、ロットごとに 個数 × 1個の量（容量があればその量、なければ普段の量）を足す
+    const amount = stock.lots.reduce((sum, lot) =>
+      sum + lot.stock * (saleSizeToUnit(lot.size, item.unit) ?? stockPerUnit ?? unitQty), 0);
+    if (amount >= unitQty) return null;
+    return { name: name, item: item, stock: stock.total, unit: stockPerUnit === 1 ? String(item.unit ?? "").trim() : "個" };
   }).filter(Boolean);
   if (targets.length === 0) return null;
 
@@ -316,6 +323,21 @@ function saleNum(v) {
   if (v === "" || v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : Number(String(v).replace(/[,，円%％\s]/g, ""));
   return isFinite(n) ? n : null;
+}
+
+// 在庫の容量（"2L"・"1200g" など）を、セール品目の unit での量にする（読めない・単位が合わないときは null）
+// kg → g、L → ml は ×1000。unit が g か ml のときは g と ml を同じとみなす（1ml＝1g）
+function saleSizeToUnit(size, unit) {
+  const m = normText(size).match(/^(\d+(?:\.\d+)?)\s*(\D+)$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const from = m[2].trim().toLowerCase();
+  const to = normText(unit).toLowerCase();
+  if (!to) return null;
+  if (from === to) return n;
+  const base = { kg: ["g", 1000], l: ["ml", 1000], g: ["g", 1], ml: ["ml", 1] };
+  if (!base[from] || (to !== "g" && to !== "ml")) return null;
+  return n * base[from][1];
 }
 
 // 3桁区切り。digits は小数の最大桁数（498.0 → "498"、49.75 → "49.8"）
