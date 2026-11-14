@@ -1,5 +1,6 @@
 // =========================================================
-// 在庫：1行＝1ロット（同じ商品でも賞味期限ごとに別の行）
+// 在庫：1行＝1ロット（同じ商品でも賞味期限か容量が違えば別の行）
+// 容量（size）は「2L」「1200g」のような文字。空は普段の量（セール品目の unitQty／stockPerUnit の量）
 // カテゴリ・収納場所・タグ・型番・買う目安・買い物メモの印は商品単位の情報として、同じ商品名の全ロットで揃える
 // 買い物メモの印（BUY_FLAG）・買う目安（parseReorderAt）・買う物の判定は shared.js（画面と共通）
 // =========================================================
@@ -44,6 +45,7 @@ function stockColumns(headers) {
     lastUpdated: headers.indexOf("lastUpdated"),
     reorderAt: headers.indexOf("reorderAt"),
     buyFlag: headers.indexOf("buyFlag"),
+    size: headers.indexOf("size"),
   };
 }
 
@@ -88,7 +90,17 @@ function normDate(v) {
   return m ? `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` : "";
 }
 
-// ---- 在庫の登録（同じ商品名・同じ期限のロットがあれば個数を加算、なければロットを追加）----
+// 容量を保存する形にそろえる（未指定は ""＝普段の量）。size の列がないシートでは、どれも "" として扱う
+function normSize(col, v) {
+  return col.size === -1 ? "" : normText(v);
+}
+
+// ロットを見分けるキー（期限＋容量。size は normSize でそろえた値）
+function lotKey(exp, size) {
+  return normDate(exp) + "|" + size;
+}
+
+// ---- 在庫の登録（同じ商品名・同じ期限・同じ容量のロットがあれば個数を加算、なければロットを追加）----
 function updateStock(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
@@ -96,11 +108,13 @@ function updateStock(ss, data) {
   const name = normText(data.target);
   if (!name) throw new Error("商品名が空です。");
   const exp = normDate(data.expirationDate);
+  const size = normSize(col, data.size);
+  const key = lotKey(exp, size);
   const info = itemInfo(data);
 
   // 同じ商品かどうかは、正規化した商品名どうしで比べる
   const lots = itemLotRows(values, col, name);
-  const target = lots.find(i => normDate(values[i][col.expirationDate]) === exp);
+  const target = lots.find(i => lotKey(values[i][col.expirationDate], normSize(col, values[i][col.size])) === key);
   const added = Number(data.value) > 0;
 
   const now = new Date();
@@ -120,6 +134,7 @@ function updateStock(ss, data) {
     newRow[col.stock] = Number(data.value) || 0;
     setItemInfo(newRow, col, inherited);
     newRow[col.expirationDate] = exp;
+    if (col.size !== -1) newRow[col.size] = size;
     newRow[col.lastUpdated] = now;
     sheet.appendRow(newRow);
   } else {
@@ -186,7 +201,7 @@ function deleteStock(ss, data) {
 
 // ---- 商品の編集 ----
 // data: { oldName, itemName, category, location, tags, modelNumber, reorderAt,
-//         lots: [{ id（新規ロットは省略）, expirationDate, stock }], deleteIds: [id, ...] }
+//         lots: [{ id（新規ロットは省略）, expirationDate, size, stock }], deleteIds: [id, ...] }
 function editItem(ss, data) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
@@ -212,8 +227,16 @@ function editItem(ss, data) {
   const lots = data.lots || [];
   const deleteIds = new Set((data.deleteIds || []).map(String));
   if (!lots.length) throw new Error("賞味期限の行を1つ以上残してください。");
-  const exps = lots.map(l => normDate(l.expirationDate));
-  if (new Set(exps).size !== exps.length) throw new Error("同じ賞味期限の行が重複しています。");
+  // 容量が送られてこないロット（古い画面）は、シートの今の容量のままにする
+  const rowById = {};
+  itemRows.forEach(i => { rowById[String(values[i][col.id])] = i; });
+  const sizeOf = l => {
+    if (l.size !== undefined) return normSize(col, l.size);
+    const i = rowById[String(l.id)];
+    return i === undefined ? "" : normSize(col, values[i][col.size]);
+  };
+  const keys = lots.map(l => lotKey(l.expirationDate, sizeOf(l)));
+  if (new Set(keys).size !== keys.length) throw new Error("同じ賞味期限・容量の行が重複しています。");
 
   const now = new Date();
   const lotById = {};
@@ -234,7 +257,7 @@ function editItem(ss, data) {
   const increased = totalAfter > totalBefore;
   if (increased) info.buyFlag = "";
 
-  // 既存ロット：商品情報を揃え、編集されたロットは期限と個数も更新する
+  // 既存ロット：商品情報を揃え、編集されたロットは期限・容量・個数も更新する
   itemRows.forEach(i => {
     const id = String(values[i][col.id]);
     if (deleteIds.has(id)) return;
@@ -244,6 +267,7 @@ function editItem(ss, data) {
     const lot = lotById[id];
     if (lot) {
       row[col.expirationDate] = normDate(lot.expirationDate);
+      if (col.size !== -1) row[col.size] = sizeOf(lot);
       row[col.stock] = Number(lot.stock) || 0;
     }
     row[col.lastUpdated] = now;
@@ -262,6 +286,7 @@ function editItem(ss, data) {
     newRow[col.stock] = Number(l.stock) || 0;
     setItemInfo(newRow, col, newInfo);
     newRow[col.expirationDate] = normDate(l.expirationDate);
+    if (col.size !== -1) newRow[col.size] = sizeOf(l);
     newRow[col.lastUpdated] = now;
     sheet.appendRow(newRow);
   });

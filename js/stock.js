@@ -1,7 +1,8 @@
-// 在庫：カテゴリのタブ、一覧（賞味期限ごとのロットを商品ごとにまとめて表示）、登録、削除、商品の編集
+// 在庫：カテゴリのタブ、一覧（賞味期限・容量ごとのロットを商品ごとにまとめて表示）、登録、削除、商品の編集
 
 // ---------- 在庫 ----------
-// 在庫は1行＝1ロット（賞味期限ごと）。画面では商品名ごとにまとめて表示する
+// 在庫は1行＝1ロット（賞味期限・容量ごと）。画面では商品名ごとにまとめて表示する
+// 容量（size）は「2L」のような文字。空は普段の量
 function groupStock(){
   const map = new Map();
   stockCache.forEach(r=>{
@@ -9,10 +10,10 @@ function groupStock(){
     if(!map.has(name)) map.set(name, []);
     map.get(name).push(r);
   });
-  // 期限の早い順（期限なしは最後）
+  // 期限の早い順（期限なしは最後）。同じ期限なら容量の空（通常）を先にする
   const expKey = r=>toDateInputValue(r.expirationDate) || '9999-99-99';
   return [...map.entries()].map(([name, lots])=>{
-    lots.sort((a,b)=>expKey(a).localeCompare(expKey(b)));
+    lots.sort((a,b)=>expKey(a).localeCompare(expKey(b)) || lotSize(a).localeCompare(lotSize(b)));
     const pick = key=>(lots.find(l=>l[key]) || {})[key] || '';
     // 買う目安は 0 も有効な値なので pick を使わない
     const reorderAt = lots.map(l=>parseReorderAt(l.reorderAt)).find(v=>v !== '') ?? '';
@@ -25,7 +26,7 @@ function groupStock(){
 // 買う物になった商品は、GAS が「やること」タブの買い物リストに行を作る（gas/reminder.js の syncStockReminders）
 // 印の値（BUY_FLAG）・買う目安の読み方（parseReorderAt）・買う物の判定（stockBuyReason）は gas/shared.js（GAS と共通）
 const BUY_BADGE = '買う物';
-let stockSheetColumns = []; // 在庫シートの列名。reorderAt・buyFlag の列がない古いシートでは、その機能を画面に出さない
+let stockSheetColumns = []; // 在庫シートの列名。reorderAt・buyFlag・size の列がない古いシートでは、その機能を画面に出さない
 
 function stockTotal(g){ return g.lots.reduce((s,l)=>s + (Number(l.stock) || 0), 0); }
 // なぜ買う物なのかの説明。買う物でなければ ''
@@ -100,6 +101,16 @@ function expInfo(lot){
   const days = daysFromToday(exp);
   return {label:`期限 ${mdLabel(exp)}`, cls: days < 0 ? 'expired' : days <= 3 ? 'soon' : ''};
 }
+// ロットの容量（空は普段の量）
+function lotSize(lot){ return normText(lot.size); }
+// 複数ロットの商品の、ロットの行のラベル（「2L ・ 期限 12/5」）
+// 容量が空のロットは、ほかのロットに容量があるとき（anySize）だけ「通常サイズ」と出す
+function lotLabel(lot, anySize){
+  const e = expInfo(lot);
+  const size = lotSize(lot) || (anySize ? '通常サイズ' : '');
+  if(!size && !e.label) return h('span', {class:'lot-exp'}, '期限なし');
+  return h('span', {class:'lot-exp'}, size, size && e.label ? ' ・ ' : '', e.label ? h('span', {class:'exp ' + e.cls}, e.label) : '');
+}
 function renderStockList(){
   const wrap = document.getElementById('stock-list');
   const all = groupStock();
@@ -117,9 +128,12 @@ function renderStockList(){
     const single = model || g.lots.length === 1;
     const exp = single && !model ? expInfo(g.lots[0]) : null;
     const text = [showAll ? stockCategoryOf(g) : '', model ? `型番 ${g.modelNumber}` : '', g.location, splitTags(g.tags).join(', ')].filter(Boolean).join(' ・ ');
+    // 1ロットの商品は、容量があれば先頭に出す
+    const size = exp ? lotSize(g.lots[0]) : '';
     const meta = h('div', {class:'card-meta'});
-    if(exp && exp.label) meta.append(h('span', {class:'exp ' + exp.cls}, exp.label), text ? ' ・ ' : '');
-    meta.append(text || (exp && exp.label ? '' : '—'));
+    const rest = [exp && exp.label ? h('span', {class:'exp ' + exp.cls}, exp.label) : '', text].filter(Boolean);
+    [size, ...rest].filter(Boolean).forEach((part, i)=>meta.append(i ? ' ・ ' : '', part));
+    if(!meta.childNodes.length) meta.append('—');
     const info = h('div', {class:'card-info'},
       h('div', {class:'card-name-row'}, h('div', {class:'card-name'}, g.name), isBuyItem(g) ? h('span', {class:'buy-badge'}, BUY_BADGE) : ''),
       meta, canMemoBuy(g) ? makeBuyButton(g) : '');
@@ -139,10 +153,7 @@ function renderStockList(){
     } else {
       card.append(
         h('div', {class:'card-top'}, info, h('div', {class:'card-total'}, '計 ', rollNumber(h('span'), 'total:' + g.name, stockTotal(g)))),
-        h('div', {class:'lots'}, g.lots.map(l=>{
-          const e = expInfo(l);
-          return h('div', {class:'lot'}, h('span', {class:'lot-exp exp ' + e.cls}, e.label || '期限なし'), makeStepper(l));
-        }))
+        h('div', {class:'lots'}, g.lots.map(l=>h('div', {class:'lot'}, lotLabel(l, g.lots.some(lotSize)), makeStepper(l))))
       );
     }
     wrap.appendChild(card);
@@ -216,7 +227,7 @@ editToggle.addEventListener('click', ()=>setStockEditMode(!stockEditMode));
 // 削除は商品単位（その商品の全ロット）。1つのロットだけ消すときは編集画面から
 function openDeleteSheet(g){
   const stock = stockTotal(g);
-  const warn = (stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '') + (g.lots.length > 1 ? `賞味期限の異なる${g.lots.length}件をすべて削除します。` : '');
+  const warn = (stock > 0 ? `在庫がまだ ${stock} 個残っています。` : '') + (g.lots.length > 1 ? `期限・容量の異なる${g.lots.length}件をすべて削除します。` : '');
   deleteBtn = makeHoldButton('長押しで削除', reset=>{
     postToGas({type:'stock', action:'delete', target:g.name})
       .then(res=>{
@@ -268,6 +279,7 @@ function loadStock(preloaded){
     .then(rows=>{
       stockCache = rows;
       stockSheetColumns = Object.keys(rows[0] || {});
+      document.getElementById('s-size-field').hidden = !stockSheetColumns.includes('size');
       renderStockList();
       // カテゴリ・収納場所・タグの候補はスプレッドシートに登録済みの値から作る（カテゴリは決まったカテゴリも出す）
       // （名称変更・削除で無くなったタグを選択から外してから、カテゴリに合わせてタグの候補を絞る）
@@ -289,13 +301,14 @@ document.getElementById('stock-form').addEventListener('submit', e=>{
   const tags = stockTagPicker.value();
   const expirationDate = document.getElementById('s-expiration').value;
   const modelNumber = normText(document.getElementById('s-model').value);
-  postToGas({type:'stock', target:name, value, category, location, tags, expirationDate, modelNumber})
+  const size = normText(document.getElementById('s-size').value);
+  postToGas({type:'stock', target:name, value, category, location, tags, expirationDate, size, modelNumber})
     .then(res=>{
       if(res.status==='success'){ toast('登録しました'); e.target.reset(); document.getElementById('s-value').value=1; stockTagPicker.clear(); loadStock(); }
       else toastError(res.message || '登録に失敗しました');
     }).catch(err=>toastError(errMsg(err)));
 });
-// 一覧の商品をタップすると、商品名・カテゴリ・収納場所・タグ・型番を入力する（買い足し用。期限と個数は入れ直す）
+// 一覧の商品をタップすると、商品名・カテゴリ・収納場所・タグ・型番を入力する（買い足し用。期限・容量・個数は入れ直す）
 function fillStockForm(g, card){
   document.getElementById('s-name').value = g.name;
   setHybridValue(document.getElementById('s-category-select'), document.getElementById('s-category-input'), g.category);
@@ -305,12 +318,13 @@ function fillStockForm(g, card){
   document.getElementById('s-model').value = g.modelNumber || '';
   document.getElementById('s-value').value = 1;
   document.getElementById('s-expiration').value = '';
+  document.getElementById('s-size').value = '';
   document.querySelector('#stock-form details').open = true; // 買い足しは期限を入れることが多い
   flashPicked(card, g.name);
 }
 
 function openItemEditor(g){ openSheet('stock', tmItemView, g); }
-// 商品の編集：商品情報（全ロット共通）と、賞味期限ごとの個数（ロット）をまとめて保存する
+// 商品の編集：商品情報（全ロット共通）と、賞味期限・容量ごとの個数（ロット）をまとめて保存する
 function tmItemView(g){
   tmTitle.textContent = '商品を編集';
   const name = h('input', {type:'text', value:g.name});
@@ -329,17 +343,21 @@ function tmItemView(g){
   const reorder = h('input', {type:'number', min:'0', step:'1', inputMode:'numeric', value:g.reorderAt});
   const save = h('button', {type:'button', class:'tm-btn tm-wide'}, '保存');
 
-  // 賞味期限ごとの行。既存ロットは id を持ち、×で消すと deleteIds に入る
+  // 賞味期限・容量ごとの行。既存ロットは id を持ち、×で消すと deleteIds に入る
+  // size の列がない古いシートでは、容量の欄を出さない
+  const hasSize = stockSheetColumns.includes('size');
+  const lotClass = 'lot-edit' + (hasSize ? '' : ' no-size');
   const lotRows = [];
   const deleteIds = [];
   const lotList = h('div');
   const addLotRow = (lot)=>{
-    const exp = h('input', {type:'date', value:lot ? toDateInputValue(lot.expirationDate) : ''});
-    const count = h('input', {type:'number', value:lot ? (Number(lot.stock) || 0) : 1, inputMode:'numeric'});
-    const entry = {id: lot ? lot.id : undefined, exp, count};
-    const row = h('div', {class:'lot-edit'}, exp, count,
+    const exp = h('input', {type:'date', value:lot ? toDateInputValue(lot.expirationDate) : '', 'aria-label':'賞味期限'});
+    const size = h('input', {type:'text', value:lot ? lotSize(lot) : '', placeholder:'通常', 'aria-label':'容量'});
+    const count = h('input', {type:'number', value:lot ? (Number(lot.stock) || 0) : 1, inputMode:'numeric', 'aria-label':'個数'});
+    const entry = {id: lot ? lot.id : undefined, exp, size, count};
+    const row = h('div', {class:lotClass}, exp, hasSize ? size : '', count,
       h('button', {type:'button', class:'lot-remove', 'aria-label':'この行を削除', onclick:()=>{
-        if(lotRows.length <= 1){ toastError('賞味期限の行は1つ以上必要です（商品ごと消すときは「整理」から）'); return; }
+        if(lotRows.length <= 1){ toastError('行は1つ以上必要です（商品ごと消すときは「整理」から）'); return; }
         if(entry.id !== undefined) deleteIds.push(entry.id);
         lotRows.splice(lotRows.indexOf(entry), 1);
         row.remove();
@@ -360,10 +378,12 @@ function tmItemView(g){
     hasReorder ? field('買う目安', reorder,
       h('p', {class:'tm-note'}, '合計がこの個数以下になったら「買う物」にし、やることタブの買い物リストに入れます。天然水など本数で判断できる物に入れてください。空欄なら、残り1個のときに「買い物リストに入れる」を押して判断します。')) : '',
     h('div', {class:'field'},
-      h('div', {class:'lot-edit lot-head'}, h('label', {}, '賞味期限'), h('label', {}, '個数'), h('span')),
+      h('div', {class:lotClass + ' lot-head'}, h('label', {}, '賞味期限'), hasSize ? h('label', {}, '容量') : '', h('label', {}, '個数'), h('span')),
       lotList,
-      h('button', {type:'button', class:'cancel-btn', onclick:()=>addLotRow(null)}, '＋ 賞味期限を追加'),
-      h('p', {class:'tm-note'}, '賞味期限の違うものを買い足したときは、行を追加して期限ごとに個数を入れてください。'))
+      h('button', {type:'button', class:'cancel-btn', onclick:()=>addLotRow(null)}, hasSize ? '＋ 期限・容量の違う物を追加' : '＋ 賞味期限を追加'),
+      h('p', {class:'tm-note'}, hasSize
+        ? '賞味期限や容量の違う物を買い足したときは、行を追加して個数を入れてください。容量は「2L」「1200g」のように入れ、普段の量の物は空のままにします。'
+        : '賞味期限の違うものを買い足したときは、行を追加して期限ごとに個数を入れてください。'))
   );
   tmFoot.append(save);
 
@@ -376,9 +396,9 @@ function tmItemView(g){
   save.addEventListener('click', ()=>{
     const itemName = normText(name.value);
     if(!itemName){ toastError('商品名を入力してください'); return; }
-    const lots = lotRows.map(r=>({id:r.id, expirationDate:r.exp.value, stock:Number(r.count.value) || 0}));
-    const exps = lots.map(l=>l.expirationDate);
-    if(new Set(exps).size !== exps.length){ toastError('同じ賞味期限の行が重複しています'); return; }
+    const lots = lotRows.map(r=>({id:r.id, expirationDate:r.exp.value, size:hasSize ? normText(r.size.value) : undefined, stock:Number(r.count.value) || 0}));
+    const keys = lots.map(l=>l.expirationDate + '|' + (l.size || ''));
+    if(new Set(keys).size !== keys.length){ toastError(hasSize ? '同じ賞味期限・容量の行が重複しています' : '同じ賞味期限の行が重複しています'); return; }
     // 数値の欄に数字以外を入れると value が空になるので、badInput でも確かめる
     const reorderText = reorder.value.trim();
     const reorderAt = parseReorderAt(reorderText);

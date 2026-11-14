@@ -72,7 +72,11 @@ main{flex:1;position:relative;overflow:hidden;}
 .lot-exp{font-size:13px;color:var(--muted);}
 .exp.soon{color:var(--chore);font-weight:700;}
 .exp.expired{color:var(--danger);font-weight:700;}
-.lot-edit{display:grid;grid-template-columns:1fr 84px 40px;gap:8px;align-items:center;margin-bottom:8px;}
+/* 商品の編集のロットの行：賞味期限・容量・個数・×（iPhone の幅に収めるため、欄の左右の余白を詰める） */
+.lot-edit{display:grid;grid-template-columns:minmax(0,1fr) 72px 52px 36px;gap:6px;align-items:center;margin-bottom:8px;}
+.lot-edit.no-size{grid-template-columns:minmax(0,1fr) 84px 40px;gap:8px;} /* size の列がない古いシート */
+.lot-edit input{min-width:0;}
+.lot-edit:not(.no-size) input{padding-left:8px;padding-right:8px;}
 .lot-head{margin-bottom:6px;}
 .lot-head label{margin:0 !important;}
 .lot-remove{height:40px;border:1px solid var(--border);border-radius:10px;background:none;color:var(--muted);font-size:18px;}
