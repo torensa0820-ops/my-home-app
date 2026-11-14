@@ -15,7 +15,8 @@ const SHEET_STOCK_IMPORT = "在庫取込";
 const SHEET_COUPON = "クーポン";
 const SHEET_RECEIPT_ITEMS = "レシート明細";
 const RECEIPT_HEADERS = ["id", "kind", "fileIds", "uploadedAt", "status", "store", "purchasedAt", "total", "payment", "importId", "note", "processedAt"];
-const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt", "category"];
+const STOCK_IMPORT_HEADERS = ["id", "receiptId", "itemName", "qty", "location", "tags", "kind", "status", "reason", "stockRowId", "createdAt", "updatedAt", "category", "size"];
+// 在庫取込の size：レシートの品名に印字された容量（在庫の size と同じ「数字＋単位」の文字。例：600g）。印字がなければ空（普段の量）
 // レシート明細：レシートの全品目と、在庫についての判断（decision：自動追加 / 確認 / 対象外）と理由。Claude が書く
 const RECEIPT_ITEM_HEADERS = ["id", "receiptId", "itemName", "qty", "price", "matchedStock", "decision", "reason", "stockImportId", "createdAt", "updatedAt"];
 const COUPON_HEADERS = ["id", "receiptId", "fileId", "store", "title", "detail", "validFrom", "validUntil", "status", "notifiedOn", "createdAt", "repeat"];
@@ -104,12 +105,14 @@ function receiptAppend(sheet, obj) {
 }
 
 // 画面に渡す形にする（日付は日本時間の文字列。validFrom などは yyyy-MM-dd、それ以外は yyyy/MM/dd HH:mm）
+// 在庫取込の size（容量）は、在庫の size と同じく normText でそろえた文字にする（列がないシートでは size は付かない）
 function receiptOut(o) {
   const out = {};
   Object.keys(o).forEach(k => {
     if (k === "_row") return;
     const v = o[k];
     if (COUPON_DATE_COLUMNS.indexOf(k) !== -1) out[k] = normDate(v);
+    else if (k === "size") out[k] = normText(v);
     else out[k] = v instanceof Date ? Utilities.formatDate(v, "Asia/Tokyo", "yyyy/MM/dd HH:mm") : v;
   });
   return out;
@@ -328,7 +331,8 @@ function getStockImports() {
 }
 
 // 在庫取込の操作（data.action）
-//   add     … 確認待ちを在庫に登録する（在庫の登録と同じ処理。itemName・qty・category・location・tags・expirationDate は画面で直した値）。status=added
+//   add     … 確認待ちを在庫に登録する（在庫の登録と同じ処理。itemName・qty・category・location・tags・expirationDate・size は画面で直した値）。status=added
+//             期限と容量（size）が同じロットがあれば個数を足し、なければ新しいロットにする。size が空・未指定なら普段の量のロット
 //   dismiss … 確認待ちを追加しない。status=dismissed
 //   undo    … 自動追加を取り消す。stockRowId のロットの個数を qty だけ減らす（0 未満にはしない）。status=undone
 // add・undo では在庫が変わるので、同じロックの中で買い物リストにも反映する
@@ -352,9 +356,10 @@ function stockImportAction(ss, data) {
       }
       const qty = Number(data.qty);
       if (!(qty > 0)) throw new Error("個数を入れてください。");
-      updateStock(ss, { target: data.itemName, value: qty, category: data.category, location: data.location, tags: data.tags, expirationDate: data.expirationDate || "" });
+      updateStock(ss, { target: data.itemName, value: qty, category: data.category, location: data.location, tags: data.tags, expirationDate: data.expirationDate || "", size: data.size });
       const written = { status: "added", updatedAt: now, itemName: normText(data.itemName), qty: qty, location: normText(data.location), tags: normTags(data.tags) };
       if (t.headers.indexOf("category") !== -1) written.category = normCategory(data.category);
+      if (t.headers.indexOf("size") !== -1) written.size = normText(data.size); // size の列がないシートでは書かない
       receiptWrite(sheet, t.headers, found._row, written);
       syncStockRemindersSafe(ss);
       return "";
@@ -374,6 +379,7 @@ function stockImportAction(ss, data) {
 }
 
 // 在庫のロット（id）の個数を qty だけ減らす（0 未満にはしない）。ロットが見つからなければ個数は変えず、その旨を返す
+// ロットは id だけで決める（id はロットごとに別なので、同じ商品で容量や期限の違うロットを取り違えない）
 function reduceStockLot(ss, stockRowId, qty) {
   const sheet = ss.getSheetByName(SHEET_STOCK);
   const values = sheet.getDataRange().getValues();
